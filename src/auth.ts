@@ -48,7 +48,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira$/, mod: ['carteira', 'visao', 'obrigacoes', 'certificados', 'honorarios', 'captura'] },
-  { r: /^\/api\/escritorio\/carteira(\/\d+)?$/, mod: ['carteira'] },
+  { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer)?$/, mod: ['carteira'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['carteira', 'obrigacoes'] },
   { r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['obrigacoes'] },
   { r: /^\/api\/escritorio\/(tarefas|obrigacoes)(\/\d+|\/entregar|\/inicio)?$/, mod: ['obrigacoes'] },

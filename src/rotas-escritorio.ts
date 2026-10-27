@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { db } from './db.js';
 import { exigirLogin, exigirPapel, restritoAEmpresas, type Usuario } from './auth.js';
 import { ErroNegocio } from './servicos/emissao.js';
+import { clientesForaDaCarteira } from './servicos/cadastro-unico.js';
 import { ClienteCarteira, criarCliente, editarCliente, listarCarteira, visaoGeral } from './servicos/carteira.js';
 import { Certificado, excluirCertificado, listarCertificados, renovarCertificado, resumoCertificados, salvarCertificado, TIPOS_CERT } from './servicos/certificados.js';
-import { AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInicioDoControle, inicioDoControle, atualizarTarefa, entregarEmLote, excluirObrigacao, listarObrigacoes, listarTarefas, obrigacoesDoCliente, resumoTarefas, salvarObrigacao, salvarObrigacoesDoCliente } from './servicos/obrigacoes.js';
+import { REGIMES, AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInicioDoControle, inicioDoControle, atualizarTarefa, entregarEmLote, excluirObrigacao, listarObrigacoes, listarTarefas, obrigacoesDoCliente, resumoTarefas, salvarObrigacao, salvarObrigacoesDoCliente } from './servicos/obrigacoes.js';
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
@@ -47,6 +48,25 @@ export async function rotasEscritorio(app: FastifyInstance) {
       checar(req, id(req));
       editarCliente(u(req).escritorio_id, id(req), ClienteCarteira.parse(req.body));
       return { ok: true };
+    });
+    // clientes que só existem em "Clientes" da empresa do escritório: trazer para a carteira (cadastro único)
+    api.get('/api/escritorio/carteira/fora', async (req) => clientesForaDaCarteira(u(req).escritorio_id));
+    api.post('/api/escritorio/carteira/trazer', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const b = z.object({ itens: z.array(z.object({ tomador_id: z.number().int().positive(), regime: z.enum(REGIMES) })).min(1).max(500) }).parse(req.body);
+      const fora = new Map(clientesForaDaCarteira(u(req).escritorio_id).map((t) => [t.id, t]));
+      const resultados = b.itens.map((i) => {
+        const t = fora.get(i.tomador_id);
+        if (!t) return { tomador_id: i.tomador_id, ok: false, mensagem: 'Já está na carteira ou não foi encontrado.' };
+        try {
+          const d = ClienteCarteira.parse({ documento: t.documento, razao_social: t.nome, cod_municipio: t.cod_municipio ?? '', uf: t.uf || null, email: t.email || null, contato_fone: t.fone,
+            regime: i.regime, cep: t.cep, logradouro: t.logradouro, cidade: t.cidade });
+          return { tomador_id: i.tomador_id, ok: true, id: criarCliente(u(req).escritorio_id, d) };
+        } catch (e: any) {
+          const msg = e?.issues ? e.issues.map((x: any) => x.message).join('; ') : e?.message;
+          return { tomador_id: i.tomador_id, ok: false, mensagem: msg || 'Erro ao trazer.' };
+        }
+      });
+      return { resultados };
     });
     api.get('/api/escritorio/carteira/:id/obrigacoes', async (req) => { checar(req, id(req)); return obrigacoesDoCliente(u(req).escritorio_id, id(req)); });
     api.put('/api/escritorio/carteira/:id/obrigacoes', async (req) => {

@@ -1,3 +1,4 @@
+import { sincronizarClienteNoCadastro } from './cadastro-unico.js';
 import { z } from 'zod';
 import { db } from '../db.js';
 import type { Usuario } from '../auth.js';
@@ -413,24 +414,24 @@ export async function sincronizarFaturamento(escritorioId: number, contratoId: n
   if (!cfg.escritorio) return { avisos: ['O faturamento automático não foi ligado: marque na Carteira qual empresa é o próprio escritório.'] };
   if (!cfg.servicoId) return { avisos: ['O faturamento automático não foi ligado: escolha o serviço de honorários em Contratos e honorários > Configurar faturamento.'] };
   if (cfg.escritorio.id === c.empresa_id) return { avisos: ['O contrato é do próprio escritório: não há faturamento a ligar.'] };
-  const cli = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
-  let tomadorId: number | null = c.tomador_id && db.prepare('SELECT 1 FROM tomadores WHERE id = ? AND empresa_id = ?').get(c.tomador_id, cfg.escritorio.id) ? c.tomador_id : null;
-  tomadorId ??= (db.prepare('SELECT id FROM tomadores WHERE empresa_id = ? AND documento = ?').get(cfg.escritorio.id, cli.documento) as any)?.id ?? null;
+  let cli = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
+  // endereço é necessário para o boleto e para o grupo IBS/CBS: sem ele na carteira, completa a carteira pela Receita
+  const temTomador = !!db.prepare('SELECT 1 FROM tomadores WHERE empresa_id = ? AND (carteira_empresa_id = ? OR documento = ?)').get(cfg.escritorio.id, cli.id, cli.documento);
+  if (!cli.logradouro && !temTomador && cli.documento.length === 14) {
+    try {
+      const r = await buscarCnpj(cli.documento);
+      db.prepare(`UPDATE empresas SET cep = COALESCE(cep, ?), logradouro = COALESCE(logradouro, ?), numero = COALESCE(numero, ?), complemento = COALESCE(complemento, ?),
+        bairro = COALESCE(bairro, ?), cidade = COALESCE(cidade, ?), uf = COALESCE(uf, ?), contato_fone = COALESCE(contato_fone, ?) WHERE id = ?`)
+        .run(r.cep ?? null, r.logradouro ?? null, r.numero ?? null, r.complemento ?? null, r.bairro ?? null, r.municipio ?? null, r.uf ?? null, r.fone ?? null, cli.id);
+    } catch { /* segue sem endereço */ }
+  }
+  const tomadorId = sincronizarClienteNoCadastro(escritorioId, cli.id)!;
+  cli = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
   const vencTipo = 'DIA_FIXO';
-  if (!tomadorId) {
-    // endereço vem da Receita (necessário para o boleto e para o grupo IBS/CBS); sem a consulta, o cadastro fica marcado para conferir
-    let end: any = cli.logradouro ? { cep: cli.cep, cod_municipio: cli.cod_municipio, logradouro: cli.logradouro, numero: cli.numero, complemento: cli.complemento, bairro: cli.bairro, municipio: cli.cidade, uf: cli.uf } : null;
-    if (!end && cli.documento.length === 14) { try { end = await buscarCnpj(cli.documento); } catch { /* segue sem endereço */ } }
-    const r = db.prepare(`INSERT INTO tomadores (empresa_id, tipo_doc, documento, nome, inscricao_municipal, email, fone, cep, cod_municipio, logradouro, numero, complemento, bairro, cidade, uf,
-        modo_faturamento, vencimento_tipo, vencimento_valor, enviar_email_auto, conferir, conferir_motivo)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(cfg.escritorio.id, cli.documento.length === 14 ? 'CNPJ' : 'CPF', cli.documento, cli.razao_social, cli.inscricao_municipal,
-      cli.email, cli.contato_fone ?? end?.fone ?? null, end?.cep ?? null, cli.cod_municipio ?? end?.cod_municipio ?? null, end?.logradouro ?? null, end?.numero ?? null, end?.complemento ?? null,
-      end?.bairro ?? null, end?.municipio ?? null, cli.uf ?? end?.uf ?? null, c.modo_faturamento, vencTipo, c.dia_vencimento, cli.email ? 1 : 0, end ? 0 : 1,
-      end ? null : 'Criado pelo contrato de honorários sem consulta à Receita: confira endereço e e-mail.');
-    tomadorId = Number(r.lastInsertRowid);
-    if (!end) avisos.push('O cliente foi criado na empresa do escritório sem endereço (sem endereço na carteira e a consulta à Receita não respondeu): complete o cadastro em Clientes antes de gerar boleto.');
-  } else {
-    db.prepare('UPDATE tomadores SET modo_faturamento = ?, vencimento_tipo = ?, vencimento_valor = ? WHERE id = ?').run(c.modo_faturamento, vencTipo, c.dia_vencimento, tomadorId);
+  db.prepare('UPDATE tomadores SET modo_faturamento = ?, vencimento_tipo = ?, vencimento_valor = ? WHERE id = ?').run(c.modo_faturamento, vencTipo, c.dia_vencimento, tomadorId);
+  if (!cli.logradouro) {
+    db.prepare("UPDATE tomadores SET conferir = 1, conferir_motivo = 'Cliente sem endereço na carteira: complete o endereço na Carteira antes de gerar boleto.' WHERE id = ?").run(tomadorId);
+    avisos.push('O cliente está sem endereço na carteira (e a consulta à Receita não respondeu): complete o endereço na Carteira antes de gerar boleto.');
   }
   db.transaction(() => {
     db.prepare(`INSERT INTO tomador_servicos (tomador_id, servico_id, valor, descricao, padrao) VALUES (?,?,?,?,1)

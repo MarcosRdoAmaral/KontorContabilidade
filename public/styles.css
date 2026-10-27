@@ -348,3 +348,6 @@ a.link-cartao:hover { border-color: var(--laranja); transform: translateY(-1px);
 .agenda-sf { margin: 16px 0 0; }
 .agenda-sf > summary { cursor: pointer; }
 .agenda-sf[open] > summary { margin-bottom: 8px; }
+
+.selo-carteira { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--laranja); background: var(--laranja-fundo); }
+input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); cursor: not-allowed; }

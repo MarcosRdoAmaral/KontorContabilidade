@@ -35,15 +35,21 @@ class Banco {
   }
 
   /** Executa fn dentro de uma transação; desfaz tudo se lançar erro. */
+  private nivel = 0;
   transaction<A extends any[], R>(fn: (...a: A) => R) {
     return (...a: A): R => {
-      this.conn.exec('BEGIN IMMEDIATE');
+      // dentro de outra transação, usa um savepoint (transações aninhadas)
+      const sp = this.nivel > 0 ? `sp${this.nivel}` : null;
+      this.conn.exec(sp ? `SAVEPOINT ${sp}` : 'BEGIN IMMEDIATE');
+      this.nivel++;
       try {
         const r = fn(...a);
-        this.conn.exec('COMMIT');
+        this.nivel--;
+        this.conn.exec(sp ? `RELEASE ${sp}` : 'COMMIT');
         return r;
       } catch (e) {
-        this.conn.exec('ROLLBACK');
+        this.nivel--;
+        this.conn.exec(sp ? `ROLLBACK TO ${sp}; RELEASE ${sp}` : 'ROLLBACK');
         throw e;
       }
     };
@@ -902,6 +908,9 @@ const migracoes: string[] = [
     concluida_em TEXT
   );
   CREATE INDEX ix_situacao_fiscal ON situacao_fiscal(empresa_id, solicitada_em);`,
+  // 32: cadastro único — o cliente da carteira é o mesmo cliente (tomador) da empresa do escritório
+  `ALTER TABLE tomadores ADD COLUMN carteira_empresa_id INTEGER REFERENCES empresas(id);
+  CREATE INDEX ix_tomadores_carteira ON tomadores(carteira_empresa_id);`,
 ];
 
 export function migrar(): void {

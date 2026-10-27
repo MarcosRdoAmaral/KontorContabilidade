@@ -2511,6 +2511,7 @@ async function formTomador(t, aoSalvar) {
     <form id="form-tomador"><h2>${t.id ? 'Editar cliente' : 'Novo cliente'}</h2>
       <nav class="abas" id="abas-cliente"><a href="#" data-aba="cadastro" class="ativo">Cadastro</a><a href="#" data-aba="servicos">Serviços padrão${t.servicos_padrao?.length ? ' •' : ''}</a><a href="#" data-aba="descontos">Descontos${t.desconto_valor ? ' •' : ''}</a><a href="#" data-aba="descricao">Descrição da nota${t.descricao_modelo ? ' •' : ''}</a></nav>
       <div data-painel="cadastro">
+      ${t.carteira_empresa_id ? `<div class="banner"><strong>Cliente da Carteira.</strong> Nome, documento, contato e endereço vêm da Carteira de clientes e só mudam por lá, para não haver dois cadastros. Aqui ficam só os dados de faturamento. <button type="button" data-ir-carteira>Editar na Carteira</button></div>` : ''}
       ${t.conferir ? `<div class="banner teste"><strong>Falta conferir:</strong> ${esc(t.conferir_motivo ?? 'cadastro criado por planilha')}.<br>Complete o que faltar e marque <label class="check" style="display:inline-flex;gap:6px"><input type="checkbox" name="conferido"> Cadastro conferido</label> para tirar a marca.</div>` : ''}
       <fieldset class="sub"><legend>Identificação</legend><div class="grade">
         <label>Tipo <select name="tipo_doc">${['CNPJ', 'CPF', 'SEM'].map((v) => `<option value="${v}" ${t.tipo_doc === v ? 'selected' : ''}>${v === 'SEM' ? 'Sem documento' : v}</option>`).join('')}</select></label>
@@ -2590,6 +2591,11 @@ async function formTomador(t, aoSalvar) {
       <div class="acoes"><button class="primario" type="submit">Salvar cliente</button><button type="button" data-fechar>Fechar</button></div>
     </form>`, (d) => {
     const f = $('#form-tomador');
+    if (t.carteira_empresa_id) {
+      ['documento', 'nome', 'inscricao_municipal', 'email', 'fone', 'cep', 'cod_municipio', 'cidade', 'uf', 'logradouro', 'numero', 'complemento', 'bairro'].forEach((n) => { f[n].readOnly = true; f[n].classList.add('travado'); });
+      f.tipo_doc.disabled = true; f.querySelector('[data-buscar-cnpj]').hidden = true; f.querySelector('[data-cnpj-info]').hidden = true;
+      f.querySelector('[data-ir-carteira]').onclick = () => { d.close(); telaCarteira.filtro = { q: t.documento ?? t.nome, situacao: '', regime: '', resp: '' }; location.hash = '#/carteira'; };
+    }
     f.querySelectorAll('#abas-cliente a').forEach((a) => (a.onclick = (ev) => {
       ev.preventDefault();
       f.querySelectorAll('#abas-cliente a').forEach((x) => x.classList.toggle('ativo', x === a));
@@ -2674,14 +2680,19 @@ async function telaTomadores() {
   const aConferir = lista.filter((t) => t.conferir).length;
   const filtro = aConferir ? (telaTomadores.filtro ?? 'todos') : 'todos';
   const vis = filtro === 'conferir' ? lista.filter((t) => t.conferir) : lista;
+  const doEscritorio = !!empresa().eh_escritorio && pode('carteira');
+  const avulsos = lista.filter((t) => !t.carteira_empresa_id).length;
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Clientes (tomadores)</h1><p class="sutil">Clientes de ${esc(empresa().razao_social)}.</p></div>
-      <div><button id="imp-planilha">Importar planilha</button> <button class="primario" id="novo">Cadastrar cliente</button></div></div>
+      <div><button id="imp-planilha">Importar planilha</button> ${doEscritorio ? '<button id="novo">Cliente avulso</button> <button class="primario" id="novo-cart">Novo cliente na Carteira</button>' : '<button class="primario" id="novo">Cadastrar cliente</button>'}</div></div>
+    ${doEscritorio ? `<div class="banner">Esta é a empresa do escritório: os clientes da <a href="#/carteira">Carteira</a> aparecem aqui sozinhos, prontos para faturar (marca <span class="selo-carteira">Carteira</span>). Cadastre novos clientes pela Carteira; use “Cliente avulso” só para quem não é cliente da contabilidade.${avulsos ? ` <a href="#" id="trazer-cart">Levar ${avulsos} cliente(s) daqui para a Carteira</a>.` : ''}</div>` : ''}
     ${aConferir ? `<nav class="abas" id="filtros-cli"><a href="#" data-f="todos" class="${filtro === 'todos' ? 'ativo' : ''}">Todos (${lista.length})</a><a href="#" data-f="conferir" class="${filtro === 'conferir' ? 'ativo' : ''}">Falta conferir (${aConferir})</a></nav>` : ''}
     ${vis.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Nome</th><th>Documento</th><th>E-mail</th><th>Faturamento</th><th>Desconto</th></tr></thead><tbody>
-      ${vis.map((t, i) => `<tr class="clicavel" data-i="${i}"><td>${esc(t.nome)}${t.conferir ? ` <span class="selo-conferir" title="${esc(t.conferir_motivo ?? '')}">Conferir</span>` : ''}</td><td>${fmtDoc(t.documento)}</td><td>${esc(t.email ?? '')}</td><td>${NOME_MODO[t.modo_faturamento] ?? 'Nota'}</td><td>${t.desconto_valor ? brl(t.desconto_valor) : '<span class="dica">—</span>'}</td></tr>`).join('')}
+      ${vis.map((t, i) => `<tr class="clicavel" data-i="${i}"><td>${esc(t.nome)}${t.carteira_empresa_id ? ' <span class="selo-carteira" title="Cadastro vem da Carteira de clientes">Carteira</span>' : ''}${t.conferir ? ` <span class="selo-conferir" title="${esc(t.conferir_motivo ?? '')}">Conferir</span>` : ''}</td><td>${fmtDoc(t.documento)}</td><td>${esc(t.email ?? '')}</td><td>${NOME_MODO[t.modo_faturamento] ?? 'Nota'}</td><td>${t.desconto_valor ? brl(t.desconto_valor) : '<span class="dica">—</span>'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="vazio">Nenhum tomador cadastrado.</div>'}`;
   $('#novo').onclick = () => formTomador(null, telaTomadores);
+  if ($('#novo-cart')) $('#novo-cart').onclick = () => { telaCarteira.abrirNovo = true; location.hash = '#/carteira'; };
+  if ($('#trazer-cart')) $('#trazer-cart').onclick = (ev) => { ev.preventDefault(); telaCarteira.abrirTrazer = true; location.hash = '#/carteira'; };
   $('#imp-planilha').onclick = () => importarPlanilhaClientes();
   conteudo.querySelectorAll('#filtros-cli a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); telaTomadores.filtro = a.dataset.f; telaTomadores(); }));
   conteudo.querySelectorAll('tr[data-i]').forEach((tr) => (tr.onclick = () => formTomador(vis[tr.dataset.i], telaTomadores)));
@@ -3445,12 +3456,12 @@ async function telaEscritorio() {
 // ---------------------------------------------------------------------------
 
 async function telaCarteira() {
-  const [lista, tab, equipe] = await Promise.all([api('GET', '/api/escritorio/carteira'), tabelasEscritorio(), equipeEscritorio()]);
-  const f = telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' };
   const podeEditar = estado.usuario.papel !== 'cliente' && pode('carteira');
+  const [lista, tab, equipe, fora] = await Promise.all([api('GET', '/api/escritorio/carteira'), tabelasEscritorio(), equipeEscritorio(), podeEditar ? api('GET', '/api/escritorio/carteira/fora').catch(() => []) : []]);
+  const f = telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' };
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Carteira de clientes</h1><p class="sutil">Regime, perfil e responsável de cada cliente definem as obrigações que o sistema acompanha.</p></div>
-      ${podeEditar ? '<button class="primario" id="novo-cli">Novo cliente</button>' : ''}</div>
+    <div class="topo"><div><h1>Carteira de clientes</h1><p class="sutil">Cadastro único dos clientes: regime, perfil e responsável definem as obrigações, e cada cliente já aparece em Clientes do escritório, pronto para faturar.</p></div>
+      ${podeEditar ? `<div>${fora.length ? `<button id="trazer-cli">Trazer de Clientes (${fora.length})</button> ` : ''}<button class="primario" id="novo-cli">Novo cliente</button></div>` : ''}</div>
     <div class="filtros">
       <label style="flex:1 1 240px">Buscar <input type="search" id="f-q" placeholder="Nome ou CNPJ/CPF" value="${esc(f.q)}"></label>
       <label>Situação <select id="f-sit"><option value="">Todas</option>${Object.entries(SITUACAO_CLI).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label>
@@ -3485,7 +3496,39 @@ async function telaCarteira() {
   $('#f-reg').onchange = (ev) => { f.regime = ev.target.value; pintar(); };
   $('#f-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
   $('#novo-cli') && ($('#novo-cli').onclick = () => formCliente(null, tab, equipe, lista.some((c) => c.eh_escritorio)));
+  $('#trazer-cli') && ($('#trazer-cli').onclick = () => trazerDeClientes(fora, tab));
   pintar();
+  if (telaCarteira.abrirNovo && $('#novo-cli')) { telaCarteira.abrirNovo = false; $('#novo-cli').click(); }
+  if (telaCarteira.abrirTrazer) { telaCarteira.abrirTrazer = false; if ($('#trazer-cli')) $('#trazer-cli').click(); }
+}
+
+/** Traz para a carteira os clientes cadastrados só em "Clientes" da empresa do escritório (cadastro único). */
+function trazerDeClientes(fora, tab) {
+  const regimes = Object.entries(tab.regimes);
+  abrirDialogo(`<form id="form-trazer"><h2>Trazer clientes para a Carteira</h2>
+    <p class="sutil">Estes clientes estão cadastrados só em Clientes da empresa do escritório. Ao trazer, cada um passa a ser um cliente da carteira (com obrigações, certificados e situação fiscal) e o cadastro de faturamento continua o mesmo, agora ligado à carteira. Escolha o regime de cada um.</p>
+    <div class="rolagem" style="max-height:360px"><table class="tabela"><thead><tr><th><input type="checkbox" id="tz-todos" checked aria-label="Marcar todos"></th><th>Cliente</th><th>Município</th><th>Regime</th></tr></thead><tbody>
+      ${fora.map((t) => `<tr><td><input type="checkbox" data-tz="${t.id}" ${t.cod_municipio ? 'checked' : 'disabled'}></td><td>${esc(t.nome)}<br><span class="dica">${fmtDoc(t.documento)}</span></td>
+        <td>${t.cod_municipio ? esc([t.cidade, t.uf].filter(Boolean).join('/') || t.cod_municipio) : '<span class="cor-ambar">sem município — complete em Clientes</span>'}</td>
+        <td><select data-reg="${t.id}">${regimes.map(([k, v]) => `<option value="${k}" ${k === (t.tipo_doc === 'CPF' ? 'PF' : 'SIMPLES') ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="erro" id="tz-erro"></p><div id="tz-res"></div>
+    <div class="acoes"><button class="primario" type="submit">Trazer marcados</button><button type="button" data-fechar>Fechar</button></div></form>`, (d) => {
+    const f = d.querySelector('#form-trazer');
+    f.querySelector('#tz-todos').onchange = (ev) => f.querySelectorAll('[data-tz]:not(:disabled)').forEach((c) => (c.checked = ev.target.checked));
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const itens = [...f.querySelectorAll('[data-tz]:checked')].map((c) => ({ tomador_id: Number(c.dataset.tz), regime: f.querySelector(`[data-reg="${c.dataset.tz}"]`).value }));
+      if (!itens.length) { $('#tz-erro').textContent = 'Marque ao menos um cliente.'; return; }
+      try {
+        const { resultados } = await api('POST', '/api/escritorio/carteira/trazer', { itens });
+        const ok = resultados.filter((r) => r.ok), ruins = resultados.filter((r) => !r.ok);
+        if (!ruins.length) { d.close(); aviso(`${ok.length} cliente(s) trazido(s) para a Carteira. Revise o perfil de cada um (funcionários, ICMS, responsável).`); telaCarteira(); return; }
+        $('#tz-res').innerHTML = `<div class="banner teste"><strong>${ok.length} trazido(s), ${ruins.length} com problema:</strong><ul>${ruins.map((r) => `<li>${esc(fora.find((t) => t.id === r.tomador_id)?.nome ?? '')}: ${esc(r.mensagem)}</li>`).join('')}</ul></div>`;
+        ok.forEach((r) => { const c = f.querySelector(`[data-tz="${r.tomador_id}"]`); c.checked = false; c.disabled = true; });
+      } catch (e) { $('#tz-erro').textContent = mensagemErro(e); }
+    };
+  });
 }
 
 function maisAcoesCliente(c) {

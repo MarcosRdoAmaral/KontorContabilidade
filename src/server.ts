@@ -11,6 +11,7 @@ import { rotas } from './rotas.js';
 import { rotasEscritorio } from './rotas-escritorio.js';
 import { avisosAutomaticos } from './servicos/avisos.js';
 import { buscarAdnAutomaticamente } from './servicos/nfse-capturadas.js';
+import { sincronizarTodosOsEscritorios } from './servicos/cadastro-unico.js';
 import { relerRelatoriosAntigos, sitfisAutomatico } from './servicos/situacao-fiscal.js';
 import { sincronizarDespesasDoExtrato } from './servicos/extrato.js';
 import { sincronizarDespesasDoCartao } from './servicos/cartao.js';
@@ -68,6 +69,7 @@ export async function criarApp() {
   }
   // relatórios de situação fiscal lidos por uma versão antiga: relê do PDF guardado
   setTimeout(() => { relerRelatoriosAntigos().catch((e) => app.log.error(e)); }, 5_000).unref();
+  try { sincronizarTodosOsEscritorios(); } catch (e) { app.log.error(e); }
   // Situação fiscal automática (Escritório > Situação fiscal): a cada 30 min vê se chegou o dia ou se há relatório pendente
   if (process.env.SITFIS_AUTOMATICO !== '0') {
     const timerSf = setInterval(() => { sitfisAutomatico().catch((e) => app.log.error(e)); }, 30 * 60e3);

@@ -5,6 +5,7 @@ import { codMunicipioValido, documentoValido, limparDoc, soDigitos } from '../nf
 import { REGIMES, limparTarefasQueNaoSeAplicam, listarTarefas, regimeDe, resumoTarefas } from './obrigacoes.js';
 import { listarCertificados, resumoCertificados } from './certificados.js';
 import { resumoSituacoes } from './situacao-fiscal.js';
+import { sincronizarCarteiraInteira, sincronizarClienteNoCadastro } from './cadastro-unico.js';
 
 /**
  * Carteira de clientes do escritório. Cada cliente é uma "empresa" do sistema (a mesma usada para emitir NFS-e e
@@ -78,6 +79,7 @@ export function criarCliente(escritorioId: number, d: ClienteCarteira): number {
       d.contato_nome ?? null, d.contato_fone ?? null, d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.eh_escritorio ? 1 : 0, d.observacoes ?? null);
     const id = Number(r.lastInsertRowid);
     gravarExtras(id, d);
+    if (d.eh_escritorio) sincronizarCarteiraInteira(escritorioId); else sincronizarClienteNoCadastro(escritorioId, id);
     return id;
   })();
 }
@@ -104,6 +106,7 @@ export function editarCliente(escritorioId: number, id: number, d: ClienteCartei
       db.prepare(`UPDATE tarefas SET responsavel_id = ? WHERE empresa_id = ? AND status IN ('PENDENTE','ANDAMENTO') AND (responsavel_id IS ? OR responsavel_id IS NULL)`)
         .run(d.responsavel_id ?? null, id, atual.responsavel_id ?? null);
     }
+    if (d.eh_escritorio && !atual.eh_escritorio) sincronizarCarteiraInteira(escritorioId); else sincronizarClienteNoCadastro(escritorioId, id);
   })();
   limparTarefasQueNaoSeAplicam(id);
 }

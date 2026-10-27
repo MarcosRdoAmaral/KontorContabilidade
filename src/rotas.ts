@@ -1,3 +1,4 @@
+import { CAMPOS_BLOQUEADOS } from './servicos/cadastro-unico.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db.js';
@@ -330,6 +331,8 @@ export async function rotas(app: FastifyInstance) {
       const id = Number((req.params as any).id);
       checarEmpresa(req, id);
       const d = Tomador.parse(req.body);
+      const naCarteira = d.documento ? db.prepare('SELECT 1 FROM empresas e JOIN tomadores t ON t.carteira_empresa_id = e.id WHERE t.empresa_id = ? AND e.documento = ?').get(id, d.documento) : null;
+      if (naCarteira) throw new ErroNegocio('Este cliente já está na Carteira de clientes e já aparece nesta lista. Edite-o por lá.', 409);
       conferirServicosPadrao(id, d.servicos_padrao);
       const r = db.prepare(`INSERT INTO tomadores (empresa_id, tipo_doc, documento, nome, inscricao_municipal, email, fone, cep, cod_municipio, logradouro, numero, complemento, bairro,
         modo_faturamento, vencimento_tipo, vencimento_valor, email_cobranca, enviar_email_auto, cidade, uf, desconto_valor, desconto_motivo, descricao_modelo, multa_pct, juros_pct_mes, desc_pontual_pct, desc_pontual_dias)
@@ -341,10 +344,11 @@ export async function rotas(app: FastifyInstance) {
     });
     api.put('/api/tomadores/:id', async (req) => {
       const id = Number((req.params as any).id);
-      const t = db.prepare('SELECT empresa_id FROM tomadores WHERE id = ?').get(id) as any;
+      const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(id) as any;
       if (!t) throw new ErroNegocio('Tomador não encontrado.', 404);
       checarEmpresa(req, t.empresa_id);
-      const d = Tomador.parse(req.body);
+      // cliente da carteira: identificação, contato e endereço só mudam na Carteira
+      const d = Tomador.parse(t.carteira_empresa_id ? { ...(req.body as any), ...Object.fromEntries(CAMPOS_BLOQUEADOS.map((c) => [c, t[c] ?? null])) } : req.body);
       conferirServicosPadrao(t.empresa_id, d.servicos_padrao);
       db.prepare(`UPDATE tomadores SET tipo_doc=?, documento=?, nome=?, inscricao_municipal=?, email=?, fone=?, cep=?, cod_municipio=?, logradouro=?, numero=?, complemento=?, bairro=?,
         modo_faturamento=?, vencimento_tipo=?, vencimento_valor=?, email_cobranca=?, enviar_email_auto=?, cidade=?, uf=?, desconto_valor=?, desconto_motivo=?, descricao_modelo=?, multa_pct=?, juros_pct_mes=?, desc_pontual_pct=?, desc_pontual_dias=? WHERE id=?`)

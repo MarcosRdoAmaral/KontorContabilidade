@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.5.2';
+export const MANUAL_VERSAO = '1.6.0';
 
 export const MANUAL = [
   {
@@ -51,6 +51,9 @@ export const MANUAL = [
       <p>O endereço (o CEP preenche rua, bairro e cidade) e o representante legal (nome, CPF, RG, nacionalidade, estado civil e profissão) vão no contrato. Se faltarem, o contrato avisa e esses campos saem em branco no PDF, para preencher à mão.</p>
       <h3>Empresa do escritório</h3>
       <p>Marque “Esta é a empresa do próprio escritório” no cadastro do escritório. É ela que emite as notas e os boletos de honorários e aparece como CONTRATADA nos contratos (com o endereço e o registro no CRC); ela não gera obrigações na agenda.</p>
+      <h3>Cadastro único</h3>
+      <p>A Carteira é o cadastro principal do cliente. Cada cliente cadastrado aqui aparece sozinho em <strong>Cadastros → Clientes</strong> da empresa do escritório, com a marca <em>Carteira</em>, pronto para emitir a nota e o boleto de honorários. Nome, CNPJ/CPF, e-mail, telefone e endereço só mudam na Carteira; em Clientes ficam os dados de faturamento (forma de cobrança, vencimento, serviços padrão, descontos e descrição da nota).</p>
+      <p>Se um cliente já existia em Clientes, ao cadastrá-lo na Carteira com o mesmo CNPJ/CPF o sistema liga os dois e traz para a Carteira o que só Clientes tinha (e-mail, telefone, endereço); nada é duplicado. Clientes que estão só em Clientes aparecem no botão <em>Trazer de Clientes</em>: escolha o regime de cada um e eles entram na Carteira.</p>
       <h3>Obrigações do cliente</h3>
       <p>O botão <em>Obrigações</em> mostra quais entram pela regra e permite exceções: incluir sempre (ex.: EFD-Reinf para quem tem retenções), dispensar, ou definir outro responsável só para aquela obrigação.</p>
       <p class="dica">O botão ⋯ leva aos dados de emissão (certificado A1, logo, dados bancários), à emissão de NFS-e e às NF-e recebidas do cliente.</p>`,
@@ -171,6 +174,7 @@ export const MANUAL = [
     id: 'clientes', titulo: 'Clientes', resumo: 'Tomadores, forma de faturar, vencimento e serviços padrão.',
     corpo: `
       <p>Em <strong>Clientes</strong> ficam os tomadores de cada empresa. Informe o CNPJ/CPF (a busca preenche os dados), endereço e e-mail.</p>
+      <p class="dica">Na empresa do escritório, os clientes da Carteira aparecem aqui sozinhos (marca <em>Carteira</em>) e o cadastro deles é editado na Carteira. Use <em>Cliente avulso</em> só para quem não é cliente da contabilidade.</p>
       <h3>Importar clientes de uma planilha</h3>
       <p>Em <strong>Clientes → Importar planilha</strong>, envie um arquivo Excel (.xlsx) ou .csv com o <strong>CNPJ</strong> (ou CPF) e, se quiser, o nome, em qualquer coluna. O sistema mostra quantos são novos, quais já estão cadastrados, repetidos ou inválidos. Ao importar, ele <strong>consulta cada CNPJ na Receita Federal</strong> e preenche razão social, endereço, e-mail e telefone. CPF precisa do nome na planilha. CNPJ que o Excel mostrou sem o zero à esquerda é reconhecido.</p>
       <p>Todo cliente criado assim fica com a marca <strong>Falta conferir</strong>, com o motivo (endereço incompleto, sem e-mail, situação na Receita, Receita fora do ar). Use a aba <em>Falta conferir</em> da lista, complete o cadastro e marque <em>Cadastro conferido</em> para tirar a marca.</p>
