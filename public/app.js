@@ -4183,43 +4183,86 @@ async function abaFaturamento() {
 
 async function telaCaptura() {
   const mes = telaCaptura.mes ?? mesAtual();
-  const lista = await api('GET', `/api/escritorio/captura?mes=${mes}`);
+  const [lista, ax] = await Promise.all([api('GET', `/api/escritorio/captura?mes=${mes}`), api('GET', `/api/escritorio/captura/autxml?mes=${mes}`)]);
   const comCert = lista.filter((l) => l.tem_certificado);
-  const prontos = lista.filter((l) => l.pode_consultar).length;
+  const prontos = lista.filter((l) => l.pode_consultar || l.pode_adn).length;
+  const e = ax.escritorio;
+  const ultima = (data, resultado, erro, proxima, pode, cert) => `${data ? `<span class="dica">${dhBr(data)}</span>` : '<span class="dica">nunca</span>'}${erro ? `<br><span class="dica cor-vermelho">${esc(erro)}</span>` : resultado ? `<br><span class="dica">${esc(resultado)}</span>` : ''}${proxima && !pode && cert ? `<br><span class="dica">próxima a partir de ${dhBr(proxima)}</span>` : ''}`;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Captura de documentos</h1><p class="sutil">NF-e emitidas contra cada cliente, baixadas da SEFAZ com o certificado A1 dele, e as NFS-e emitidas aqui. Tudo pronto para a escrituração.</p></div>
+    <div class="topo"><div><h1>Captura de documentos</h1><p class="sutil">Notas de compra, de venda e de serviço de cada cliente, baixadas da SEFAZ e do Ambiente Nacional da NFS-e, prontas para a escrituração.</p></div>
       <label>Mês <input type="month" id="mes-cap" value="${mes}"></label></div>
-    <div class="acoes" style="margin-top:0">
+    <div class="duas-colunas cap-fontes">
+      <div class="cartao">
+        <h2 style="margin-top:0">Notas de venda dos clientes (NF-e)</h2>
+        ${!e ? '<p class="sutil">Marque na <a href="#/carteira">Carteira</a> qual empresa é o escritório para receber as notas de venda dos clientes.</p>' : `
+        <p class="sutil">Peça a cada cliente para informar o CNPJ do escritório no campo <strong>“Autorizados a baixar o XML” (autXML)</strong> do sistema emissor de notas dele. Daí em diante, as NF-e de venda chegam aqui pelo certificado do escritório e vão para o cliente certo pelo CNPJ.</p>
+        <div class="cnpj-copia"><span>${fmtDoc(e.documento)}</span><button type="button" id="copiar-cnpj">Copiar CNPJ</button></div>
+        <p class="dica">${!e.tem_certificado ? '<span class="cor-ambar">Envie o certificado A1 do escritório em Cadastros &gt; Empresas para começar.</span>' : e.cert_vencido ? '<span class="cor-vermelho">O certificado A1 do escritório está vencido.</span>' : `${ax.notasNoMes} nota(s) de venda recebida(s) em ${rotuloMes(mes)}. Última consulta: ${e.ultima_consulta ? dhBr(e.ultima_consulta) : 'nunca'}.`}
+          Vale para as notas emitidas depois que o cliente configurar o campo. NFC-e (cupom) não entra.</p>
+        ${ax.foraDaCarteira.length ? `<details><summary class="dica">${ax.foraDaCarteira.length} emitente(s) fora da carteira mandaram notas para o escritório</summary><ul class="dicas">${ax.foraDaCarteira.map((f) => `<li>${fmtDoc(f.emitente_documento)} ${esc(f.emitente_nome ?? '')} — ${f.notas} nota(s), ${brl(f.total)}</li>`).join('')}</ul><p class="dica">Cadastre o CNPJ na Carteira e as notas passam a aparecer no cliente.</p></details>` : ''}`}
+      </div>
+      <div class="cartao">
+        <h2 style="margin-top:0">Compras e serviços</h2>
+        <p class="sutil">Com o certificado A1 de cada cliente, o sistema baixa as <strong>NF-e de compra</strong> (SEFAZ) e as <strong>NFS-e prestadas e tomadas</strong> (Ambiente Nacional da NFS-e, nos municípios do padrão nacional).</p>
+        <p class="dica">A busca automática consulta sozinha com o programa aberto, respeitando o intervalo de 1 hora de cada órgão quando não há notas novas. Para enviar o certificado de um cliente, use Cadastros &gt; Empresas.</p>
+      </div>
+    </div>
+    <div class="acoes">
       <button class="primario" id="cap-todos" ${prontos ? '' : 'disabled'}>Buscar agora (${prontos} cliente(s))</button>
       <button id="cap-auto-on" ${comCert.length ? '' : 'disabled'}>Ligar busca automática para todos</button>
       <button id="cap-auto-off" ${comCert.length ? '' : 'disabled'}>Desligar para todos</button>
-      <span class="dica">Com a busca automática, o sistema consulta sozinho (com o programa aberto), respeitando o intervalo de 1 hora exigido pela SEFAZ.</span>
     </div>
     <div id="cap-res"></div>
-    <div class="rolagem" style="margin-top:12px"><table class="tabela"><thead><tr><th>Cliente</th><th>Certificado A1</th><th>Última consulta</th><th class="num">NF-e recebidas</th><th class="num">NFS-e emitidas</th><th>Automática</th><th></th></tr></thead><tbody>
-    ${lista.map((l) => `<tr><td><strong>${esc(l.cliente)}</strong><br><span class="dica">${fmtDoc(l.documento)}</span></td>
+    <div class="rolagem" style="margin-top:12px"><table class="tabela tabela-captura"><thead><tr><th>Cliente</th><th>Certificado A1</th><th class="num">NF-e compras</th><th class="num">NF-e vendas</th><th class="num">NFS-e prestadas</th><th class="num">NFS-e tomadas</th><th>Última consulta</th><th>Automática</th><th></th></tr></thead><tbody>
+    ${lista.map((l) => `<tr><td><strong>${esc(l.cliente)}</strong>${l.eh_escritorio ? ' <span class="selo PZ-PRAZO">Escritório</span>' : ''}<br><span class="dica">${fmtDoc(l.documento)}</span></td>
       <td>${!l.tem_certificado ? '<span class="dica">não enviado</span>' : l.cert_vencido ? '<span class="cor-vermelho">vencido</span>' : `até ${dataBr(l.cert_validade)}`}</td>
-      <td>${l.ultima_consulta ? dhBr(l.ultima_consulta) : '<span class="dica">nunca</span>'}${l.ultimo_erro ? `<br><span class="dica cor-vermelho">${esc(l.ultimo_erro)}</span>` : l.ultimo_resultado ? `<br><span class="dica">${esc(l.ultimo_resultado)}</span>` : ''}${l.proxima_consulta && !l.pode_consultar && l.tem_certificado ? `<br><span class="dica">próxima a partir de ${dhBr(l.proxima_consulta)}</span>` : ''}</td>
       <td class="num">${l.nfe_mes}${l.nfe_mes ? `<br><span class="dica">${brl(l.nfe_valor)}</span>` : ''}${l.nfe_sem_xml ? `<br><span class="dica cor-ambar">${l.nfe_sem_xml} sem XML</span>` : ''}</td>
-      <td class="num">${l.nfse_mes}</td>
-      <td>${l.tem_certificado ? (l.automatica ? '<span class="cor-verde">ligada</span>' : 'desligada') : '—'}</td>
-      <td class="acoes-linha">${pode('compras') ? `<button data-ver="${l.id}">Ver NF-e</button> ` : ''}<button data-pac="${l.id}" ${l.nfe_mes + l.nfse_mes ? '' : 'disabled'}>Baixar pacote</button></td></tr>`).join('') || '<tr><td colspan="7"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
+      <td class="num">${l.eh_escritorio ? '<span class="dica">—</span>' : `${l.vendas_mes}${l.vendas_mes ? `<br><span class="dica">${brl(l.vendas_valor)}</span>` : ''}`}</td>
+      <td class="num">${l.nfse_prestadas}</td><td class="num">${l.eh_escritorio ? '<span class="dica">—</span>' : l.nfse_tomadas}</td>
+      <td><span class="dica">NF-e:</span> ${ultima(l.ultima_consulta, l.ultimo_resultado, l.ultimo_erro, l.proxima_consulta, l.pode_consultar, l.tem_certificado)}
+        ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado)}`}</td>
+      <td>${!l.tem_certificado ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
+      <td class="acoes-linha">${l.eh_escritorio ? '' : `<button data-notas="${l.id}">Notas</button> `}${pode('compras') ? `<button data-ver="${l.id}">Compras</button> ` : ''}<button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
     </tbody></table></div>
-    <p class="dica">O pacote do mês (ZIP) traz os XML das NFS-e emitidas e das NF-e recebidas, com planilhas de conferência. Para enviar o certificado A1 de um cliente, use Cadastros &gt; Empresas.</p>`;
+    <p class="dica">O pacote do mês (ZIP) traz os XML das notas de compra, de venda e de serviço (prestadas e tomadas), com planilhas de conferência.</p>`;
   $('#mes-cap').onchange = (ev) => { telaCaptura.mes = ev.target.value || mesAtual(); telaCaptura(); };
+  $('#copiar-cnpj') && ($('#copiar-cnpj').onclick = async () => { try { await navigator.clipboard.writeText(e.documento); aviso('CNPJ copiado.'); } catch { aviso(fmtDoc(e.documento)); } });
   $('#cap-todos').onclick = async (ev) => {
-    ev.target.disabled = true; ev.target.textContent = 'Consultando a SEFAZ…';
+    ev.target.disabled = true; ev.target.textContent = 'Consultando…';
     try {
       const r = await api('POST', '/api/escritorio/captura/buscar');
       $('#cap-res').innerHTML = `<div class="cartao" style="margin-top:12px"><strong>${r.consultados} cliente(s) consultado(s), ${r.novas} nota(s) nova(s)${r.erros ? `, ${r.erros} com erro` : ''}.</strong>
-        <ul class="dicas">${r.resultados.map((x) => `<li class="${x.ok ? '' : 'cor-vermelho'}">${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul></div>`;
-      setTimeout(() => telaCaptura(), 4000);
-    } catch (e) { aviso(mensagemErro(e)); ev.target.disabled = false; }
+        <ul class="dicas">${r.resultados.map((x) => `<li class="${x.ok ? '' : 'cor-vermelho'}">${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul>
+        <div class="acoes"><button type="button" id="cap-atualizar">Atualizar a lista</button></div></div>`;
+      $('#cap-atualizar').onclick = () => telaCaptura();
+    } catch (er) { aviso(mensagemErro(er)); ev.target.disabled = false; ev.target.textContent = 'Buscar agora'; }
   };
-  const auto = (ligar) => async () => { try { const r = await api('POST', '/api/escritorio/captura/automatica', { ligar }); aviso(`Busca automática ${ligar ? 'ligada' : 'desligada'} para ${r.alterados} cliente(s).`); telaCaptura(); } catch (e) { aviso(mensagemErro(e)); } };
+  const auto = (ligar) => async () => { try { const r = await api('POST', '/api/escritorio/captura/automatica', { ligar }); aviso(`Busca automática ${ligar ? 'ligada' : 'desligada'} para ${r.alterados} cliente(s).`); telaCaptura(); } catch (er) { aviso(mensagemErro(er)); } };
   $('#cap-auto-on').onclick = auto(true); $('#cap-auto-off').onclick = auto(false);
   conteudo.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = () => irParaEmpresa(Number(b.dataset.ver), '#/nfe-sefaz')));
   conteudo.querySelectorAll('[data-pac]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/captura/${b.dataset.pac}/pacote?mes=${mes}`, `documentos_${mes}.zip`)));
+  conteudo.querySelectorAll('[data-notas]').forEach((b) => (b.onclick = () => notasCapturadas(lista.find((l) => l.id === Number(b.dataset.notas)), mes)));
+}
+
+async function notasCapturadas(cli, mes) {
+  const d = await api('GET', `/api/escritorio/captura/${cli.id}/notas?mes=${mes}`);
+  const sit = (s) => (s === 'CANCELADA' ? '<span class="selo PZ-ATRASADA">Cancelada</span>' : s === 'DENEGADA' ? '<span class="selo PZ-BREVE">Denegada</span>' : '');
+  const xml = (chave) => `<button data-xml="${chave}">XML</button>`;
+  const prest = d.nfse.filter((n) => n.papel !== 'TOMADOR'), toma = d.nfse.filter((n) => n.papel === 'TOMADOR');
+  const total = (l) => brl(l.filter((x) => x.situacao !== 'CANCELADA').reduce((s, x) => s + (x.valor ?? 0), 0));
+  const tabNfse = (l, outra) => l.length ? `<table class="tabela"><thead><tr><th>Competência</th><th>Nº</th><th>${outra}</th><th class="num">Valor</th><th class="num">ISS</th><th></th></tr></thead><tbody>
+    ${l.map((n) => { const p = outra === 'Tomador' ? [n.tomador_nome, n.tomador_documento] : [n.prestador_nome, n.prestador_documento]; return `<tr class="${n.situacao === 'CANCELADA' ? 'inativo' : ''}"><td>${dataBr(n.competencia)}</td><td>${esc(n.numero ?? '')}</td><td>${esc(p[0] ?? '')}<br><span class="dica">${fmtDoc(p[1] ?? '')}</span></td><td class="num">${brl(n.valor)}</td><td class="num">${brl(n.iss)}${n.iss_retido ? '<br><span class="dica">retido</span>' : ''}</td><td class="acoes-linha">${sit(n.situacao)} ${xml(n.chave)}</td></tr>`; }).join('')}</tbody></table>` : '<p class="dica">Nenhuma nota neste mês.</p>';
+  abrirDialogo(`<div class="dlg-largo"><h2>${esc(cli.cliente)} — ${rotuloMes(mes)}</h2>
+    <h3>NF-e de venda (${d.vendas.length}) <span class="dica">${total(d.vendas)}</span></h3>
+    ${d.vendas.length ? `<table class="tabela"><thead><tr><th>Emissão</th><th>Nº</th><th>Destinatário</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+      ${d.vendas.map((v) => `<tr class="${v.situacao === 'CANCELADA' ? 'inativo' : ''}"><td>${dataBr(v.emissao)}</td><td>${esc(v.numero ?? '')}${v.modelo === '65' ? ' <span class="dica">NFC-e</span>' : ''}</td><td>${esc(v.destinatario_nome ?? 'Consumidor')}<br><span class="dica">${fmtDoc(v.destinatario_documento ?? '')}</span></td><td class="num">${brl(v.valor)}</td><td class="acoes-linha">${sit(v.situacao)} ${xml(v.chave)}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="dica">Nenhuma nota de venda neste mês. Confira se o cliente informou o CNPJ do escritório no autXML do emissor dele.</p>'}
+    <h3>NFS-e prestadas (${prest.length}) <span class="dica">${total(prest)}</span></h3>${tabNfse(prest, 'Tomador')}
+    <h3>NFS-e tomadas (${toma.length}) <span class="dica">${total(toma)}</span></h3>${tabNfse(toma, 'Prestador')}
+    <p class="dica">As NFS-e prestadas emitidas pelo próprio sistema também estão em Faturamento &gt; Notas emitidas.</p>
+    <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    dlg.querySelectorAll('[data-xml]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/captura/${cli.id}/xml/${b.dataset.xml}`, `${b.dataset.xml}.xml`)));
+  });
 }
 
 // ---------------------------------------------------------------------------

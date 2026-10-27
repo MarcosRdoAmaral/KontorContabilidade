@@ -34,5 +34,11 @@ export const SEFIN_URL: Record<1 | 2, string> = {
   2: 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional',
 };
 
+/** Ambiente de Dados Nacional (ADN): distribuição das NFS-e para os contribuintes (prestador, tomador, intermediário). */
+export const ADN_URL: Record<1 | 2, string> = {
+  1: 'https://adn.nfse.gov.br/contribuintes',
+  2: 'https://adn.producaorestrita.nfse.gov.br/contribuintes',
+};
+
 /** Base da consulta pública (usada no QR Code do DANFSe). */
 export const CONSULTA_PUBLICA_URL = 'https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=';

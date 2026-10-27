@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.1.0';
+export const MANUAL_VERSAO = '1.2.0';
 
 export const MANUAL = [
   {
@@ -100,10 +100,19 @@ export const MANUAL = [
       <p>Contratos com 13º aparecem na aba 13º honorário para emitir em dezembro. A aba Em atraso mostra os boletos de honorário vencidos por cliente.</p>`,
   },
   {
-    id: 'captura', titulo: 'Captura de documentos', resumo: 'NF-e recebidas de todos os clientes e pacote do mês.',
+    id: 'captura', titulo: 'Captura de documentos', resumo: 'NF-e de compra e de venda, NFS-e prestadas e tomadas de todos os clientes, e o pacote do mês.',
     corpo: `
-      <p>Para cada cliente com certificado A1, o sistema consulta a SEFAZ (Distribuição DF-e) e baixa as NF-e emitidas contra ele. <em>Buscar agora</em> consulta todos os que já podem (a SEFAZ exige 1 hora entre consultas sem novidade); <em>Ligar busca automática</em> faz isso sozinho enquanto o programa estiver aberto.</p>
-      <p><em>Baixar pacote</em> gera o ZIP do mês do cliente com os XML das NFS-e emitidas e das NF-e recebidas e planilhas de conferência. <em>Ver NF-e</em> abre a tela de NF-e recebidas do cliente.</p>`,
+      <p>Uma tela para os documentos de toda a carteira, mês a mês. A tabela mostra, por cliente, as NF-e de compra, as NF-e de venda, as NFS-e prestadas e as tomadas.</p>
+      <h3>NF-e de compra</h3>
+      <p>Com o certificado A1 do cliente (Cadastros &gt; Empresas &gt; Certificado), o sistema consulta a SEFAZ e baixa as NF-e emitidas contra ele.</p>
+      <h3>NF-e de venda</h3>
+      <p>A SEFAZ não devolve ao emitente as notas que ele mesmo emitiu. Por isso, peça a cada cliente para informar o <strong>CNPJ do escritório</strong> no campo <em>“Autorizados a baixar o XML” (autXML)</em> do sistema emissor de notas dele (o CNPJ aparece na tela, com o botão Copiar). Daí em diante, as notas de venda chegam pelo certificado A1 do <strong>escritório</strong> e vão para o cliente certo pelo CNPJ do emitente. Para isso, envie o certificado A1 da empresa do escritório em Cadastros &gt; Empresas.</p>
+      <p class="dica">Só chegam as notas emitidas depois que o cliente configurar o campo. NFC-e (cupom) não entra nessa distribuição. Notas de CNPJs que ainda não estão na carteira ficam guardadas e aparecem no cliente assim que ele for cadastrado.</p>
+      <h3>NFS-e prestadas e tomadas</h3>
+      <p>Com o certificado A1 do cliente, o sistema consulta o Ambiente de Dados Nacional da NFS-e e baixa as notas de serviço em que ele é prestador ou tomador, inclusive as emitidas em outros sistemas, com os cancelamentos. Vale para os municípios que usam o padrão nacional; os que têm sistema próprio de prefeitura não enviam as notas para lá.</p>
+      <h3>Buscar e acompanhar</h3>
+      <p><em>Buscar agora</em> consulta todos os clientes que já podem: SEFAZ e Ambiente Nacional pedem 1 hora entre consultas quando não há notas novas. <em>Ligar busca automática</em> faz isso sozinho enquanto o programa estiver aberto. O botão <em>Notas</em> mostra as notas de venda e de serviço do mês, com o XML de cada uma; <em>Compras</em> abre as NF-e de compra do cliente.</p>
+      <p><em>Pacote do mês</em> gera um ZIP com os XML de compras, vendas e serviços (prestados e tomados) e planilhas de conferência.</p>`,
   },
   {
     id: 'avisos', titulo: 'Avisos de prazos por e-mail', resumo: 'Resumo diário de atrasos, vencimentos, certificados e reajustes.',

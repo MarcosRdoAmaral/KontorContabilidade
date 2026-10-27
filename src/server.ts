@@ -10,6 +10,7 @@ import { garantirAdmin, garantirMaster } from './auth.js';
 import { rotas } from './rotas.js';
 import { rotasEscritorio } from './rotas-escritorio.js';
 import { avisosAutomaticos } from './servicos/avisos.js';
+import { buscarAdnAutomaticamente } from './servicos/nfse-capturadas.js';
 import { sincronizarDespesasDoExtrato } from './servicos/extrato.js';
 import { sincronizarDespesasDoCartao } from './servicos/cartao.js';
 import { garantirTiposDosPerfis, migrarServicosLegados } from './servicos/tributacao.js';
@@ -54,6 +55,9 @@ export async function criarApp() {
   if (process.env.NFE_BUSCA_AUTOMATICA !== '0') {
     const timerNfe = setInterval(() => { buscarAutomaticamente().catch((e) => app.log.error(e)); }, 10 * 60e3);
     timerNfe.unref();
+    // NFS-e prestadas e tomadas no Ambiente Nacional: mesma cadência (intervalo de 1 h por cliente sem novidade)
+    const timerAdn = setInterval(() => { buscarAdnAutomaticamente().catch((e) => app.log.error(e)); }, 10 * 60e3);
+    timerAdn.unref();
   }
   // Fechamento mensal para a contabilidade: a cada 30 min vê se alguma empresa chegou ao dia de envio
   if (process.env.FECHAMENTO_AUTOMATICO !== '0') {

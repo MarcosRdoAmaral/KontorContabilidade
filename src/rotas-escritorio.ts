@@ -7,7 +7,9 @@ import { ClienteCarteira, criarCliente, editarCliente, listarCarteira, visaoGera
 import { Certificado, excluirCertificado, listarCertificados, renovarCertificado, resumoCertificados, salvarCertificado, TIPOS_CERT } from './servicos/certificados.js';
 import { AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInicioDoControle, inicioDoControle, atualizarTarefa, entregarEmLote, excluirObrigacao, listarObrigacoes, listarTarefas, obrigacoesDoCliente, resumoTarefas, salvarObrigacao, salvarObrigacoesDoCliente } from './servicos/obrigacoes.js';
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
-import { automaticaParaTodos, capturarTodos, pacoteDoMes, statusCaptura } from './servicos/captura.js';
+import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
+import { xmlSaida } from './servicos/nfe-saidas.js';
+import { xmlNfseCapturada } from './servicos/nfse-capturadas.js';
 import { ConfigAvisos, configAvisos, enviarResumo, montarResumo, salvarAvisos } from './servicos/avisos.js';
 
 /** Rotas exclusivas do Kontor Gestão Contabilidade (gestão do escritório). Permissões em src/auth.ts (REGRAS). */
@@ -185,6 +187,20 @@ export async function rotasEscritorio(app: FastifyInstance) {
 
     // ---------- Captura de documentos ----------
     api.get('/api/escritorio/captura', async (req) => statusCaptura(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))));
+    api.get('/api/escritorio/captura/autxml', async (req) => statusAutXml(u(req).escritorio_id, mesDe(req.query)));
+    api.get('/api/escritorio/captura/:id/notas', async (req) => { checar(req, id(req)); return notasDoMes(u(req).escritorio_id, id(req), mesDe(req.query)); });
+    api.get('/api/escritorio/captura/:id/xml/:chave', async (req, reply) => {
+      checar(req, id(req));
+      const chave = String((req.params as any).chave);
+      const doc = (db.prepare('SELECT documento FROM empresas WHERE id = ?').get(id(req)) as any).documento;
+      if (/^\d{44}$/.test(chave)) {
+        const x = xmlSaida(u(req).escritorio_id, chave);
+        if (x.emitente_documento !== doc) throw new ErroNegocio('XML não encontrado.', 404);
+        return reply.type('application/xml').header('Content-Disposition', `attachment; filename="NFe_${chave}.xml"`).send(x.xml);
+      }
+      const x = xmlNfseCapturada(id(req), chave);
+      return reply.type('application/xml').header('Content-Disposition', `attachment; filename="NFSe_${x.numero ?? chave}.xml"`).send(x.xml);
+    });
     api.post('/api/escritorio/captura/buscar', async (req) => capturarTodos(u(req).escritorio_id, empresasDoUsuario(u(req))));
     api.post('/api/escritorio/captura/automatica', async (req) => automaticaParaTodos(u(req).escritorio_id, z.object({ ligar: z.boolean() }).parse(req.body).ligar, empresasDoUsuario(u(req))));
     api.get('/api/escritorio/captura/:id/pacote', async (req, reply) => {

@@ -6,6 +6,7 @@ import { cadeiaIcpGuardada, baixarCadeiaIcp } from '../nfe/confianca.js';
 import { EVENTOS_CANCELAMENTO, ErroSefaz, SefazAN, lerDocumento, type DocDistribuido } from '../nfe/sefaz-an.js';
 import { ErroNegocio, certificadoDaEmpresa } from './emissao.js';
 import { OpcoesImportacao, importarCompraXml } from './compras.js';
+import { rotearSaida } from './nfe-saidas.js';
 
 /**
  * NF-e de entrada direto da SEFAZ.
@@ -35,6 +36,8 @@ export interface ResultadoBusca {
   cancelamentos: number;
   ciencias: number;
   cienciasRecusadas: number;
+  /** NF-e de venda de clientes recebidas pelo autXML (só na busca da empresa do escritório). */
+  saidas: number;
   aviso: string | null;
   resumo: string;
 }
@@ -84,7 +87,9 @@ function gravarNota(empresaId: number, chave: string, campos: {
 }
 
 /** Guarda um documento distribuído. Retorna o que ele representou. */
-export function processarDocumento(empresaId: number, d: DocDistribuido): 'nova' | 'completa' | 'cancelamento' | 'outro' {
+export function processarDocumento(empresaId: number, d: DocDistribuido): 'nova' | 'completa' | 'cancelamento' | 'outro' | 'saida' {
+  // na busca do escritório, as notas de venda dos clientes (autXML) vão para nfe_saidas
+  if (rotearSaida(empresaId, d)) return 'saida';
   if (d.tipo === 'resNFe') {
     const c = lerDocumento(d.xml);
     if (!/^\d{44}$/.test(c.chNFe ?? '')) return 'outro';
@@ -174,6 +179,7 @@ function textoResumo(r: Omit<ResultadoBusca, 'resumo'>) {
   if (r.novas) partes.push(`${r.novas} nota(s) nova(s)`);
   if (r.completas) partes.push(`${r.completas} XML(s) completo(s)`);
   if (r.cancelamentos) partes.push(`${r.cancelamentos} cancelamento(s)`);
+  if (r.saidas) partes.push(`${r.saidas} nota(s) de venda de clientes (autXML)`);
   if (r.ciencias) partes.push(`ciência registrada em ${r.ciencias}`);
   if (r.cienciasRecusadas) partes.push(`${r.cienciasRecusadas} ciência(s) recusada(s)`);
   if (!partes.length) partes.push(r.consultou ? 'nenhum documento novo' : 'aguardando o intervalo da SEFAZ');
@@ -194,7 +200,7 @@ export async function buscarNaSefaz(empresaId: number, opcoes: { automatica?: bo
     const cert = certificadoDaEmpresa(empresa);
     const est = estado(empresaId);
     const r = await comSefaz(cert, async (cli) => {
-      const res: Omit<ResultadoBusca, 'resumo'> = { consultou: false, proximaConsulta: est.proxima_consulta, novas: 0, completas: 0, cancelamentos: 0, ciencias: 0, cienciasRecusadas: 0, aviso: null };
+      const res: Omit<ResultadoBusca, 'resumo'> = { consultou: false, proximaConsulta: est.proxima_consulta, novas: 0, completas: 0, cancelamentos: 0, ciencias: 0, cienciasRecusadas: 0, saidas: 0, aviso: null };
       if (!est.proxima_consulta || new Date(est.proxima_consulta).getTime() <= Date.now()) {
         res.consultou = true;
         let ult = est.ult_nsu;
@@ -205,7 +211,7 @@ export async function buscarNaSefaz(empresaId: number, opcoes: { automatica?: bo
             db.transaction(() => {
               for (const d of ret.docs) {
                 const t = processarDocumento(empresaId, d);
-                if (t === 'nova') res.novas++; else if (t === 'completa') res.completas++; else if (t === 'cancelamento') res.cancelamentos++;
+                if (t === 'nova') res.novas++; else if (t === 'completa') res.completas++; else if (t === 'cancelamento') res.cancelamentos++; else if (t === 'saida') res.saidas++;
               }
               if (ret.ultNSU) ult = ret.ultNSU;
               db.prepare('UPDATE nfe_distribuicao SET ult_nsu = ? WHERE empresa_id = ?').run(ult, empresaId);

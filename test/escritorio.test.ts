@@ -235,8 +235,9 @@ test('escritório: carteira, obrigações, certificados, contratos, honorários 
     assert.equal(cap.length, 3); assert.ok(cap.every((c: any) => !c.pode_consultar), 'sem certificado não consulta');
     const { capturarTodos } = await import('../src/servicos/captura.js');
     db.prepare("UPDATE empresas SET cert_pfx_enc = x'00', cert_validade = '2099-01-01T00:00:00Z' WHERE id = ?").run(simples);
-    const rc = await capturarTodos(1, null, async () => ({ novas: 3, resumo: '3 notas novas' }) as any);
-    assert.deepEqual([rc.consultados, rc.novas, rc.erros], [1, 3, 0]);
+    const rc = await capturarTodos(1, null, async () => ({ novas: 3, resumo: '3 notas novas' }) as any, async () => ({ prestadas: 2, tomadas: 1, resumo: 'NFS-e: 2 prestadas, 1 tomada' }));
+    assert.deepEqual([rc.consultados, rc.novas, rc.erros], [1, 6, 0]);
+    assert.match(rc.resultados[0].mensagem, /NF-e: 3 notas novas · NFS-e: 2 prestadas/);
     const { montarResumo } = await import('../src/servicos/avisos.js');
     const linhas = montarResumo(1);
     assert.ok(linhas.some((l) => /ATRASADAS/.test(l)));

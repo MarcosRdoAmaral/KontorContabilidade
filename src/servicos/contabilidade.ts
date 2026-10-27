@@ -92,15 +92,15 @@ function entradasDoPeriodo(empresaId: number, de: string, ate: string, arq: Reco
   arq['entradas/relatorio-entradas.csv'] = strToU8('﻿' + [cab.map(csv).join(';'), ...linhas.map((l) => l.map(csv).join(';'))].join('\r\n'));
 }
 
-export interface OpcoesPacote { de: string; ate: string; xml: boolean; pdf: boolean; ofx: boolean; entradas?: boolean; sefaz?: boolean }
+export interface OpcoesPacote { de: string; ate: string; xml: boolean; pdf: boolean; ofx: boolean; entradas?: boolean; sefaz?: boolean; extras?: Record<string, Uint8Array> }
 
 /** ZIP para a contabilidade: XML e PDF das notas do período, OFX da movimentação e planilha-índice. */
 export async function pacoteContabilidade(empresaId: number, o: OpcoesPacote): Promise<{ zip: Buffer; nome: string }> {
   const emp = db.prepare('SELECT razao_social, documento, ambiente FROM empresas WHERE id = ?').get(empresaId) as any;
   if (!emp) throw new ErroNegocio('Empresa não encontrada.', 404);
   if (o.de > o.ate) throw new ErroNegocio('A data inicial é maior que a final.');
-  if (!o.xml && !o.pdf && !o.ofx && !o.entradas && !o.sefaz) throw new ErroNegocio('Marque ao menos um tipo de arquivo.');
-  const arq: Record<string, Uint8Array> = {};
+  if (!o.xml && !o.pdf && !o.ofx && !o.entradas && !o.sefaz && !o.extras) throw new ErroNegocio('Marque ao menos um tipo de arquivo.');
+  const arq: Record<string, Uint8Array> = { ...(o.extras ?? {}) };
   const notas = db.prepare(`SELECT id, n_nfse, status, competencia, valor_servico, tomador_nome, tomador_documento, chave_acesso, xml_nfse
       FROM notas WHERE empresa_id = ? AND ambiente = ? AND xml_nfse IS NOT NULL AND competencia BETWEEN ? AND ? ORDER BY competencia, id LIMIT 5000`)
     .all(empresaId, emp.ambiente, o.de, o.ate) as any[];

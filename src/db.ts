@@ -841,6 +841,48 @@ const migracoes: string[] = [
   ALTER TABLE empresas ADD COLUMN rep_estado_civil TEXT;
   ALTER TABLE empresas ADD COLUMN rep_profissao TEXT;
   ALTER TABLE contrato_modelos ADD COLUMN testemunhas INTEGER NOT NULL DEFAULT 1;`,
+  // 30: captura de NF-e de venda (autXML, pelo certificado do escritório) e de NFS-e prestadas/tomadas (ADN)
+  `CREATE TABLE nfe_saidas (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    chave TEXT NOT NULL,
+    emitente_documento TEXT NOT NULL,         -- liga a nota ao cliente da carteira pelo CNPJ
+    emitente_nome TEXT,
+    numero TEXT, serie TEXT, modelo TEXT, natureza TEXT, emissao TEXT,
+    destinatario_documento TEXT, destinatario_nome TEXT,
+    valor REAL,
+    situacao TEXT NOT NULL DEFAULT 'AUTORIZADA' CHECK (situacao IN ('AUTORIZADA','DENEGADA','CANCELADA')),
+    xml TEXT,
+    nsu TEXT,
+    recebida_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (escritorio_id, chave)
+  );
+  CREATE INDEX ix_nfe_saidas ON nfe_saidas(escritorio_id, emitente_documento, emissao);
+  CREATE TABLE nfse_capturadas (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    chave TEXT NOT NULL,
+    papel TEXT NOT NULL CHECK (papel IN ('PRESTADOR','TOMADOR','OUTRO')),
+    numero TEXT, emissao TEXT, competencia TEXT,
+    prestador_documento TEXT, prestador_nome TEXT, tomador_documento TEXT, tomador_nome TEXT,
+    municipio TEXT, descricao TEXT,
+    valor REAL, valor_liquido REAL, iss REAL, iss_retido INTEGER NOT NULL DEFAULT 0,
+    situacao TEXT NOT NULL DEFAULT 'AUTORIZADA' CHECK (situacao IN ('AUTORIZADA','CANCELADA')),
+    xml TEXT,
+    nsu INTEGER,
+    recebida_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (empresa_id, chave)
+  );
+  CREATE INDEX ix_nfse_capturadas ON nfse_capturadas(empresa_id, competencia);
+  CREATE TABLE adn_distribuicao (
+    empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
+    ult_nsu INTEGER NOT NULL DEFAULT 0,
+    proxima_consulta TEXT,
+    ultima_consulta TEXT,
+    ultimo_resultado TEXT,
+    ultimo_erro TEXT,
+    automatica INTEGER NOT NULL DEFAULT 1
+  );`,
 ];
 
 export function migrar(): void {
