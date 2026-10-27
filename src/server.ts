@@ -11,6 +11,7 @@ import { rotas } from './rotas.js';
 import { rotasEscritorio } from './rotas-escritorio.js';
 import { avisosAutomaticos } from './servicos/avisos.js';
 import { buscarAdnAutomaticamente } from './servicos/nfse-capturadas.js';
+import { sitfisAutomatico } from './servicos/situacao-fiscal.js';
 import { sincronizarDespesasDoExtrato } from './servicos/extrato.js';
 import { sincronizarDespesasDoCartao } from './servicos/cartao.js';
 import { garantirTiposDosPerfis, migrarServicosLegados } from './servicos/tributacao.js';
@@ -64,6 +65,12 @@ export async function criarApp() {
     const timerFech = setInterval(() => { fechamentoAutomatico().catch((e) => app.log.error(e)); }, 30 * 60e3);
     timerFech.unref();
     setTimeout(() => { fechamentoAutomatico().catch((e) => app.log.error(e)); }, 60e3).unref();
+  }
+  // Situação fiscal automática (Escritório > Situação fiscal): a cada 30 min vê se chegou o dia ou se há relatório pendente
+  if (process.env.SITFIS_AUTOMATICO !== '0') {
+    const timerSf = setInterval(() => { sitfisAutomatico().catch((e) => app.log.error(e)); }, 30 * 60e3);
+    timerSf.unref();
+    setTimeout(() => { sitfisAutomatico().catch((e) => app.log.error(e)); }, 2 * 60e3).unref();
   }
   // Resumo diário de prazos por e-mail (Configurações > Avisos)
   if (process.env.AVISOS_AUTOMATICOS !== '0') {

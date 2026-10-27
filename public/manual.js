@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.4.0';
+export const MANUAL_VERSAO = '1.5.0';
 
 export const MANUAL = [
   {
@@ -142,6 +142,9 @@ export const MANUAL = [
         <li><strong>Conferir o PDF:</strong> o relatório veio num formato que o sistema não conseguiu ler; abra o PDF.</li>
       </ul>
       <p>Clientes com pendência aparecem primeiro na lista e na Visão geral. Os valores são lidos do relatório: em caso de dúvida, vale o PDF.</p>
+      <h3>Consulta automática</h3>
+      <p>No quadro <em>Consulta automática</em> (administrador), escolha um ou dois dias do mês e os e-mails que recebem o resultado. Nesses dias, a partir das 7h e com o programa aberto, o sistema consulta todos os clientes ativos e manda um e-mail com quem tem pendência, separando as <strong>pendências novas</strong> das que continuam e listando os clientes que não puderam ser consultados (sem procuração, por exemplo). Se o computador estiver desligado no dia, a consulta roda na próxima abertura do programa. Relatórios que a Receita ainda estava gerando são buscados sozinhos nas rodadas seguintes.</p>
+      <p class="dica">O quadro mostra quantas chamadas ao Integra Contador a consulta automática faz por mês (duas por cliente em cada rodada).</p>
       <p class="dica">É preciso o Integra Contador configurado (Configurações &gt; Integra Contador) e a procuração eletrônica do cliente para o escritório no e-CAC.</p>`,
   },
   {

@@ -30,6 +30,16 @@ test('leitura do relatório de situação fiscal', async () => {
   assert.equal(lerRelatorio('texto qualquer').situacao, 'VERIFICAR');
 });
 
+test('agenda mensal: datas das ocorrências', async () => {
+  const { ocorrenciaDevida, proximaOcorrencia } = await import('../src/servicos/situacao-fiscal.js');
+  assert.equal(ocorrenciaDevida([1, 15], '2026-10-27'), '2026-10-15');
+  assert.equal(ocorrenciaDevida([1, 15], '2026-10-10'), '2026-10-01');
+  assert.equal(ocorrenciaDevida([5], '2026-01-03'), '2025-12-05', 'antes do dia: vale a do mês anterior');
+  assert.equal(proximaOcorrencia([1, 15], '2026-10-27'), '2026-11-01');
+  assert.equal(proximaOcorrencia([1, 15], '2026-10-01'), '2026-10-15');
+  assert.equal(proximaOcorrencia([10], '2026-12-20'), '2027-01-10');
+});
+
 test('consulta da situação fiscal pelo Integra Contador', async () => {
   const { criarApp } = await import('../src/server.js');
   const { db } = await import('../src/db.js');
@@ -94,6 +104,42 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     const api = (await call('POST', '/api/escritorio/situacao-fiscal/consultar', { ids: [ids[ALFA]] }, t)).json;
     assert.equal(api.erros, 1); assert.match(api.resultados[0].mensagem, /Integra Contador/);
     assert.ok(db.prepare('SELECT COUNT(*) AS n FROM situacao_fiscal').get());
+
+    // ---------- consulta automática ----------
+    const email = await import('../src/servicos/email.js');
+    const enviados: any[] = [];
+    email.trocarTransporte(() => ({ sendMail: async (m: any) => { enviados.push(m); return {}; } }) as any);
+    email.salvarConfig(1, { host: 'smtp.x.com', port: 587, secure: false, usuario: 'u', senha: 's', remetente_nome: 'Ciclo', remetente_email: 'ciclo@x.com' } as any);
+    assert.equal((await call('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: true, dias: [1, 15, 20] }, t)).status, 400, 'no máximo dois dias');
+    const ag = (await call('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: true, dias: [15, 1], emails: ['contador@x.com'] }, t)).json;
+    assert.deepEqual(ag.dias, [1, 15]); assert.equal(ag.chamadasPorMes, 3 * 2 * 2);
+    const { sitfisAutomatico, lerAgenda } = await import('../src/servicos/situacao-fiscal.js');
+    const proxima = ag.proxima as string;
+    // antes do dia: não roda
+    assert.deepEqual(await sitfisAutomatico(new Date(`${proxima}T09:00:00-03:00`.replace(proxima, new Date(Date.parse(proxima) - 864e5).toISOString().slice(0, 10))), { transporte, esperar }), []);
+    // no dia, a partir das 7h: consulta todos os clientes ativos
+    emitirFila[PADARIA] = [{ pdf: pdfPend }]; emitirFila[ALFA] = [{ tempoEspera: 90000 }, { pdf: pdfReg }];
+    db.prepare("UPDATE situacao_fiscal SET solicitada_em = datetime('now', '-13 hours')").run(); // protocolos antigos vencidos
+    chamadas.length = 0;
+    const f1 = await sitfisAutomatico(new Date(`${proxima}T10:00:00-03:00`), { transporte, esperar });
+    assert.deepEqual(f1, [{ escritorio: 1, consultados: 3 }]);
+    assert.equal(chamadas.filter((c) => c.startsWith('Apoiar')).length, 3);
+    const a1 = lerAgenda(1);
+    assert.equal(a1.ultimaOcorrencia, proxima); assert.match(a1.ultimoResultado!, /1 com pendências .*1 aguardando a Receita.*1 com erro.*E-mail enviado/);
+    assert.equal(enviados.length, 1);
+    assert.match(enviados[0].subject, /Situação fiscal dos clientes/);
+    assert.match(enviados[0].text, /CONTINUAM COM PENDÊNCIAS\n• Cliente 11222333000181: 4 pendência\(s\)/, 'a Padaria já tinha pendência');
+    assert.match(enviados[0].text, /NÃO FOI POSSÍVEL CONSULTAR\n• Cliente 27865757000102: Sem procuração/);
+    assert.match(enviados[0].text, /AINDA EM GERAÇÃO/);
+    // mesma ocorrência: não consulta de novo; o relatório pendente é buscado quando liberar
+    chamadas.length = 0;
+    const f3 = await sitfisAutomatico(new Date(`${proxima}T10:30:00-03:00`), { transporte, esperar });
+    assert.deepEqual(f3, [{ escritorio: 1, consultados: 1 }], 'só o relatório que ficou pendente');
+    assert.deepEqual(chamadas, [`Emitir:RELATORIOSITFIS92:${ALFA}`]);
+    assert.equal(enviados.length, 1, 'e-mail só na rodada do dia');
+    // desligada: não roda
+    await call('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: false, dias: [1, 15], emails: [] }, t);
+    assert.deepEqual(await sitfisAutomatico(new Date(`${proxima.slice(0, 8)}28T10:00:00-03:00`), { transporte, esperar }), []);
   } finally {
     await app.close();
   }

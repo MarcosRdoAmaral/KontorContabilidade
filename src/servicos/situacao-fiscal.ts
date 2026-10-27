@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import { db } from '../db.js';
+import { enviarEmailSimples } from './email.js';
 import { ErroNegocio } from './emissao.js';
 import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from './integra-contador.js';
 
@@ -107,7 +109,7 @@ async function concluir(id: number, pdf: Buffer) {
 export interface ResultadoSitfis { empresa_id: number; cliente: string; status: 'PRONTA' | 'SOLICITADA' | 'ERRO'; situacao?: string; mensagem: string; id?: number }
 
 /** Pede (ou retoma) o relatório de um cliente e espera um pouco por ele. */
-export async function consultarSituacao(escritorioId: number, usuarioId: number, empresaId: number, opcoes: { transporte?: Transporte; esperar?: Espera } = {}): Promise<ResultadoSitfis> {
+export async function consultarSituacao(escritorioId: number, usuarioId: number | null, empresaId: number, opcoes: { transporte?: Transporte; esperar?: Espera } = {}): Promise<ResultadoSitfis> {
   const e = db.prepare('SELECT id, documento, COALESCE(nome_fantasia, razao_social) AS cliente FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId) as any;
   if (!e) throw new ErroNegocio('Cliente não encontrado.', 404);
   if (!opcoes.transporte && lerConfig(escritorioId)?.ambiente === 'DEMONSTRACAO') throw new ErroNegocio('O Integra Contador está no ambiente de Demonstração. Troque para Produção em Configurações > Integra Contador.');
@@ -155,7 +157,7 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number,
   return { ...base, status: 'SOLICITADA', mensagem: 'A Receita ainda está gerando o relatório. Clique em Atualizar em instantes.', id: reg.id };
 }
 
-export async function consultarVarios(escritorioId: number, usuarioId: number, ids: number[], opcoes: { transporte?: Transporte; esperar?: Espera } = {}) {
+export async function consultarVarios(escritorioId: number, usuarioId: number | null, ids: number[], opcoes: { transporte?: Transporte; esperar?: Espera } = {}) {
   const resultados: ResultadoSitfis[] = [];
   for (const id of ids.slice(0, 100)) {
     try { resultados.push(await consultarSituacao(escritorioId, usuarioId, id, opcoes)); }
@@ -201,4 +203,132 @@ export function resumoSituacoes(escritorioId: number, empresas: number[] | null 
   const p = painelSituacao(escritorioId, empresas);
   return { comPendencias: p.filter((x) => x.situacao === 'PENDENCIAS').length, regulares: p.filter((x) => x.situacao === 'REGULAR').length,
     naoConsultados: p.filter((x) => !x.id).length, totalAberto: Math.round(p.reduce((t, x) => t + (x.situacao === 'PENDENCIAS' ? x.total_aberto ?? 0 : 0), 0) * 100) / 100 };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Consulta automática (uma ou duas vezes por mês)
+// ---------------------------------------------------------------------------------------------
+
+
+const P_AGENDA = (e: number) => `sitfis_agenda:${e}`;
+export const AgendaSitfis = z.object({
+  ativo: z.boolean(),
+  dias: z.array(z.number().int().min(1).max(28)).min(1, 'Escolha ao menos um dia').max(2, 'No máximo dois dias por mês'),
+  emails: z.array(z.string().trim().email('E-mail inválido')).max(5),
+});
+interface AgendaSalva extends z.infer<typeof AgendaSitfis> { ultimaOcorrencia?: string | null; ultimaExecucao?: string | null; ultimoResultado?: string | null }
+
+export function lerAgenda(escritorioId: number): AgendaSalva {
+  const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(P_AGENDA(escritorioId)) as any)?.valor;
+  return v ? JSON.parse(v) : { ativo: false, dias: [1], emails: [] };
+}
+function gravarAgenda(escritorioId: number, a: AgendaSalva) {
+  db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(P_AGENDA(escritorioId), JSON.stringify(a));
+}
+export function salvarAgenda(escritorioId: number, d: z.infer<typeof AgendaSitfis>) {
+  const atual = lerAgenda(escritorioId);
+  const dias = [...new Set(d.dias)].sort((a, b) => a - b);
+  // ao ligar, não roda de imediato a ocorrência que já passou neste mês: começa na próxima
+  const ultimaOcorrencia = d.ativo && !atual.ativo ? ocorrenciaDevida(dias, hojeBr()) : atual.ultimaOcorrencia ?? null;
+  gravarAgenda(escritorioId, { ...atual, ...d, dias, ultimaOcorrencia });
+}
+
+const hojeBr = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+
+/** Data da última ocorrência programada até hoje (AAAA-MM-DD): o maior dia já alcançado no mês, ou o último do mês anterior. */
+export function ocorrenciaDevida(dias: number[], hoje: string): string {
+  const [a, m, d] = hoje.split('-').map(Number);
+  const ord = [...dias].sort((x, y) => x - y);
+  const noMes = ord.filter((x) => x <= d).pop();
+  if (noMes) return `${a}-${String(m).padStart(2, '0')}-${String(noMes).padStart(2, '0')}`;
+  const [pa, pm] = m === 1 ? [a - 1, 12] : [a, m - 1];
+  return `${pa}-${String(pm).padStart(2, '0')}-${String(ord[ord.length - 1]).padStart(2, '0')}`;
+}
+
+/** Próxima data programada depois de hoje. */
+export function proximaOcorrencia(dias: number[], hoje: string): string {
+  const [a, m, d] = hoje.split('-').map(Number);
+  const ord = [...dias].sort((x, y) => x - y);
+  const noMes = ord.find((x) => x > d);
+  if (noMes) return `${a}-${String(m).padStart(2, '0')}-${String(noMes).padStart(2, '0')}`;
+  const [pa, pm] = m === 12 ? [a + 1, 1] : [a, m + 1];
+  return `${pa}-${String(pm).padStart(2, '0')}-${String(ord[0]).padStart(2, '0')}`;
+}
+
+export function statusAgenda(escritorioId: number) {
+  const a = lerAgenda(escritorioId);
+  const clientes = (db.prepare("SELECT COUNT(*) AS n FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND eh_escritorio = 0").get(escritorioId) as any).n as number;
+  return { ...a, proxima: a.ativo ? proximaOcorrencia(a.dias, hojeBr()) : null, clientes, chamadasPorMes: clientes * 2 * a.dias.length };
+}
+
+const emExecucao = new Set<number>();
+
+/** Monta o e-mail do resultado: pendências novas primeiro, depois as que continuam, e os erros. */
+function linhasDoResumo(escritorioId: number, ids: number[]) {
+  const novas: string[] = [], continuam: string[] = [], erros: string[] = [], aguardando: string[] = [];
+  const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  for (const id of ids) {
+    const [atual, anterior] = db.prepare('SELECT status, situacao, total_aberto, qtd_pendencias, erro FROM situacao_fiscal WHERE empresa_id = ? ORDER BY id DESC LIMIT 2').all(id) as any[];
+    const nome = (db.prepare('SELECT COALESCE(nome_fantasia, razao_social) AS n FROM empresas WHERE id = ?').get(id) as any)?.n ?? String(id);
+    if (!atual) continue;
+    if (atual.status === 'ERRO') { erros.push(`• ${nome}: ${atual.erro}`); continue; }
+    if (atual.status === 'SOLICITADA') { aguardando.push(`• ${nome}`); continue; }
+    if (atual.situacao !== 'PENDENCIAS') continue;
+    const linha = `• ${nome}: ${atual.qtd_pendencias} pendência(s)${atual.total_aberto ? `, ${brl(atual.total_aberto)}` : ''}`;
+    const eraRegular = !anterior || anterior.situacao !== 'PENDENCIAS';
+    const mudou = anterior?.situacao === 'PENDENCIAS' && Math.abs((anterior.total_aberto ?? 0) - (atual.total_aberto ?? 0)) > 0.009;
+    (eraRegular ? novas : continuam).push(linha + (mudou ? ` (antes ${brl(anterior.total_aberto ?? 0)})` : ''));
+  }
+  return { novas, continuam, erros, aguardando };
+}
+
+/**
+ * Chamada de tempos em tempos pelo servidor (com o programa aberto). No dia programado, ou na primeira abertura depois
+ * dele, consulta todos os clientes ativos; relatórios que a Receita ainda não terminou são buscados nas rodadas seguintes.
+ */
+export async function sitfisAutomatico(agora = new Date(), opcoes: { transporte?: Transporte; esperar?: Espera } = {}) {
+  const br = new Date(agora.getTime() - 3 * 3600e3);
+  const hoje = br.toISOString().slice(0, 10);
+  const feitos: { escritorio: number; consultados: number }[] = [];
+  for (const { id } of db.prepare('SELECT id FROM escritorios').all() as { id: number }[]) {
+    const a = lerAgenda(id);
+    if (!a.ativo || emExecucao.has(id)) continue;
+    if (!opcoes.transporte && lerConfig(id)?.ambiente !== 'PRODUCAO') continue;
+    emExecucao.add(id);
+    try {
+      // relatórios pedidos que ainda estavam sendo gerados
+      const pendentes = (db.prepare(`SELECT DISTINCT s.empresa_id FROM situacao_fiscal s JOIN empresas e ON e.id = s.empresa_id
+        WHERE e.escritorio_id = ? AND s.status = 'SOLICITADA' AND s.id = (SELECT MAX(id) FROM situacao_fiscal x WHERE x.empresa_id = s.empresa_id)
+          AND s.solicitada_em > datetime('now', '-12 hours') AND (s.liberar_em IS NULL OR s.liberar_em <= ?)`).all(id, agora.toISOString()) as { empresa_id: number }[]).map((x) => x.empresa_id);
+      const devida = ocorrenciaDevida(a.dias, hoje);
+      const vez = br.getUTCHours() >= 7 && (a.ultimaOcorrencia ?? '') < devida;
+      if (!vez && !pendentes.length) continue;
+      const usuario = (db.prepare("SELECT id FROM usuarios WHERE escritorio_id = ? AND tipo = 'adm' AND mestre = 0 ORDER BY id LIMIT 1").get(id) as any)?.id ?? null;
+      if (vez) {
+        // grava antes de começar: se o programa fechar no meio, a próxima abertura só busca os pendentes
+        gravarAgenda(id, { ...a, ultimaOcorrencia: devida, ultimaExecucao: new Date().toISOString(), ultimoResultado: 'Em andamento…' });
+        const ids = (db.prepare("SELECT id FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND eh_escritorio = 0 ORDER BY id").all(id) as { id: number }[]).map((x) => x.id);
+        const r = await consultarVarios(id, usuario, ids, opcoes);
+        const l = linhasDoResumo(id, ids);
+        const resumo = `${r.prontos} relatório(s), ${r.comPendencias} com pendências (${l.novas.length} nova(s))${r.aguardando ? `, ${r.aguardando} aguardando a Receita` : ''}${r.erros ? `, ${r.erros} com erro` : ''}.`;
+        let envio = '';
+        if (a.emails.length) {
+          const corpo = ['Olá!', '', `Resultado da consulta automática da situação fiscal (${hoje.split('-').reverse().join('/')}): ${resumo}`, '',
+            ...(l.novas.length ? ['PENDÊNCIAS NOVAS', ...l.novas, ''] : []), ...(l.continuam.length ? ['CONTINUAM COM PENDÊNCIAS', ...l.continuam, ''] : []),
+            ...(l.erros.length ? ['NÃO FOI POSSÍVEL CONSULTAR', ...l.erros, ''] : []), ...(l.aguardando.length ? ['AINDA EM GERAÇÃO NA RECEITA (o sistema busca sozinho)', ...l.aguardando, ''] : []),
+            'Os detalhes e os PDFs estão em Escritório > Situação fiscal.', '', 'Kontor Gestão Contabilidade'];
+          try { envio = (await enviarEmailSimples(id, a.emails, `Situação fiscal dos clientes — ${hoje.split('-').reverse().join('/')}`, corpo)) ? ' E-mail enviado.' : ' E-mail não enviado: configure o SMTP.'; }
+          catch (e: any) { envio = ` Falha no e-mail: ${e?.message ?? e}`; }
+        }
+        gravarAgenda(id, { ...lerAgenda(id), ultimoResultado: resumo + envio });
+        feitos.push({ escritorio: id, consultados: r.consultados });
+      } else {
+        await consultarVarios(id, usuario, pendentes, opcoes);
+        feitos.push({ escritorio: id, consultados: pendentes.length });
+      }
+    } catch (e: any) {
+      gravarAgenda(id, { ...lerAgenda(id), ultimoResultado: `Falha: ${e?.message ?? e}` });
+    } finally { emExecucao.delete(id); }
+  }
+  return feitos;
 }

@@ -4374,7 +4374,9 @@ async function telaIntegra() {
 const SIT_FISCAL = { REGULAR: ['Regular', 'PZ-ENTREGUE'], PENDENCIAS: ['Com pendências', 'PZ-ATRASADA'], VERIFICAR: ['Conferir o PDF', 'PZ-BREVE'] };
 
 async function telaSituacao() {
-  const d = await api('GET', '/api/escritorio/situacao-fiscal');
+  const [d, ag] = await Promise.all([api('GET', '/api/escritorio/situacao-fiscal'), api('GET', '/api/escritorio/situacao-fiscal/agenda')]);
+  const adm = estado.usuario.tipo === 'adm';
+  const opDia = (sel, vazio) => (vazio ? `<option value="">— só uma vez por mês</option>` : '') + Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}" ${sel === i + 1 ? 'selected' : ''}>dia ${i + 1}</option>`).join('');
   const r = d.resumo;
   const f = telaSituacao.filtro ??= { q: '', sit: '' };
   conteudo.innerHTML = `
@@ -4385,6 +4387,18 @@ async function telaSituacao() {
       <div class="cartao"><div class="sutil">Regulares</div><div class="valor" style="color:${COR.verde}">${r.regulares}</div></div>
       <div class="cartao"><div class="sutil">Ainda não consultados</div><div class="valor">${r.naoConsultados}</div></div>
     </div>
+    <details class="cartao agenda-sf" ${ag.ativo ? '' : 'open'}><summary><strong>Consulta automática</strong> — ${ag.ativo ? `ligada, ${ag.dias.map((x) => `dia ${x}`).join(' e ')} de cada mês · próxima em ${dataBr(ag.proxima)}` : 'desligada'}</summary>
+      <p class="sutil">Nos dias escolhidos (a partir das 7h, com o programa aberto), o sistema consulta todos os clientes ativos e manda um e-mail com quem tem pendência, destacando as novas. Se o computador estiver desligado no dia, roda na próxima abertura.</p>
+      ${adm ? `<form id="form-agsf" class="grade">
+        <label class="largo"><span><input type="checkbox" name="ativo" ${ag.ativo ? 'checked' : ''}> Consultar automaticamente</span></label>
+        <label>Primeiro dia <select name="dia1">${opDia(ag.dias[0] ?? 1)}</select></label>
+        <label>Segundo dia (opcional) <select name="dia2">${opDia(ag.dias[1] ?? null, true)}</select></label>
+        <label class="largo">Enviar o resultado para (até 5 e-mails, separados por vírgula) <input name="emails" value="${esc((ag.emails ?? []).join(', '))}"></label>
+        <p class="dica largo">${ag.clientes} cliente(s) ativo(s): cerca de <strong id="agsf-chamadas">${ag.chamadasPorMes}</strong> chamada(s) ao Integra Contador por mês, cobradas pelo SERPRO.</p>
+        <p class="erro largo" id="erro-agsf"></p>
+        <div class="acoes largo"><button class="primario" type="submit">Salvar</button></div></form>` : '<p class="dica">Só um administrador altera a consulta automática.</p>'}
+      ${ag.ultimaExecucao ? `<p class="dica">Última rodada automática: ${dhBr(ag.ultimaExecucao)} — ${esc(ag.ultimoResultado ?? '')}</p>` : ''}
+    </details>
     <div class="filtros" style="margin:16px 0 10px">
       <label style="flex:1 1 240px">Buscar <input type="search" id="sf-q" value="${esc(f.q)}" placeholder="Nome ou CNPJ/CPF"></label>
       <label>Situação <select id="sf-sit"><option value="">Todas</option><option value="PENDENCIAS">Com pendências</option><option value="REGULAR">Regulares</option><option value="NUNCA">Não consultados</option></select></label>
@@ -4394,6 +4408,19 @@ async function telaSituacao() {
     <div id="sf-res"></div>
     <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>`;
   $('#sf-sit').value = f.sit;
+  const fa = $('#form-agsf');
+  if (fa) {
+    const conta = () => { const n = 1 + (fa.dia2.value && fa.dia2.value !== fa.dia1.value ? 1 : 0); $('#agsf-chamadas').textContent = ag.clientes * 2 * n; };
+    fa.dia1.onchange = fa.dia2.onchange = conta;
+    fa.onsubmit = async (ev) => {
+      ev.preventDefault(); $('#erro-agsf').textContent = '';
+      const dias = [Number(fa.dia1.value), fa.dia2.value ? Number(fa.dia2.value) : null].filter(Boolean);
+      try {
+        await api('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: fa.ativo.checked, dias, emails: fa.emails.value.split(/[,;\s]+/).filter(Boolean) });
+        aviso('Consulta automática salva.'); telaSituacao();
+      } catch (er) { $('#erro-agsf').textContent = mensagemErro(er); }
+    };
+  }
   const pintar = () => {
     const q = norm(f.q), qd = f.q.replace(/\D/g, '');
     const vis = d.clientes.filter((c) => (!f.sit || (f.sit === 'NUNCA' ? !c.id : c.situacao === f.sit)) && (!q || norm(c.cliente).includes(q) || (qd && c.documento.includes(qd))));

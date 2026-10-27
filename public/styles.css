@@ -345,3 +345,6 @@ a.link-cartao:hover { border-color: var(--laranja); transform: translateY(-1px);
 .tabela-captura td.acoes-linha { display: grid; gap: 4px; justify-items: stretch; min-width: 118px; }
 .tabela-captura td.acoes-linha button { padding: 5px 10px; font-size: .82rem; }
 .tabela-captura th { white-space: nowrap; }
+.agenda-sf { margin: 16px 0 0; }
+.agenda-sf > summary { cursor: pointer; }
+.agenda-sf[open] > summary { margin-bottom: 8px; }

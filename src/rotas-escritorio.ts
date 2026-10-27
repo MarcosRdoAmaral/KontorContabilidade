@@ -9,7 +9,7 @@ import { AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInic
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
-import { consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes } from './servicos/situacao-fiscal.js';
+import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
 import { xmlNfseCapturada } from './servicos/nfse-capturadas.js';
 import { ConfigAvisos, configAvisos, enviarResumo, montarResumo, salvarAvisos } from './servicos/avisos.js';
@@ -220,6 +220,8 @@ export async function rotasEscritorio(app: FastifyInstance) {
 
     // ---------- Situação fiscal (Integra Contador) ----------
     api.get('/api/escritorio/situacao-fiscal', async (req) => ({ clientes: painelSituacao(u(req).escritorio_id, empresasDoUsuario(u(req))), resumo: resumoSituacoes(u(req).escritorio_id, empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
+    api.get('/api/escritorio/situacao-fiscal/agenda', async (req) => statusAgenda(u(req).escritorio_id));
+    api.put('/api/escritorio/situacao-fiscal/agenda', async (req) => { salvarAgenda(u(req).escritorio_id, AgendaSitfis.parse(req.body)); return statusAgenda(u(req).escritorio_id); });
     api.post('/api/escritorio/situacao-fiscal/consultar', async (req) => {
       const ids = z.object({ ids: z.array(z.number().int().positive()).min(1).max(100) }).parse(req.body).ids;
       for (const i of ids) checar(req, i);
