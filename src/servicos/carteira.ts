@@ -4,6 +4,7 @@ import { ErroNegocio } from './emissao.js';
 import { codMunicipioValido, documentoValido, limparDoc, soDigitos } from '../nfse/validacao.js';
 import { REGIMES, limparTarefasQueNaoSeAplicam, listarTarefas, regimeDe, resumoTarefas } from './obrigacoes.js';
 import { listarCertificados, resumoCertificados } from './certificados.js';
+import { resumoSituacoes } from './situacao-fiscal.js';
 
 /**
  * Carteira de clientes do escritório. Cada cliente é uma "empresa" do sistema (a mesma usada para emitir NFS-e e
@@ -151,6 +152,7 @@ export function visaoGeral(escritorioId: number, mes: string, empresas: number[]
     proximas: tarefasMes.filter((t) => t.prazo === 'HOJE' || t.prazo === 'EM_BREVE').slice(0, 15),
     certificados: { ...resumoCertificados(certs), lista: certs.filter((c) => ['VENCIDO', 'VENCE_7', 'VENCE_30'].includes(c.situacao)).slice(0, 10) },
     honorarios: { ...honorarios, vencidos: emAberto, escritorioConfigurado: !!esc },
+    situacaoFiscal: resumoSituacoes(escritorioId, empresas),
     porResponsavel: Object.values(tarefasMes.filter((t) => t.prazo !== 'ENTREGUE' && t.prazo !== 'DISPENSADA').reduce((acc: Record<string, { responsavel: string; abertas: number; atrasadas: number }>, t) => {
       const k = t.responsavel ?? 'Sem responsável';
       acc[k] ??= { responsavel: k, abertas: 0, atrasadas: 0 };

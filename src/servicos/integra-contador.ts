@@ -60,10 +60,11 @@ export function salvarConfig(escritorioId: number, d: z.infer<typeof ConfigInteg
 // Transporte (trocável nos testes)
 // ---------------------------------------------------------------------------------------------
 
+export type Endpoint = 'Consultar' | 'Apoiar' | 'Emitir';
 export interface Token { accessToken: string; jwtToken: string; expiraEm: number }
 export interface Transporte {
   autenticar(): Promise<Token>;
-  consultar(corpo: object, token: Token): Promise<{ status: number; corpo: any }>;
+  consultar(corpo: object, token: Token, endpoint?: Endpoint): Promise<{ status: number; corpo: any }>;
 }
 
 function requisicao(url: string, opcoes: https.RequestOptions, corpo: string): Promise<{ status: number; corpo: any; bruto: string }> {
@@ -101,8 +102,8 @@ function transporteReal(escritorioId: number): Transporte {
       if (r.status !== 200 || !r.corpo?.access_token) throw new ErroNegocio(`Falha ao autenticar no Integra Contador (HTTP ${r.status}).`, 502);
       return { accessToken: r.corpo.access_token, jwtToken: r.corpo.jwt_token, expiraEm: Date.now() + (Number(r.corpo.expires_in) || 1800) * 1000 - 60_000 };
     },
-    async consultar(corpo, token) {
-      const r = await requisicao(`${api}/Consultar`, { method: 'POST', headers: { Authorization: `Bearer ${token.accessToken}`, jwt_token: token.jwtToken, 'Content-Type': 'application/json', Accept: 'application/json' } }, JSON.stringify(corpo));
+    async consultar(corpo, token, endpoint = 'Consultar') {
+      const r = await requisicao(`${api}/${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.accessToken}`, jwt_token: token.jwtToken, 'Content-Type': 'application/json', Accept: 'application/json' } }, JSON.stringify(corpo));
       return { status: r.status, corpo: r.corpo };
     },
   };
@@ -134,15 +135,15 @@ export class Integra {
   }
 
   /** Uma consulta. Devolve os dados já interpretados (o campo "dados" vem como texto JSON) e as mensagens. */
-  async consultar(contribuinte: string, idSistema: string, idServico: string, dados: object | null) {
+  async consultar(contribuinte: string, idSistema: string, idServico: string, dados: object | null, endpoint: Endpoint = 'Consultar') {
     const corpo = {
       contratante: { numero: this.documentoEscritorio, tipo: 2 },
       autorPedidoDados: { numero: this.documentoEscritorio, tipo: 2 },
       contribuinte: { numero: contribuinte, tipo: tipoDoc(contribuinte) },
       pedidoDados: { idSistema, idServico, versaoSistema: '1.0', dados: dados ? JSON.stringify(dados) : '' },
     };
-    let r = await this.transporte.consultar(corpo, await this.token());
-    if (r.status === 401) { tokens.delete(this.escritorioId); r = await this.transporte.consultar(corpo, await this.token()); }
+    let r = await this.transporte.consultar(corpo, await this.token(), endpoint);
+    if (r.status === 401) { tokens.delete(this.escritorioId); r = await this.transporte.consultar(corpo, await this.token(), endpoint); }
     const msgs: { codigo: string; texto: string }[] = ([] as any[]).concat(r.corpo?.mensagens ?? []).map((m: any) => ({ codigo: String(m?.codigo ?? ''), texto: String(m?.texto ?? '') }));
     let dadosLidos: any = null;
     const bruto = r.corpo?.dados;
@@ -151,8 +152,8 @@ export class Integra {
   }
 }
 
-const textoMsgs = (m: { codigo: string; texto: string }[]) => m.map((x) => x.texto || x.codigo).filter(Boolean).join(' ');
-const semProcuracao = (m: { codigo: string; texto: string }[]) => m.some((x) => /AcessoNegado|procura/i.test(`${x.codigo} ${x.texto}`));
+export const textoMsgs = (m: { codigo: string; texto: string }[]) => m.map((x) => x.texto || x.codigo).filter(Boolean).join(' ');
+export const semProcuracao = (m: { codigo: string; texto: string }[]) => m.some((x) => /AcessoNegado|procura/i.test(`${x.codigo} ${x.texto}`));
 
 /** "20240315103000", "2024-03-15T10:30" ou número → AAAA-MM-DD. */
 export function dataDaReceita(v: unknown): string | null {

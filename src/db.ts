@@ -883,6 +883,25 @@ const migracoes: string[] = [
     ultimo_erro TEXT,
     automatica INTEGER NOT NULL DEFAULT 1
   );`,
+  // 31: situação fiscal (relatório da Receita/PGFN pelo Integra Contador)
+  `CREATE TABLE situacao_fiscal (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('SOLICITADA','PRONTA','ERRO')),
+    situacao TEXT CHECK (situacao IN ('REGULAR','PENDENCIAS','VERIFICAR')),
+    protocolo TEXT,
+    liberar_em TEXT,                          -- quando o relatório deve estar pronto (tempo de espera do SERPRO)
+    resumo_json TEXT,                         -- pendências lidas do relatório
+    total_aberto REAL,
+    qtd_pendencias INTEGER,
+    pdf BLOB,
+    texto TEXT,
+    erro TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    solicitada_em TEXT NOT NULL DEFAULT (datetime('now')),
+    concluida_em TEXT
+  );
+  CREATE INDEX ix_situacao_fiscal ON situacao_fiscal(empresa_id, solicitada_em);`,
 ];
 
 export function migrar(): void {

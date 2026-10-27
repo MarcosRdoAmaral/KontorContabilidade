@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.3.0';
+export const MANUAL_VERSAO = '1.4.0';
 
 export const MANUAL = [
   {
@@ -128,6 +128,21 @@ export const MANUAL = [
       <h3>Conferir</h3>
       <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer (o SERPRO cobra por consulta) e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
       <p class="dica">EFD, ECD, ECF, eSocial, FGTS e as obrigações estaduais e municipais não passam pelo Integra Contador e continuam sendo marcadas à mão.</p>`,
+  },
+  {
+    id: 'situacao-fiscal', titulo: 'Situação fiscal', resumo: 'O que está em aberto na Receita Federal e na PGFN, cliente a cliente.',
+    corpo: `
+      <p>Consulta, pelo Integra Contador, o <strong>Relatório de Situação Fiscal</strong> da Receita Federal e da Procuradoria-Geral da Fazenda Nacional (o mesmo do e-CAC) e mostra o que está em aberto: débitos, omissões de declaração e inscrições em dívida ativa, com o saldo de cada um. O PDF original fica guardado.</p>
+      <h3>Consultar</h3>
+      <p>Em Escritório &gt; Situação fiscal, marque os clientes e clique em <em>Consultar selecionados</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador.</p>
+      <h3>Resultado</h3>
+      <ul>
+        <li><strong>Com pendências:</strong> o botão <em>Detalhes</em> lista as pendências por tipo (débito, omissão, inscrição), com receita, período, vencimento e saldo. Débitos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão.</li>
+        <li><strong>Regular:</strong> o relatório não trouxe pendências.</li>
+        <li><strong>Conferir o PDF:</strong> o relatório veio num formato que o sistema não conseguiu ler; abra o PDF.</li>
+      </ul>
+      <p>Clientes com pendência aparecem primeiro na lista e na Visão geral. Os valores são lidos do relatório: em caso de dúvida, vale o PDF.</p>
+      <p class="dica">É preciso o Integra Contador configurado (Configurações &gt; Integra Contador) e a procuração eletrônica do cliente para o escritório no e-CAC.</p>`,
   },
   {
     id: 'avisos', titulo: 'Avisos de prazos por e-mail', resumo: 'Resumo diário de atrasos, vencimentos, certificados e reajustes.',

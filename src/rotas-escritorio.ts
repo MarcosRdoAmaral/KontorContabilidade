@@ -9,6 +9,7 @@ import { AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInic
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
+import { consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
 import { xmlNfseCapturada } from './servicos/nfse-capturadas.js';
 import { ConfigAvisos, configAvisos, enviarResumo, montarResumo, salvarAvisos } from './servicos/avisos.js';
@@ -216,6 +217,25 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.post('/api/escritorio/integra/testar', async (req) => testarConexao(u(req).escritorio_id));
     api.get('/api/escritorio/integra/previa', async (req) => ({ ...previaConferencia(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
     api.post('/api/escritorio/integra/conferir', async (req) => conferirNaReceita(u(req).escritorio_id, u(req).id, MES.parse((req.body as any)?.mes), empresasDoUsuario(u(req))));
+
+    // ---------- Situação fiscal (Integra Contador) ----------
+    api.get('/api/escritorio/situacao-fiscal', async (req) => ({ clientes: painelSituacao(u(req).escritorio_id, empresasDoUsuario(u(req))), resumo: resumoSituacoes(u(req).escritorio_id, empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
+    api.post('/api/escritorio/situacao-fiscal/consultar', async (req) => {
+      const ids = z.object({ ids: z.array(z.number().int().positive()).min(1).max(100) }).parse(req.body).ids;
+      for (const i of ids) checar(req, i);
+      return consultarVarios(u(req).escritorio_id, u(req).id, ids);
+    });
+    api.get('/api/escritorio/situacao-fiscal/:id', async (req) => {
+      const d = detalheSituacao(u(req).escritorio_id, id(req));
+      checar(req, d.empresa_id);
+      return d;
+    });
+    api.get('/api/escritorio/situacao-fiscal/:id/pdf', async (req, reply) => {
+      const d = detalheSituacao(u(req).escritorio_id, id(req));
+      checar(req, d.empresa_id);
+      const p = pdfSituacao(u(req).escritorio_id, id(req));
+      return reply.type('application/pdf').header('Content-Disposition', `inline; filename="${p.nome}"`).send(p.pdf);
+    });
 
     // ---------- Avisos por e-mail ----------
     api.get('/api/escritorio/avisos', async (req) => ({ ...configAvisos(u(req).escritorio_id), previa: montarResumo(u(req).escritorio_id) }));

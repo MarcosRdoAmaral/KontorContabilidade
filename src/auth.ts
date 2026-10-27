@@ -9,7 +9,7 @@ export type Tipo = 'adm' | 'normal';
 /** Módulos que podem ser liberados por usuário. Configurações (usuários, e-mail, backup, licença) é sempre só do adm. */
 export const MODULOS = {
   visao: 'Visão geral do escritório', carteira: 'Carteira de clientes', obrigacoes: 'Obrigações e prazos', certificados: 'Certificados',
-  honorarios: 'Contratos e honorários', captura: 'Captura de documentos',
+  honorarios: 'Contratos e honorários', captura: 'Captura de documentos', situacao: 'Situação fiscal',
   painel: 'Painel do mês', emitir: 'Emitir nota', notas: 'Notas emitidas', cobrancas: 'Cobranças',
   banco: 'Dados bancários', despesas: 'Despesas e balanço', tomadores: 'Clientes', servicos: 'Serviços', empresas: 'Empresas', relatorios: 'Relatórios', compras: 'Compras', tributacao: 'Tributação e apuração',
   excluir: 'Excluir registros',
@@ -57,6 +57,7 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/escritorio\/captura(\/buscar|\/automatica|\/autxml|\/\d+\/(pacote|notas|xml\/[A-Za-z0-9]{44,60}))?$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/avisos(\/enviar)?$/, mod: 'adm' },
   { r: /^\/api\/escritorio\/integra\/(config|testar)$/, mod: 'adm' },
+  { r: /^\/api\/escritorio\/situacao-fiscal(\/consultar|\/\d+(\/pdf)?)?$/, mod: ['situacao'] },
   { r: /^\/api\/escritorio\/integra\/(previa|conferir)$/, mod: ['obrigacoes'] },
   { r: /^\/api\/me(\/empresa|\/senha)?$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/licenca$/, mod: 'livre' },

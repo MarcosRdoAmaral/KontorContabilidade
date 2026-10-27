@@ -406,12 +406,12 @@ async function iniciar() {
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
 function telaPermitida(nome) {
-  const modulo = { visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
+  const modulo = { situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
   return nome === 'config' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
 const rotas = {
-  visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
+  situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
   painel: telaPainel, emitir: telaEmitir, notas: telaNotas, nota: telaNota,
   cobrancas: telaCobrancas, banco: telaBanco, despesas: telaDespesas, compras: telaCompras, entradas: telaCompras, 'compra-nova': telaCompraManual, 'nfe-sefaz': telaNfeSefaz, tributacao: telaTributacao, extrato: telaExtrato, cartao: telaCartao, agenda: telaAgenda, relatorios: telaRelatorios, tomadores: telaTomadores, servicos: telaServicos, empresas: telaEmpresas, config: telaConfig,
 };
@@ -424,7 +424,7 @@ function rotear() {
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
-  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura'].includes(nome);
+  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao'].includes(nome);
   if (precisaEmpresa && !empresa()) {
     conteudo.innerHTML = `<div class="vazio"><p>Cadastre o primeiro cliente na carteira para começar.</p>
       ${estado.usuario.papel !== 'cliente' ? '<a href="#/carteira">Ir para a Carteira de clientes</a>' : ''}</div>`;
@@ -3420,6 +3420,8 @@ async function telaEscritorio() {
       <a class="cartao link-cartao ${t.atrasadas ? 'alerta-cartao' : ''}" href="#/obrigacoes"><div class="sutil">Atrasadas</div><div class="valor" style="color:${t.atrasadas ? COR.vermelho : COR.verde}">${t.atrasadas}</div><div class="dica">inclui meses anteriores</div></a>
       <a class="cartao link-cartao" href="#/certificados"><div class="sutil">Certificados e procurações</div><div class="valor" style="color:${c.vencidos + c.vence7 ? COR.vermelho : c.vence30 ? COR.laranja : COR.verde}">${c.vencidos + c.vence7 + c.vence30}</div>
         <div class="dica">${c.vencidos} vencido(s) · ${c.vence7} em 7 dias · ${c.vence30} em 30 dias</div></a>
+      ${v.situacaoFiscal ? `<a class="cartao link-cartao ${v.situacaoFiscal.comPendencias ? 'alerta-cartao' : ''}" href="#/situacao"><div class="sutil">Pendências fiscais</div><div class="valor" style="color:${v.situacaoFiscal.comPendencias ? COR.vermelho : COR.verde}">${v.situacaoFiscal.comPendencias}</div>
+        <div class="dica">${v.situacaoFiscal.comPendencias ? `cliente(s) · ${brl(v.situacaoFiscal.totalAberto)} em aberto` : 'nenhum cliente com pendência'}${v.situacaoFiscal.naoConsultados ? ` · ${v.situacaoFiscal.naoConsultados} não consultado(s)` : ''}</div></a>` : ''}
       <a class="cartao link-cartao" href="#/honorarios"><div class="sutil">Honorários mensais</div><div class="valor">${brl(h.total)}</div>
         <div class="dica">${h.contratos} contrato(s) assinado(s)${h.vencidos.n ? ` · <span class="cor-vermelho">${brl(h.vencidos.total)} vencido(s)</span>` : ''}</div></a>
     </div>
@@ -4363,4 +4365,98 @@ async function telaIntegra() {
     catch (er) { $('#erro-integra').textContent = mensagemErro(er); }
     finally { ev.target.disabled = false; ev.target.textContent = 'Testar conexão'; }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Situação fiscal (Receita Federal e PGFN, pelo Integra Contador)
+// ---------------------------------------------------------------------------
+
+const SIT_FISCAL = { REGULAR: ['Regular', 'PZ-ENTREGUE'], PENDENCIAS: ['Com pendências', 'PZ-ATRASADA'], VERIFICAR: ['Conferir o PDF', 'PZ-BREVE'] };
+
+async function telaSituacao() {
+  const d = await api('GET', '/api/escritorio/situacao-fiscal');
+  const r = d.resumo;
+  const f = telaSituacao.filtro ??= { q: '', sit: '' };
+  conteudo.innerHTML = `
+    <div class="topo"><div><h1>Situação fiscal</h1><p class="sutil">O relatório de situação fiscal da Receita Federal e da PGFN (o mesmo do e-CAC), consultado pelo Integra Contador, com o que está em aberto em cada cliente.</p></div></div>
+    ${!d.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador (Configurações &gt; Integra Contador).'}</div>` : ''}
+    <div class="resumo">
+      <div class="cartao ${r.comPendencias ? 'alerta-cartao' : ''}"><div class="sutil">Com pendências</div><div class="valor" style="color:${r.comPendencias ? COR.vermelho : COR.verde}">${r.comPendencias}</div><div class="dica">${brl(r.totalAberto)} em aberto</div></div>
+      <div class="cartao"><div class="sutil">Regulares</div><div class="valor" style="color:${COR.verde}">${r.regulares}</div></div>
+      <div class="cartao"><div class="sutil">Ainda não consultados</div><div class="valor">${r.naoConsultados}</div></div>
+    </div>
+    <div class="filtros" style="margin:16px 0 10px">
+      <label style="flex:1 1 240px">Buscar <input type="search" id="sf-q" value="${esc(f.q)}" placeholder="Nome ou CNPJ/CPF"></label>
+      <label>Situação <select id="sf-sit"><option value="">Todas</option><option value="PENDENCIAS">Com pendências</option><option value="REGULAR">Regulares</option><option value="NUNCA">Não consultados</option></select></label>
+      <div class="acoes" style="margin:0"><button class="primario" id="sf-consultar" disabled>Consultar selecionados</button></div>
+    </div>
+    <p class="dica">Cada consulta usa duas chamadas ao Integra Contador (pedido do relatório e emissão), cobradas pelo SERPRO conforme o contrato. A Receita leva alguns segundos para gerar cada relatório.</p>
+    <div id="sf-res"></div>
+    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>`;
+  $('#sf-sit').value = f.sit;
+  const pintar = () => {
+    const q = norm(f.q), qd = f.q.replace(/\D/g, '');
+    const vis = d.clientes.filter((c) => (!f.sit || (f.sit === 'NUNCA' ? !c.id : c.situacao === f.sit)) && (!q || norm(c.cliente).includes(q) || (qd && c.documento.includes(qd))));
+    $('#sf-lista').innerHTML = vis.length ? vis.map((c) => `<tr>
+      <td><input type="checkbox" data-sel="${c.empresa_id}" aria-label="Selecionar"></td>
+      <td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span></td>
+      <td>${esc(c.responsavel ?? '—')}</td>
+      <td>${!c.id ? '<span class="dica">não consultado</span>' : c.status === 'ERRO' ? `<span class="cor-vermelho">Erro</span><br><span class="dica">${esc(c.erro ?? '')}</span>` : c.status === 'SOLICITADA' ? '<span class="cor-ambar">Aguardando a Receita</span>' : selo(SIT_FISCAL[c.situacao] ?? [c.situacao, ''])}</td>
+      <td class="num">${c.status === 'PRONTA' ? c.qtd_pendencias ?? 0 : '—'}</td>
+      <td class="num ${c.situacao === 'PENDENCIAS' ? 'cor-vermelho' : ''}">${c.status === 'PRONTA' && c.situacao === 'PENDENCIAS' ? brl(c.total_aberto) : '—'}</td>
+      <td>${c.concluida_em ? dhBr(c.concluida_em) : c.solicitada_em ? `<span class="dica">pedido em ${dhBr(c.solicitada_em)}</span>` : '—'}</td>
+      <td class="acoes-linha">${c.status === 'PRONTA' ? `<button data-det="${c.id}">Detalhes</button> ${c.tem_pdf ? `<button data-pdf="${c.id}">PDF</button>` : ''}` : ''}${c.status === 'SOLICITADA' ? `<button data-at="${c.empresa_id}">Atualizar</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="8"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>';
+    const sel = () => { const n = conteudo.querySelectorAll('[data-sel]:checked').length; const b = $('#sf-consultar'); b.disabled = !n || !d.configurado; b.textContent = n ? `Consultar ${n} cliente(s)` : 'Consultar selecionados'; };
+    conteudo.querySelectorAll('[data-sel]').forEach((c) => (c.onchange = sel)); sel();
+    conteudo.querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheSituacaoFiscal(Number(b.dataset.det))));
+    conteudo.querySelectorAll('[data-pdf]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/situacao-fiscal/${b.dataset.pdf}/pdf`, 'situacao-fiscal.pdf', true)));
+    conteudo.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => consultarSituacoes([Number(b.dataset.at)], b)));
+  };
+  $('#sf-todos').onchange = (ev) => { conteudo.querySelectorAll('[data-sel]').forEach((c) => (c.checked = ev.target.checked)); conteudo.querySelector('[data-sel]')?.onchange(); };
+  $('#sf-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
+  $('#sf-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
+  $('#sf-consultar').onclick = (ev) => {
+    const ids = [...conteudo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel));
+    if (!confirm(`Consultar a situação fiscal de ${ids.length} cliente(s)?\nSerão cerca de ${ids.length * 2} chamadas ao Integra Contador, cobradas pelo SERPRO. Pode levar alguns segundos por cliente.`)) return;
+    consultarSituacoes(ids, ev.target);
+  };
+  pintar();
+}
+
+async function consultarSituacoes(ids, botao) {
+  const texto = botao.textContent;
+  botao.disabled = true; botao.textContent = 'Consultando a Receita…';
+  try {
+    const r = await api('POST', '/api/escritorio/situacao-fiscal/consultar', { ids });
+    await telaSituacao();
+    $('#sf-res').innerHTML = `<div class="cartao" style="margin-bottom:12px"><strong>${r.prontos} relatório(s) recebido(s)${r.comPendencias ? `, ${r.comPendencias} com pendências` : ''}${r.aguardando ? `, ${r.aguardando} ainda em geração (use Atualizar)` : ''}${r.erros ? `, ${r.erros} com erro` : ''}.</strong>
+      <ul class="dicas">${r.resultados.map((x) => `<li class="${x.status === 'ERRO' ? 'cor-vermelho' : ''}">${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul></div>`;
+  } catch (e) { aviso(mensagemErro(e)); botao.disabled = false; botao.textContent = texto; }
+}
+
+async function detalheSituacaoFiscal(id) {
+  const d = await api('GET', `/api/escritorio/situacao-fiscal/${id}`);
+  const r = d.resumo;
+  const tabela = (s) => {
+    const deb = s.itens.some((i) => i.receita);
+    return deb ? `<table class="tabela"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo</th><th>Situação</th></tr></thead><tbody>
+      ${s.itens.map((i) => i.receita ? `<tr><td><strong>${esc(i.receita)}</strong> ${esc(i.descricao ?? '')}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td><td class="num">${i.valorOriginal != null ? brl(i.valorOriginal) : ''}</td><td class="num">${i.saldo != null ? brl(i.saldo) : ''}</td><td>${esc(i.situacao ?? '')}</td></tr>`
+        : `<tr><td colspan="6">${esc(i.texto)}</td></tr>`).join('')}</tbody></table>`
+      : `<ul class="dicas">${s.itens.map((i) => `<li>${esc(i.texto)}</li>`).join('') || '<li class="dica">Sem detalhes no relatório: confira o PDF.</li>'}</ul>`;
+  };
+  const pend = r?.secoes?.filter((s) => s.tipo === 'PENDENCIA') ?? [], susp = r?.secoes?.filter((s) => s.tipo === 'SUSPENSO') ?? [];
+  abrirDialogo(`<div class="dlg-largo"><h2>Situação fiscal — ${esc(d.cliente)}</h2>
+    <p class="sutil">${fmtDoc(d.documento)} · consultado em ${dhBr(d.concluida_em)}${d.usuario ? ` por ${esc(d.usuario)}` : ''}${r?.certidao ? ` · certidão: <strong>${esc(r.certidao)}</strong>` : ''}</p>
+    ${d.situacao === 'REGULAR' ? '<div class="cartao"><strong class="cor-verde">Sem pendências</strong> nos controles da Receita Federal e da Procuradoria-Geral da Fazenda Nacional.</div>' : ''}
+    ${d.situacao === 'VERIFICAR' ? '<div class="banner teste">Não foi possível ler as pendências do relatório automaticamente. Abra o PDF para conferir.</div>' : ''}
+    ${pend.length ? `<p><strong>${d.qtd_pendencias}</strong> pendência(s)${d.total_aberto ? ` · saldo de <strong class="cor-vermelho">${brl(d.total_aberto)}</strong>` : ''}</p>` : ''}
+    ${pend.map((s) => `<h3>${esc(s.titulo)}</h3>${tabela(s)}`).join('')}
+    ${susp.length ? `<h3>Com exigibilidade suspensa (não impedem a certidão)</h3>${susp.map(tabela).join('')}` : ''}
+    <p class="dica">Os valores são lidos do relatório da Receita; em caso de dúvida, vale o PDF.</p>
+    ${d.historico.length > 1 ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.historico.slice(1).map((h) => `<li>${dhBr(h.concluida_em ?? h.solicitada_em)} — ${h.status === 'PRONTA' ? (SIT_FISCAL[h.situacao]?.[0] ?? h.situacao) + (h.situacao === 'PENDENCIAS' ? ` (${brl(h.total_aberto)})` : '') : h.status === 'ERRO' ? 'erro' : 'aguardando'} ${h.tem_pdf ? `<button data-pdfh="${h.id}">PDF</button>` : ''}</li>`).join('')}</ul>` : ''}
+    <div class="acoes">${d.tem_pdf ? '<button class="primario" id="sf-pdf">Abrir o relatório (PDF)</button>' : ''}<button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    $('#sf-pdf') && ($('#sf-pdf').onclick = () => baixar(`/api/escritorio/situacao-fiscal/${id}/pdf`, 'situacao-fiscal.pdf', true));
+    dlg.querySelectorAll('[data-pdfh]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/situacao-fiscal/${b.dataset.pdfh}/pdf`, 'situacao-fiscal.pdf', true)));
+  });
 }
