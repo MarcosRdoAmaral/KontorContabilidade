@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.2.0';
+export const MANUAL_VERSAO = '1.3.0';
 
 export const MANUAL = [
   {
@@ -113,6 +113,21 @@ export const MANUAL = [
       <h3>Buscar e acompanhar</h3>
       <p><em>Buscar agora</em> consulta todos os clientes que já podem: SEFAZ e Ambiente Nacional pedem 1 hora entre consultas quando não há notas novas. <em>Ligar busca automática</em> faz isso sozinho enquanto o programa estiver aberto. O botão <em>Notas</em> mostra as notas de venda e de serviço do mês, com o XML de cada uma; <em>Compras</em> abre as NF-e de compra do cliente.</p>
       <p><em>Pacote do mês</em> gera um ZIP com os XML de compras, vendas e serviços (prestados e tomados) e planilhas de conferência.</p>`,
+  },
+  {
+    id: 'integra-contador', titulo: 'Conferir na Receita (Integra Contador)', resumo: 'PGDAS-D, DCTFWeb e DEFIS conferidos direto na Receita Federal.',
+    corpo: `
+      <p>O <strong>Integra Contador</strong> é o serviço do SERPRO que dá aos escritórios acesso, em nome dos clientes, ao que foi transmitido à Receita Federal. Com ele, o botão <strong>Conferir na Receita</strong>, em Obrigações e prazos, consulta o <strong>PGDAS-D</strong> (com a informação de DAS pago), a <strong>DCTFWeb</strong> e a <strong>DEFIS</strong> e marca como entregue o que já foi transmitido, com o número da declaração e a data.</p>
+      <h3>Configurar (administrador)</h3>
+      <ol>
+        <li>Contrate o Integra Contador na Loja Serpro com o e-CNPJ do escritório. O Consumer Key e o Consumer Secret ficam na Área do Cliente Serpro.</li>
+        <li>Envie o certificado A1 da empresa do escritório em Cadastros &gt; Empresas: a autenticação é feita com ele.</li>
+        <li>Em Configurações &gt; Integra Contador, informe as chaves, escolha Produção e use <em>Testar conexão</em>. O ambiente de Demonstração responde com dados fictícios, para testar antes do contrato.</li>
+        <li>Cada cliente outorga procuração eletrônica ao CNPJ do escritório no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</li>
+      </ol>
+      <h3>Conferir</h3>
+      <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer (o SERPRO cobra por consulta) e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
+      <p class="dica">EFD, ECD, ECF, eSocial, FGTS e as obrigações estaduais e municipais não passam pelo Integra Contador e continuam sendo marcadas à mão.</p>`,
   },
   {
     id: 'avisos', titulo: 'Avisos de prazos por e-mail', resumo: 'Resumo diário de atrasos, vencimentos, certificados e reajustes.',

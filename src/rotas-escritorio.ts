@@ -9,6 +9,7 @@ import { AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInic
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
+import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
 import { xmlNfseCapturada } from './servicos/nfse-capturadas.js';
 import { ConfigAvisos, configAvisos, enviarResumo, montarResumo, salvarAvisos } from './servicos/avisos.js';
 
@@ -208,6 +209,13 @@ export async function rotasEscritorio(app: FastifyInstance) {
       const p = await pacoteDoMes(id(req), mesDe(req.query));
       return reply.type('application/zip').header('Content-Disposition', `attachment; filename="${p.nome}"`).send(p.zip);
     });
+
+    // ---------- Integra Contador (SERPRO) ----------
+    api.get('/api/escritorio/integra/config', async (req) => ({ ...configIntegra(u(req).escritorio_id), conferiveis: CONFERIVEIS }));
+    api.put('/api/escritorio/integra/config', async (req) => { salvarIntegra(u(req).escritorio_id, ConfigIntegra.parse(req.body)); return { ok: true }; });
+    api.post('/api/escritorio/integra/testar', async (req) => testarConexao(u(req).escritorio_id));
+    api.get('/api/escritorio/integra/previa', async (req) => ({ ...previaConferencia(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
+    api.post('/api/escritorio/integra/conferir', async (req) => conferirNaReceita(u(req).escritorio_id, u(req).id, MES.parse((req.body as any)?.mes), empresasDoUsuario(u(req))));
 
     // ---------- Avisos por e-mail ----------
     api.get('/api/escritorio/avisos', async (req) => ({ ...configAvisos(u(req).escritorio_id), previa: montarResumo(u(req).escritorio_id) }));

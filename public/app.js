@@ -418,6 +418,7 @@ const rotas = {
 
 function rotear() {
   const [, nome = 'painel', param] = location.hash.split('/');
+  if ($('#dialogo').open) $('#dialogo').close(); // trocar de tela fecha a janela aberta
   document.querySelectorAll('#menu details.grupo').forEach((g) => { const ativo = [...g.querySelectorAll('a')].some((a) => a.getAttribute('href') === `#/${nome}` && !a.hidden); g.classList.toggle('tem-ativo', ativo); if (ativo) g.open = true; });
   document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === `#/${nome}` || (a.id === 'menu-doc' && nome === 'relatorios' && param === 'documentacao')));
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
@@ -3010,14 +3011,14 @@ async function telaConfig(aba) {
   const adm = estado.usuario.tipo === 'adm';
   const abas = [
     ['conta', 'Minha conta', true], ['usuarios', 'Usuários e acessos', adm], ['email', 'E-mail', adm],
-    ['avisos', 'Avisos de prazos', adm], ['aparencia', 'Aparência', true], ['backup', 'Backup', adm], ['contabilidade', 'Contabilidade', adm], ['licenca', 'Licença', true], ['atualizacoes', 'Atualizações', true],
+    ['avisos', 'Avisos de prazos', adm], ['integra', 'Integra Contador', adm], ['aparencia', 'Aparência', true], ['backup', 'Backup', adm], ['contabilidade', 'Contabilidade', adm], ['licenca', 'Licença', true], ['atualizacoes', 'Atualizações', true],
   ].filter((x) => x[2]);
   if (!abas.some((x) => x[0] === aba)) aba = abas[0][0];
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Configurações</h1><p class="sutil">Ajustes gerais do sistema${adm ? '' : ' e da sua conta'}.</p></div></div>
     <nav class="abas" aria-label="Configurações">${abas.map(([k, nome]) => `<a href="#/config/${k}" class="${k === aba ? 'ativo' : ''}">${nome}</a>`).join('')}</nav>
     <div id="cfg-corpo"></div>`;
-  const tela = { avisos: telaAvisos, conta: telaMinhaConta, usuarios: telaUsuarios, email: telaEmail, aparencia: telaAparencia, backup: telaBackup, contabilidade: telaContabilidade, licenca: telaLicenca, atualizacoes: telaAtualizacoes }[aba];
+  const tela = { integra: telaIntegra, avisos: telaAvisos, conta: telaMinhaConta, usuarios: telaUsuarios, email: telaEmail, aparencia: telaAparencia, backup: telaBackup, contabilidade: telaContabilidade, licenca: telaLicenca, atualizacoes: telaAtualizacoes }[aba];
   await tela();
 }
 
@@ -3639,7 +3640,7 @@ async function prazosDoMes() {
       <div class="cartao"><div class="sutil">Hoje e próximos dias</div><div class="valor" style="color:${r.hoje + r.em_breve ? COR.laranja : 'inherit'}">${r.hoje + r.em_breve}</div></div>
       <div class="cartao"><div class="sutil">No prazo</div><div class="valor">${r.no_prazo}</div></div>
     </div>
-    <div class="acoes" style="margin:14px 0 8px"><button id="ob-lote" disabled>Marcar selecionadas como entregues</button><span class="dica" id="ob-cont"></span></div>
+    <div class="acoes" style="margin:14px 0 8px"><button id="ob-lote" disabled>Marcar selecionadas como entregues</button><button id="ob-receita" title="Consulta no Integra Contador (SERPRO) o PGDAS-D, a DCTFWeb e a DEFIS dos clientes">Conferir na Receita</button><span class="dica" id="ob-cont"></span></div>
     <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="ob-todas" aria-label="Selecionar todas"></th><th>Vencimento</th><th>Cliente</th><th>Obrigação</th><th>Competência</th><th>Responsável</th><th>Situação</th><th></th></tr></thead><tbody id="ob-lista"></tbody></table></div>`;
   $('#ob-resp').value = f.resp; $('#ob-sit').value = f.sit; $('#ob-esf').value = f.esfera;
   const meu = estado.usuario.id;
@@ -3674,6 +3675,7 @@ async function prazosDoMes() {
     if (!confirm(`Marcar ${ids.length} obrigação(ões) como entregue(s) hoje?`)) return;
     try { const r2 = await api('POST', '/api/escritorio/tarefas/entregar', { ids }); aviso(`${r2.entregues} marcada(s) como entregue(s).`); prazosDoMes(); } catch (e) { aviso(mensagemErro(e)); }
   };
+  $('#ob-receita').onclick = () => conferirNaReceita(f.mes);
   $('#ob-mes').onchange = (ev) => { f.mes = ev.target.value || mesAtual(); prazosDoMes(); };
   $('#ob-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
   $('#ob-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
@@ -3725,7 +3727,7 @@ async function catalogoObrigacoes() {
       <span class="dica" style="max-width:46ch">Vencimentos anteriores a esta data não entram na agenda (evita “atrasadas” que foram entregues antes de usar o sistema).</span></form>
       <button class="primario" id="nova-ob">Nova obrigação</button></div>
     <div class="rolagem"><table class="tabela"><thead><tr><th>Obrigação</th><th>Periodicidade</th><th>Vencimento</th><th>Próximo exemplo</th><th>Vale para</th><th></th></tr></thead><tbody>
-    ${lista.map((o) => `<tr class="${o.ativa ? '' : 'inativo'}"><td><strong>${esc(o.codigo)}</strong> ${esc(o.nome)}<br><span class="dica">${ESFERA[o.esfera]}${o.ativa ? '' : ' · desativada'}</span></td>
+    ${lista.map((o) => `<tr class="${o.ativa ? '' : 'inativo'}"><td><strong>${esc(o.codigo)}</strong> ${esc(o.nome)}<br><span class="dica">${ESFERA[o.esfera]}${o.ativa ? '' : ' · desativada'}${['DAS', 'DCTFWEB', 'DEFIS'].includes(o.codigo) ? ' · conferida na Receita pelo Integra Contador' : ''}</span></td>
       <td>${{ MENSAL: 'Mensal', TRIMESTRAL: 'Trimestral', ANUAL: 'Anual' }[o.periodicidade]}</td>
       <td>${descreverRegra(o)}</td><td>${dataBr(o.exemplo)}</td>
       <td>${o.regimes.length ? o.regimes.map((r) => esc(tab.regimes[r])).join(', ') : 'Todos os regimes'}${o.requisito ? `<br><span class="dica">${{ FUNCIONARIOS: 'com empregados', ICMS: 'contribuintes do ICMS', ISS: 'prestadores de serviço' }[o.requisito]}</span>` : ''}${o.aplica_padrao ? '' : '<br><span class="dica">só para os clientes marcados</span>'}</td>
@@ -4289,5 +4291,76 @@ async function telaAvisos() {
   $('#form-av').onsubmit = async (ev) => { ev.preventDefault(); try { await api('PUT', '/api/escritorio/avisos', ler()); aviso('Avisos salvos.'); } catch (e) { $('#erro-av').textContent = mensagemErro(e); } };
   $('#av-teste').onclick = async () => {
     try { await api('PUT', '/api/escritorio/avisos', ler()); const r = await api('POST', '/api/escritorio/avisos/enviar'); aviso(r.enviado ? 'Resumo enviado.' : r.motivo); } catch (e) { $('#erro-av').textContent = mensagemErro(e); }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Integra Contador (SERPRO): conferência das entregas na Receita
+// ---------------------------------------------------------------------------
+
+async function conferirNaReceita(mes) {
+  let pv;
+  try { pv = await api('GET', `/api/escritorio/integra/previa?mes=${mes}`); } catch (e) { return aviso(mensagemErro(e)); }
+  if (!pv.configurado) {
+    return abrirDialogo(`<h2>Conferir na Receita</h2>
+      <p>A conferência usa o <strong>Integra Contador</strong> do SERPRO, que consulta em nome dos clientes o PGDAS-D (DAS do Simples), a DCTFWeb e a DEFIS.</p>
+      <p>${estado.usuario.tipo === 'adm' ? 'Configure em <a href="#/config/integra" data-fechar>Configurações &gt; Integra Contador</a>.' : 'Peça a um administrador para configurar em Configurações &gt; Integra Contador.'}</p>
+      <div class="acoes"><button data-fechar>Fechar</button></div>`);
+  }
+  if (!pv.tarefas) return aviso('Nenhuma DAS, DCTFWeb ou DEFIS em aberto neste mês (nem atrasada) para conferir.');
+  abrirDialogo(`<h2>Conferir na Receita</h2>
+    <p>Em aberto para conferir: <strong>${pv.porObrigacao.DAS}</strong> DAS (PGDAS-D), <strong>${pv.porObrigacao.DCTFWEB}</strong> DCTFWeb e <strong>${pv.porObrigacao.DEFIS}</strong> DEFIS, incluindo as atrasadas.</p>
+    <p>Serão feitas <strong>${pv.consultas} consulta(s)</strong> ao Integra Contador. O SERPRO cobra por consulta, conforme o seu contrato.</p>
+    <p class="dica">O que for localizado é marcado como <em>Entregue</em>, com o número da declaração e a data de transmissão. O que não for localizado continua em aberto.</p>
+    <div class="acoes"><button class="primario" id="conf-ok">Conferir agora</button><button data-fechar>Cancelar</button></div>`, (d) => {
+    $('#conf-ok').onclick = async (ev) => {
+      ev.target.disabled = true; ev.target.textContent = 'Consultando a Receita…';
+      try {
+        const r = await api('POST', '/api/escritorio/integra/conferir', { mes });
+        const grupo = (sit, titulo, cls) => { const l = r.resultados.filter((x) => x.situacao === sit); return l.length ? `<h3>${titulo} (${l.length})</h3><ul class="dicas ${cls}">${l.map((x) => `<li><strong>${esc(x.codigo)} ${esc(x.competencia)}</strong> — ${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul>` : ''; };
+        d.close();
+        abrirDialogo(`<div class="dlg-largo"><h2>Conferência na Receita</h2>
+          <p><strong>${r.entregues}</strong> marcada(s) como entregue(s), <strong>${r.naoEncontradas}</strong> não localizada(s)${r.erros ? `, <strong class="cor-vermelho">${r.erros}</strong> com erro` : ''}.</p>
+          ${grupo('ENTREGUE', 'Entregues', '')}${grupo('NAO_ENCONTRADA', 'Não localizadas na Receita', '')}${grupo('ERRO', 'Não foi possível conferir', 'cor-vermelho')}
+          ${r.resultados.some((x) => /procuração/.test(x.mensagem)) ? '<p class="dica">Sem procuração: o cliente precisa outorgar procuração eletrônica ao CNPJ do escritório no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</p>' : ''}
+          <div class="acoes"><button data-fechar class="primario">Fechar</button></div></div>`);
+        prazosDoMes();
+      } catch (e) { ev.target.disabled = false; ev.target.textContent = 'Conferir agora'; aviso(mensagemErro(e)); }
+    };
+  });
+}
+
+async function telaIntegra() {
+  const c = await api('GET', '/api/escritorio/integra/config');
+  const e = c.escritorio;
+  corpoConfig().innerHTML = `
+    <h2>Integra Contador (SERPRO)</h2>
+    <div class="cartao">
+      <p class="sutil">Com o Integra Contador, o botão <strong>Conferir na Receita</strong> (Obrigações e prazos) consulta em nome dos clientes o <strong>PGDAS-D</strong> (com a informação de DAS pago), a <strong>DCTFWeb</strong> e a <strong>DEFIS</strong>, e marca como entregue o que já foi transmitido.</p>
+      <ol class="dicas">
+        <li>Contrate o Integra Contador na Loja Serpro com o e-CNPJ do escritório. Na Área do Cliente Serpro ficam o <strong>Consumer Key</strong> e o <strong>Consumer Secret</strong>.</li>
+        <li>Envie o certificado A1 do escritório em Cadastros &gt; Empresas: ${!e ? '<span class="cor-ambar">marque antes, na Carteira, qual empresa é o escritório</span>' : e.temCertificado ? `<span class="cor-verde">certificado de ${esc(e.nome)} enviado${e.certValidade ? ` (até ${dataBr(e.certValidade)})` : ''}</span>` : `<span class="cor-ambar">ainda não enviado para ${esc(e.nome)}</span>`}.</li>
+        <li>Cada cliente outorga procuração eletrônica ao CNPJ do escritório${e ? ` (<strong>${fmtDoc(e.documento)}</strong>)` : ''} no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</li>
+      </ol>
+      <form id="form-integra" class="grade" style="margin-top:14px">
+        <label>Ambiente <select name="ambiente"><option value="PRODUCAO">Produção</option><option value="DEMONSTRACAO">Demonstração (dados fictícios, para testar)</option></select></label>
+        <label>Consumer Key <input name="consumerKey" autocomplete="off" value="${esc(c.consumerKey)}"></label>
+        <label>Consumer Secret <input name="consumerSecret" type="password" autocomplete="new-password" placeholder="${c.temSecret ? 'Guardado — digite só para trocar' : ''}"></label>
+        <p class="erro largo" id="erro-integra"></p>
+        <div class="acoes largo"><button class="primario" type="submit">Salvar</button><button type="button" id="integra-testar" ${c.configurado ? '' : 'disabled'}>Testar conexão</button></div>
+      </form>
+      <p class="dica">O Consumer Secret fica guardado criptografado neste computador e nunca aparece na tela.</p>
+    </div>`;
+  const f = $('#form-integra');
+  f.ambiente.value = c.ambiente;
+  f.onsubmit = async (ev) => {
+    ev.preventDefault(); $('#erro-integra').textContent = '';
+    try { await api('PUT', '/api/escritorio/integra/config', lerForm(f)); aviso('Integra Contador salvo.'); telaIntegra(); } catch (er) { $('#erro-integra').textContent = mensagemErro(er); }
+  };
+  $('#integra-testar').onclick = async (ev) => {
+    ev.target.disabled = true; ev.target.textContent = 'Testando…';
+    try { const r = await api('POST', '/api/escritorio/integra/testar'); aviso(r.mensagem); $('#erro-integra').textContent = ''; }
+    catch (er) { $('#erro-integra').textContent = mensagemErro(er); }
+    finally { ev.target.disabled = false; ev.target.textContent = 'Testar conexão'; }
   };
 }
