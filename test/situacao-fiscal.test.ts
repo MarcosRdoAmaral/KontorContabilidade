@@ -65,6 +65,7 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
       async autenticar() { return { accessToken: 'a', jwtToken: 'j', expiraEm: Date.now() + 3600e3 }; },
       async consultar(corpo: any, _t: any, endpoint?: string) {
         const doc = corpo.contribuinte.numero, srv = corpo.pedidoDados.idServico;
+        assert.equal(corpo.pedidoDados.versaoSistema, '2.0', 'SITFIS está na versão 2.0 do catálogo');
         chamadas.push(`${endpoint}:${srv}:${doc}`);
         if (doc === SEMPROC) return { status: 403, corpo: { status: 403, mensagens: [{ codigo: 'AcessoNegado-SITFIS', texto: 'Não há procuração.' }], dados: '' } };
         if (srv === 'SOLICITARPROTOCOLO91') { assert.equal(endpoint, 'Apoiar'); return { status: 200, corpo: { status: 200, mensagens: [{ codigo: '[Sucesso-Sitfis-SC01]', texto: 'ok' }], dados: JSON.stringify({ protocoloRelatorio: `P-${doc}`, tempoEspera: 3000 }) } }; }

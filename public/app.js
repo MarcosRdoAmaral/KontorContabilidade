@@ -4348,6 +4348,10 @@ async function telaIntegra() {
         <label>Ambiente <select name="ambiente"><option value="PRODUCAO">Produção</option><option value="DEMONSTRACAO">Demonstração (dados fictícios, para testar)</option></select></label>
         <label>Consumer Key <input name="consumerKey" autocomplete="off" value="${esc(c.consumerKey)}"></label>
         <label>Consumer Secret <input name="consumerSecret" type="password" autocomplete="new-password" placeholder="${c.temSecret ? 'Guardado — digite só para trocar' : ''}"></label>
+        <details class="largo"><summary class="dica">Avançado: versões dos serviços</summary>
+          <label style="margin-top:8px">Versões dos serviços <input name="versoes" value="${esc(c.versoes ?? '')}" placeholder="${esc(Object.entries(c.versoesPadrao ?? {}).map(([k, v]) => `${k}=${v}`).join('; '))}"></label>
+          <p class="dica">Use só se o SERPRO responder “Versão Descontinuada”. Formato: SISTEMA=versão, separados por ponto e vírgula (ex.: SITFIS=2.0; PGDASD=1.0). Em branco, o sistema usa as versões atuais do catálogo: ${esc(Object.entries(c.versoesPadrao ?? {}).map(([k, v]) => `${k} ${v}`).join(', '))}; os demais, 1.0.</p>
+        </details>
         <p class="erro largo" id="erro-integra"></p>
         <div class="acoes largo"><button class="primario" type="submit">Salvar</button><button type="button" id="integra-testar" ${c.configurado ? '' : 'disabled'}>Testar conexão</button></div>
       </form>

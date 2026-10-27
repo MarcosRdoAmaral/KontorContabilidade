@@ -28,9 +28,24 @@ export const ConfigIntegra = z.object({
   ambiente: z.enum(['PRODUCAO', 'DEMONSTRACAO']),
   consumerKey: z.string().trim().max(200).nullish(),
   consumerSecret: z.string().trim().max(200).nullish(),
+  /** Ajuste avançado: "SITFIS=2.0; PGDASD=1.0" (para quando o SERPRO descontinuar uma versão). */
+  versoes: z.string().trim().max(300).nullish(),
 });
 
-interface ConfigSalva { ambiente: Ambiente; consumerKey: string | null; consumerSecretEnc: string | null }
+/** Versão atual de cada sistema no catálogo do Integra Contador (os não listados usam 1.0). */
+export const VERSOES_PADRAO: Record<string, string> = { SITFIS: '2.0', SICALC: '2.9', PROCURACOES: '1' };
+
+/** "SITFIS=2.0; PGDASD = 1.0" → { SITFIS: '2.0', PGDASD: '1.0' } */
+export function lerVersoes(texto?: string | null): Record<string, string> {
+  const r: Record<string, string> = {};
+  for (const par of String(texto ?? '').split(/[;,\n]+/)) {
+    const m = /^\s*([A-Za-z0-9_]+)\s*[=:]\s*([0-9]+(?:\.[0-9]+)?)\s*$/.exec(par);
+    if (m) r[m[1].toUpperCase()] = m[2];
+  }
+  return r;
+}
+
+interface ConfigSalva { ambiente: Ambiente; consumerKey: string | null; consumerSecretEnc: string | null; versoes?: string | null }
 
 export function lerConfig(escritorioId: number): ConfigSalva | null {
   const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(P_CONFIG(escritorioId)) as any)?.valor;
@@ -42,7 +57,7 @@ export function configPublica(escritorioId: number) {
   const esc = db.prepare('SELECT documento, razao_social, (cert_pfx_enc IS NOT NULL) AS tem_cert, cert_validade FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
   return {
     configurado: !!c && (c.ambiente === 'DEMONSTRACAO' || (!!c.consumerKey && !!c.consumerSecretEnc)),
-    ambiente: c?.ambiente ?? 'PRODUCAO', consumerKey: c?.consumerKey ?? '', temSecret: !!c?.consumerSecretEnc,
+    ambiente: c?.ambiente ?? 'PRODUCAO', consumerKey: c?.consumerKey ?? '', temSecret: !!c?.consumerSecretEnc, versoes: c?.versoes ?? '', versoesPadrao: VERSOES_PADRAO,
     escritorio: esc ? { documento: esc.documento, nome: esc.razao_social, temCertificado: !!esc.tem_cert, certValidade: esc.cert_validade } : null,
   };
 }
@@ -51,7 +66,8 @@ export function salvarConfig(escritorioId: number, d: z.infer<typeof ConfigInteg
   const atual = lerConfig(escritorioId);
   const secretEnc = d.consumerSecret ? cifrarTexto(d.consumerSecret) : atual?.consumerSecretEnc ?? null;
   if (d.ambiente === 'PRODUCAO' && (!d.consumerKey || !secretEnc)) throw new ErroNegocio('Informe o Consumer Key e o Consumer Secret recebidos na contratação (Área do Cliente Serpro).');
-  const nova: ConfigSalva = { ambiente: d.ambiente, consumerKey: d.consumerKey || null, consumerSecretEnc: secretEnc };
+  if (d.versoes && !Object.keys(lerVersoes(d.versoes)).length) throw new ErroNegocio('Versões: use o formato SISTEMA=versão, separados por ponto e vírgula (ex.: SITFIS=2.0; PGDASD=1.0).');
+  const nova: ConfigSalva = { ambiente: d.ambiente, consumerKey: d.consumerKey || null, consumerSecretEnc: secretEnc, versoes: d.versoes || null };
   db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(P_CONFIG(escritorioId), JSON.stringify(nova));
   tokens.delete(escritorioId);
 }
@@ -126,6 +142,11 @@ export class Integra {
     return new Integra(escritorioId, transporte ?? transporteReal(escritorioId), esc.documento);
   }
 
+  /** Versão do sistema: o ajuste da configuração, senão a do catálogo, senão 1.0. */
+  versao(idSistema: string) {
+    return lerVersoes(lerConfig(this.escritorioId)?.versoes)[idSistema] ?? VERSOES_PADRAO[idSistema] ?? '1.0';
+  }
+
   private async token() {
     const t = tokens.get(this.escritorioId);
     if (t && t.expiraEm > Date.now()) return t;
@@ -140,7 +161,7 @@ export class Integra {
       contratante: { numero: this.documentoEscritorio, tipo: 2 },
       autorPedidoDados: { numero: this.documentoEscritorio, tipo: 2 },
       contribuinte: { numero: contribuinte, tipo: tipoDoc(contribuinte) },
-      pedidoDados: { idSistema, idServico, versaoSistema: '1.0', dados: dados ? JSON.stringify(dados) : '' },
+      pedidoDados: { idSistema, idServico, versaoSistema: this.versao(idSistema), dados: dados ? JSON.stringify(dados) : '' },
     };
     let r = await this.transporte.consultar(corpo, await this.token(), endpoint);
     if (r.status === 401) { tokens.delete(this.escritorioId); r = await this.transporte.consultar(corpo, await this.token(), endpoint); }
@@ -152,7 +173,10 @@ export class Integra {
   }
 }
 
-export const textoMsgs = (m: { codigo: string; texto: string }[]) => m.map((x) => x.texto || x.codigo).filter(Boolean).join(' ');
+export const textoMsgs = (m: { codigo: string; texto: string }[]) => {
+  const t = m.map((x) => x.texto || x.codigo).filter(Boolean).join(' ');
+  return /vers[ãa]o descontinuada/i.test(t) ? `${t} O SERPRO mudou a versão deste serviço: ajuste em Configurações > Integra Contador > Versões dos serviços (ou avise o suporte do Kontor).` : t;
+};
 export const semProcuracao = (m: { codigo: string; texto: string }[]) => m.some((x) => /AcessoNegado|procura/i.test(`${x.codigo} ${x.texto}`));
 
 /** "20240315103000", "2024-03-15T10:30" ou número → AAAA-MM-DD. */

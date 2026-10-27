@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.5.0';
+export const MANUAL_VERSAO = '1.5.1';
 
 export const MANUAL = [
   {
@@ -125,6 +125,7 @@ export const MANUAL = [
         <li>Em Configurações &gt; Integra Contador, informe as chaves, escolha Produção e use <em>Testar conexão</em>. O ambiente de Demonstração responde com dados fictícios, para testar antes do contrato.</li>
         <li>Cada cliente outorga procuração eletrônica ao CNPJ do escritório no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</li>
       </ol>
+      <p class="dica">Se o SERPRO responder “Versão Descontinuada”, ele mudou a versão de algum serviço. Em Configurações &gt; Integra Contador &gt; Avançado, informe a versão nova no formato SISTEMA=versão (ex.: SITFIS=2.0) ou aguarde a atualização do sistema.</p>
       <h3>Conferir</h3>
       <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer (o SERPRO cobra por consulta) e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
       <p class="dica">EFD, ECD, ECF, eSocial, FGTS e as obrigações estaduais e municipais não passam pelo Integra Contador e continuam sendo marcadas à mão.</p>`,

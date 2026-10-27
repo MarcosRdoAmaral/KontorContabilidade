@@ -120,13 +120,13 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
   if (reg && Date.now() - Date.parse(reg.solicitada_em.replace(' ', 'T') + 'Z') > PROTOCOLO_VALIDO_MS) reg = null;
   if (!reg) {
     const r = await i.consultar(e.documento, 'SITFIS', 'SOLICITARPROTOCOLO91', null, 'Apoiar');
-    const protocolo = r.dados?.protocoloRelatorio ?? null;
+    const protocolo = r.dados?.protocoloRelatorio ?? r.dados?.protocolo ?? null;
     if (!r.ok || !protocolo) {
       const msg = semProcuracao(r.mensagens) ? 'Sem procuração do cliente para o escritório no e-CAC.' : textoMsgs(r.mensagens) || `O SERPRO não devolveu o protocolo (HTTP ${r.http}).`;
       const id = Number(db.prepare(`INSERT INTO situacao_fiscal (empresa_id, status, erro, usuario_id, concluida_em) VALUES (?, 'ERRO', ?, ?, datetime('now'))`).run(empresaId, msg, usuarioId).lastInsertRowid);
       return { ...base, status: 'ERRO', mensagem: msg, id };
     }
-    const espera = Number(r.dados?.tempoEspera) || 0;
+    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || 0;
     const id = Number(db.prepare(`INSERT INTO situacao_fiscal (empresa_id, status, protocolo, liberar_em, usuario_id) VALUES (?, 'SOLICITADA', ?, ?, ?)`)
       .run(empresaId, String(protocolo), new Date(Date.now() + espera).toISOString(), usuarioId).lastInsertRowid);
     reg = db.prepare('SELECT * FROM situacao_fiscal WHERE id = ?').get(id);
@@ -135,13 +135,13 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
   let gasto = 0;
   for (let tentativa = 0; tentativa < 3; tentativa++) {
     const r = await i.consultar(e.documento, 'SITFIS', 'RELATORIOSITFIS92', { protocoloRelatorio: reg.protocolo }, 'Emitir');
-    const pdf64 = r.dados?.pdf;
+    const pdf64 = r.dados?.pdf ?? r.dados?.pdfBase64 ?? r.dados?.relatorio ?? (typeof r.dados === 'string' && r.dados.startsWith('JVBER') ? r.dados : null);
     if (r.ok && pdf64) {
       const lido = await concluir(reg.id, Buffer.from(String(pdf64), 'base64'));
       const msg = lido.situacao === 'REGULAR' ? 'Sem pendências na Receita Federal e na PGFN.' : lido.situacao === 'PENDENCIAS' ? `${lido.qtdPendencias} pendência(s)${lido.totalAberto ? `, saldo de R$ ${lido.totalAberto.toFixed(2).replace('.', ',')}` : ''}.` : 'Relatório recebido: confira o PDF.';
       return { ...base, status: 'PRONTA', situacao: lido.situacao, mensagem: msg, id: reg.id };
     }
-    const espera = Number(r.dados?.tempoEspera) || 0;
+    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || 0;
     if (espera > 0 && gasto + espera <= ESPERA_MAX_MS) {
       db.prepare('UPDATE situacao_fiscal SET liberar_em = ? WHERE id = ?').run(new Date(Date.now() + espera).toISOString(), reg.id);
       gasto += espera; await esperar(espera); continue;

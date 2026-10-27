@@ -10,6 +10,13 @@ Object.assign(process.env, { DATABASE_PATH: path.join(tmp, 'd.db'), STORAGE_DIR:
 
 const ESC = '06990590000123', PADARIA = '11222333000181', ALFA = '45723174000110', SEMPROC = '27865757000102';
 
+test('versões dos serviços e aviso de versão descontinuada', async () => {
+  const { lerVersoes, textoMsgs } = await import('../src/servicos/integra-contador.js');
+  assert.deepEqual(lerVersoes('SITFIS=2.1; pgdasd : 1.0\nlixo'), { SITFIS: '2.1', PGDASD: '1.0' });
+  assert.deepEqual(lerVersoes(''), {});
+  assert.match(textoMsgs([{ codigo: 'x', texto: 'Requisição inválida. Versão Descontinuada.' }]), /Versões dos serviços/);
+});
+
 test('datas da Receita', async () => {
   const { dataDaReceita } = await import('../src/servicos/integra-contador.js');
   assert.equal(dataDaReceita('20261115103000'), '2026-11-15');
@@ -46,6 +53,13 @@ test('Integra Contador: configuração, prévia e conferência das obrigações'
     assert.ok(!String((db.prepare("SELECT valor FROM parametros WHERE nome = 'integra_contador:1'").get() as any).valor).includes('segredo'), 'guardado cifrado');
     // trocar a chave sem redigitar o segredo mantém o segredo
     assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: 'chave2' }, t)).status, 200);
+    assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: 'chave2', versoes: 'qualquer coisa' }, t)).status, 400);
+    assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: 'chave2', versoes: 'SITFIS=2.5' }, t)).status, 200);
+    const { Integra } = await import('../src/servicos/integra-contador.js');
+    const iv = new Integra(1, {} as any, ESC);
+    assert.deepEqual([iv.versao('SITFIS'), iv.versao('PGDASD')], ['2.5', '1.0'], 'ajuste da configuração vale por cima do catálogo');
+    assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: 'chave2', versoes: '' }, t)).status, 200);
+    assert.equal(iv.versao('SITFIS'), '2.0');
     // sem certificado do escritório, a autenticação real explica o que falta
     const teste = await call('POST', '/api/escritorio/integra/testar', undefined, t);
     assert.equal(teste.status, 400); assert.match(teste.json.erro, /certificado A1/);
@@ -64,6 +78,7 @@ test('Integra Contador: configuração, prévia e conferência das obrigações'
       async consultar(corpo: any) {
         pedidos.push(corpo);
         const { idServico } = corpo.pedidoDados, doc = corpo.contribuinte.numero;
+        assert.equal(corpo.pedidoDados.versaoSistema, '1.0');
         assert.equal(corpo.contratante.numero, ESC); assert.equal(corpo.autorPedidoDados.numero, ESC);
         if (doc === SEMPROC) return { status: 403, corpo: { status: 403, mensagens: [{ codigo: 'AcessoNegado-PGDASD-001', texto: 'Não há procuração eletrônica para o serviço.' }], dados: '' } };
         if (idServico === 'CONSDECLARACAO13') {
