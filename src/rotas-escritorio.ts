@@ -235,8 +235,13 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/integra/config', async (req) => ({ ...configIntegra(u(req).escritorio_id), conferiveis: CONFERIVEIS }));
     api.put('/api/escritorio/integra/config', async (req) => { salvarIntegra(u(req).escritorio_id, ConfigIntegra.parse(req.body)); return { ok: true }; });
     api.post('/api/escritorio/integra/testar', async (req) => testarConexao(u(req).escritorio_id));
-    api.get('/api/escritorio/integra/previa', async (req) => ({ ...previaConferencia(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
-    api.post('/api/escritorio/integra/conferir', async (req) => conferirNaReceita(u(req).escritorio_id, u(req).id, MES.parse((req.body as any)?.mes), empresasDoUsuario(u(req))));
+    // `tarefas`: só as linhas selecionadas em Obrigações e prazos (sem seleção, todo o mês)
+    const idsTarefas = z.array(z.number().int().positive()).max(2000).nullish();
+    api.get('/api/escritorio/integra/previa', async (req) => {
+      const tarefas = idsTarefas.parse(String((req.query as any).tarefas ?? '').split(',').filter(Boolean).map(Number));
+      return { ...previaConferencia(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req)), tarefas), configurado: configIntegra(u(req).escritorio_id).configurado };
+    });
+    api.post('/api/escritorio/integra/conferir', async (req) => conferirNaReceita(u(req).escritorio_id, u(req).id, MES.parse((req.body as any)?.mes), empresasDoUsuario(u(req)), undefined, idsTarefas.parse((req.body as any)?.tarefas)));
 
     // ---------- Situação fiscal (Integra Contador) ----------
     api.get('/api/escritorio/situacao-fiscal', async (req) => ({ clientes: painelSituacao(u(req).escritorio_id, empresasDoUsuario(u(req))), resumo: resumoSituacoes(u(req).escritorio_id, empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));

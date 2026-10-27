@@ -3709,7 +3709,7 @@ async function prazosDoMes() {
       <td>${selo(PRAZO[t.prazo])}${t.status === 'ANDAMENTO' ? '<br><span class="dica">em andamento</span>' : ''}${t.entregue_em ? `<br><span class="dica">${dataBr(t.entregue_em)}${t.entregue_por_nome ? ' · ' + esc(t.entregue_por_nome) : ''}</span>` : ''}</td>
       <td class="acoes-linha">${['ENTREGUE', 'DISPENSADA'].includes(t.prazo) ? '' : `<button data-ok="${t.id}">Entregue</button> `}<button data-det="${t.id}">Detalhes</button></td></tr>`).join('')
       : `<tr><td colspan="8"><div class="vazio" style="border:0">${d.tarefas.length ? 'Nada com esses filtros.' : 'Nenhuma obrigação neste mês. Confira o regime e o perfil dos clientes na Carteira.'}</div></td></tr>`;
-    const lote = () => { const n = corpo.querySelectorAll('[data-sel]:checked').length; $('#ob-lote').disabled = !n; $('#ob-lote').textContent = n ? `Marcar ${n} como entregue(s)` : 'Marcar selecionadas como entregues'; };
+    const lote = () => { const n = corpo.querySelectorAll('[data-sel]:checked').length; $('#ob-lote').disabled = !n; $('#ob-lote').textContent = n ? `Marcar ${n} como entregue(s)` : 'Marcar selecionadas como entregues'; $('#ob-receita').textContent = n ? `Conferir ${n} selecionada(s) na Receita` : 'Conferir na Receita'; };
     corpo.querySelectorAll('[data-sel]').forEach((c) => (c.onchange = lote)); lote();
     corpo.querySelectorAll('[data-ok]').forEach((b) => (b.onclick = () => detalheTarefa(d.tarefas.find((t) => t.id === Number(b.dataset.ok)), equipe, true)));
     corpo.querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheTarefa(d.tarefas.find((t) => t.id === Number(b.dataset.det)), equipe)));
@@ -3720,7 +3720,7 @@ async function prazosDoMes() {
     if (!confirm(`Marcar ${ids.length} obrigação(ões) como entregue(s) hoje?`)) return;
     try { const r2 = await api('POST', '/api/escritorio/tarefas/entregar', { ids }); aviso(`${r2.entregues} marcada(s) como entregue(s).`); prazosDoMes(); } catch (e) { aviso(mensagemErro(e)); }
   };
-  $('#ob-receita').onclick = () => conferirNaReceita(f.mes);
+  $('#ob-receita').onclick = () => conferirNaReceita(f.mes, [...corpo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel)));
   $('#ob-mes').onchange = (ev) => { f.mes = ev.target.value || mesAtual(); prazosDoMes(); };
   $('#ob-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
   $('#ob-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
@@ -4343,25 +4343,26 @@ async function telaAvisos() {
 // Integra Contador (SERPRO): conferência das entregas na Receita
 // ---------------------------------------------------------------------------
 
-async function conferirNaReceita(mes) {
+async function conferirNaReceita(mes, tarefas = []) {
   let pv;
-  try { pv = await api('GET', `/api/escritorio/integra/previa?mes=${mes}`); } catch (e) { return aviso(mensagemErro(e)); }
+  try { pv = await api('GET', `/api/escritorio/integra/previa?mes=${mes}${tarefas.length ? `&tarefas=${tarefas.join(',')}` : ''}`); } catch (e) { return aviso(mensagemErro(e)); }
   if (!pv.configurado) {
     return abrirDialogo(`<h2>Conferir na Receita</h2>
       <p>A conferência usa o <strong>Integra Contador</strong> do SERPRO, que consulta em nome dos clientes o PGDAS-D (DAS do Simples), a DCTFWeb e a DEFIS.</p>
       <p>${estado.usuario.tipo === 'adm' ? 'Configure em <a href="#/config/integra" data-fechar>Configurações &gt; Integra Contador</a>.' : 'Peça a um administrador para configurar em Configurações &gt; Integra Contador.'}</p>
       <div class="acoes"><button data-fechar>Fechar</button></div>`);
   }
-  if (!pv.tarefas) return aviso('Nenhuma DAS, DCTFWeb ou DEFIS em aberto neste mês (nem atrasada) para conferir.');
+  if (!pv.tarefas) return aviso(tarefas.length ? 'Entre as linhas selecionadas não há DAS, DCTFWeb ou DEFIS em aberto: só essas três a Receita confere.' : 'Nenhuma DAS, DCTFWeb ou DEFIS em aberto neste mês (nem atrasada) para conferir.');
   abrirDialogo(`<h2>Conferir na Receita</h2>
-    <p>Em aberto para conferir: <strong>${pv.porObrigacao.DAS}</strong> DAS (PGDAS-D), <strong>${pv.porObrigacao.DCTFWEB}</strong> DCTFWeb e <strong>${pv.porObrigacao.DEFIS}</strong> DEFIS, incluindo as atrasadas.</p>
+    ${tarefas.length ? `<p>Só ${pv.clientes.length === 1 ? 'o cliente selecionado' : `os ${pv.clientes.length} clientes selecionados`}: <strong>${esc(pv.clientes.slice(0, 5).join(', '))}${pv.clientes.length > 5 ? '…' : ''}</strong>.</p>` : '<p class="dica">Nenhuma linha selecionada: confere todos os clientes do mês. Para conferir só alguns, marque as linhas antes.</p>'}
+    <p>${tarefas.length ? 'Selecionadas para conferir' : 'Em aberto para conferir'}: <strong>${pv.porObrigacao.DAS}</strong> DAS (PGDAS-D), <strong>${pv.porObrigacao.DCTFWEB}</strong> DCTFWeb e <strong>${pv.porObrigacao.DEFIS}</strong> DEFIS, incluindo as atrasadas.</p>
     <p>Serão feitas <strong>${pv.consultas} consulta(s)</strong> ao Integra Contador. O SERPRO cobra por consulta, conforme o seu contrato.</p>
     <p class="dica">O que for localizado é marcado como <em>Entregue</em>, com o número da declaração e a data de transmissão. O que não for localizado continua em aberto.</p>
     <div class="acoes"><button class="primario" id="conf-ok">Conferir agora</button><button data-fechar>Cancelar</button></div>`, (d) => {
     $('#conf-ok').onclick = async (ev) => {
       ev.target.disabled = true; ev.target.textContent = 'Consultando a Receita…';
       try {
-        const r = await api('POST', '/api/escritorio/integra/conferir', { mes });
+        const r = await api('POST', '/api/escritorio/integra/conferir', { mes, tarefas: tarefas.length ? tarefas : null });
         const grupo = (sit, titulo, cls) => { const l = r.resultados.filter((x) => x.situacao === sit); return l.length ? `<h3>${titulo} (${l.length})</h3><ul class="dicas ${cls}">${l.map((x) => `<li><strong>${esc(x.codigo)} ${esc(x.competencia)}</strong> — ${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul>` : ''; };
         d.close();
         abrirDialogo(`<div class="dlg-largo"><h2>Conferência na Receita</h2>

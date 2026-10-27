@@ -235,27 +235,29 @@ export async function declaracoesDefis(i: Integra, cnpj: string): Promise<{ erro
 /** Obrigações do catálogo (pelo código) que o Integra Contador sabe conferir. */
 export const CONFERIVEIS: Record<string, string> = { DAS: 'PGDAS-D', DCTFWEB: 'DCTFWeb', DEFIS: 'DEFIS' };
 
-function tarefasConferiveis(escritorioId: number, mes: string, empresas: number[] | null) {
+/** Tarefas em aberto que a Receita confere; com `tarefas`, só as selecionadas na tela. */
+function tarefasConferiveis(escritorioId: number, mes: string, empresas: number[] | null, tarefas?: number[] | null) {
+  const sel = tarefas?.length ? new Set(tarefas) : null;
   return listarTarefas(escritorioId, { mes, atrasadas: true, empresas })
-    .filter((t) => CONFERIVEIS[t.codigo] && (t.status === 'PENDENTE' || t.status === 'ANDAMENTO'));
+    .filter((t) => CONFERIVEIS[t.codigo] && (t.status === 'PENDENTE' || t.status === 'ANDAMENTO') && (!sel || sel.has(t.id)));
 }
 
 /** Quantas consultas a conferência vai fazer (o SERPRO cobra por consulta). */
-export function previaConferencia(escritorioId: number, mes: string, empresas: number[] | null = null) {
-  const ts = tarefasConferiveis(escritorioId, mes, empresas);
+export function previaConferencia(escritorioId: number, mes: string, empresas: number[] | null = null, tarefas: number[] | null = null) {
+  const ts = tarefasConferiveis(escritorioId, mes, empresas, tarefas);
   const chaves = new Set<string>();
   for (const t of ts) chaves.add(t.codigo === 'DAS' ? `${t.empresa_id}:DAS:${t.competencia.slice(0, 4)}` : t.codigo === 'DEFIS' ? `${t.empresa_id}:DEFIS` : `${t.empresa_id}:DCTF:${t.competencia}`);
-  return { tarefas: ts.length, consultas: chaves.size, porObrigacao: Object.fromEntries(Object.keys(CONFERIVEIS).map((k) => [k, ts.filter((t) => t.codigo === k).length])) };
+  return { tarefas: ts.length, consultas: chaves.size, clientes: [...new Set(ts.map((t) => t.cliente))], porObrigacao: Object.fromEntries(Object.keys(CONFERIVEIS).map((k) => [k, ts.filter((t) => t.codigo === k).length])) };
 }
 
 export interface ResultadoConferencia { tarefa_id: number; cliente: string; codigo: string; competencia: string; situacao: 'ENTREGUE' | 'NAO_ENCONTRADA' | 'ERRO'; mensagem: string }
 
-export async function conferirNaReceita(escritorioId: number, usuarioId: number, mes: string, empresas: number[] | null = null, transporte?: Transporte) {
+export async function conferirNaReceita(escritorioId: number, usuarioId: number, mes: string, empresas: number[] | null = null, transporte?: Transporte, tarefas: number[] | null = null) {
   if (!transporte && lerConfig(escritorioId)?.ambiente === 'DEMONSTRACAO') {
     throw new ErroNegocio('O Integra Contador está no ambiente de Demonstração, que só responde com dados fictícios. Troque para Produção em Configurações > Integra Contador quando o contrato estiver ativo.');
   }
   const i = Integra.para(escritorioId, transporte);
-  const ts = tarefasConferiveis(escritorioId, mes, empresas);
+  const ts = tarefasConferiveis(escritorioId, mes, empresas, tarefas);
   const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
   const cachePg = new Map<string, Awaited<ReturnType<typeof declaracoesPgdasd>>>();
   const cacheDefis = new Map<string, Awaited<ReturnType<typeof declaracoesDefis>>>();

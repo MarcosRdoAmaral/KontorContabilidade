@@ -98,6 +98,15 @@ test('Integra Contador: configuração, prévia e conferência das obrigações'
       },
     };
     const { conferirNaReceita } = await import('../src/servicos/integra-contador.js');
+    // só a linha selecionada: uma consulta, só daquele cliente
+    const idDasAlfa = (db.prepare(`SELECT t.id FROM tarefas t JOIN empresas e ON e.id = t.empresa_id JOIN obrigacoes o ON o.id = t.obrigacao_id
+      WHERE e.documento = ? AND o.codigo = 'DAS' AND substr(t.vencimento,1,7) = ?`).get(ALFA, mes) as any).id;
+    const pvSel = (await call('GET', `/api/escritorio/integra/previa?mes=${mes}&tarefas=${idDasAlfa}`, undefined, t)).json;
+    assert.deepEqual([pvSel.tarefas, pvSel.consultas, pvSel.clientes], [1, 1, ['Alfa']]);
+    const rSel = await conferirNaReceita(1, 1, mes, null, transporte, [idDasAlfa]);
+    assert.equal(rSel.resultados.length, 1);
+    assert.deepEqual(pedidos.map((p) => p.contribuinte.numero), [ALFA], 'só o cliente selecionado foi consultado');
+    pedidos.length = 0;
     const r = await conferirNaReceita(1, 1, mes, null, transporte);
     assert.equal(autenticacoes, 1, 'token reaproveitado');
     const das = pedidos.filter((p) => p.pedidoDados.idServico === 'CONSDECLARACAO13');
