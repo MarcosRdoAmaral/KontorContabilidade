@@ -1,4 +1,3 @@
-import PDFDocument from 'pdfkit';
 import { z } from 'zod';
 import { db } from '../db.js';
 import type { Usuario } from '../auth.js';
@@ -6,6 +5,7 @@ import { ErroNegocio } from './emissao.js';
 import { consultarCnpj } from './consulta-cnpj.js';
 import { entradaDoItem, registrar } from './agenda.js';
 import { faturar } from './faturamento.js';
+import { ESCOPO_PADRAO, ESCOPO_PADRAO_V1, FALTA, MODELO_PADRAO, MODELO_PADRAO_V1, gerarPdfContrato, preencherModelo } from './contrato-pdf.js';
 
 /**
  * Contratos de prestação de serviços e honorários.
@@ -69,72 +69,33 @@ export function valorPorExtenso(v: number): string {
 // Modelos de contrato
 // ---------------------------------------------------------------------------------------------
 
-export const CAMPOS_MODELO = [
-  ['contratante.razao_social', 'Razão social do cliente'], ['contratante.documento', 'CNPJ/CPF do cliente'], ['contratante.responsavel', 'Contato do cliente'],
-  ['contratada.razao_social', 'Razão social do escritório'], ['contratada.documento', 'CNPJ do escritório'],
-  ['numero', 'Número do contrato'], ['inicio', 'Data de início'], ['vigencia', 'Prazo (determinado ou indeterminado)'], ['valor', 'Honorário mensal'],
-  ['valor_extenso', 'Honorário por extenso'], ['dia_vencimento', 'Dia do vencimento'], ['indice', 'Índice de reajuste'], ['mes_reajuste', 'Mês do reajuste'],
-  ['decimo_terceiro', 'Cláusula do 13º honorário'], ['escopo', 'Serviços contratados'], ['data', 'Data por extenso'],
-] as const;
+export { CAMPOS_MODELO, ESCOPO_PADRAO, MODELO_PADRAO } from './contrato-pdf.js';
 
-export const MODELO_PADRAO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS CONTÁBEIS Nº {{numero}}
+const NOME_MODELO_PADRAO = 'Prestação de serviços contábeis (padrão)';
 
-CONTRATANTE: {{contratante.razao_social}}, inscrita no CNPJ/CPF sob o nº {{contratante.documento}}.
-
-CONTRATADA: {{contratada.razao_social}}, inscrita no CNPJ sob o nº {{contratada.documento}}.
-
-As partes acima identificadas celebram o presente contrato de prestação de serviços profissionais de contabilidade, que se regerá pelas cláusulas seguintes.
-
-CLÁUSULA 1ª – DO OBJETO
-A CONTRATADA prestará à CONTRATANTE os seguintes serviços:
-{{escopo}}
-
-Serviços não relacionados acima (como abertura e alteração contratual, certidões, declarações extraordinárias, retificações por falha de informação da CONTRATANTE e consultorias específicas) serão orçados e cobrados à parte.
-
-CLÁUSULA 2ª – DAS OBRIGAÇÕES DA CONTRATANTE
-A CONTRATANTE entregará à CONTRATADA, até o dia 5 de cada mês, toda a documentação do mês anterior necessária à execução dos serviços (notas fiscais, extratos bancários, folha de ponto, contratos e demais documentos), responsabilizando-se pela sua veracidade. Atrasos na entrega desobrigam a CONTRATADA pelo cumprimento de prazos e pelas penalidades decorrentes.
-
-CLÁUSULA 3ª – DAS OBRIGAÇÕES DA CONTRATADA
-A CONTRATADA executará os serviços com zelo, diligência e observância das normas brasileiras de contabilidade e da legislação vigente, guardando sigilo sobre as informações a que tiver acesso, nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018).
-
-CLÁUSULA 4ª – DOS HONORÁRIOS
-Pelos serviços, a CONTRATANTE pagará à CONTRATADA honorários mensais de {{valor}} ({{valor_extenso}}), com vencimento no dia {{dia_vencimento}} de cada mês. {{decimo_terceiro}}
-O atraso no pagamento implicará multa de 2% e juros de 1% ao mês sobre o valor devido.
-
-CLÁUSULA 5ª – DO REAJUSTE
-Os honorários serão reajustados anualmente, no mês de {{mes_reajuste}}, pela variação acumulada do {{indice}} nos doze meses anteriores, ou revistos de comum acordo quando houver alteração significativa no volume de serviços.
-
-CLÁUSULA 6ª – DA VIGÊNCIA E DA RESCISÃO
-Este contrato vigora a partir de {{inicio}}, por {{vigencia}}, e poderá ser rescindido por qualquer das partes mediante aviso prévio por escrito de 30 (trinta) dias, período em que os serviços e os honorários permanecem devidos. Na rescisão, a CONTRATADA entregará à CONTRATANTE ou ao novo profissional indicado a documentação sob sua guarda, mediante protocolo.
-
-CLÁUSULA 7ª – DO FORO
-Fica eleito o foro da comarca da sede da CONTRATADA para dirimir quaisquer dúvidas oriundas deste contrato.
-
-E, por estarem de acordo, as partes assinam o presente instrumento.
-
-{{data}}`;
-
-export const ESCOPO_PADRAO = `- Escrituração contábil e elaboração das demonstrações contábeis anuais;
-- Escrituração fiscal, apuração de tributos e emissão das guias de recolhimento;
-- Entrega das obrigações acessórias federais, estaduais e municipais aplicáveis ao regime da CONTRATANTE;
-- Departamento pessoal: folha de pagamento, eSocial, FGTS Digital, férias, 13º salário e rescisões, quando houver empregados.`;
-
+/**
+ * Garante o modelo padrão. Quem ainda usa o texto padrão da versão 1.0.0 (sem nenhuma alteração) passa para o novo,
+ * e os contratos com o escopo padrão antigo recebem o escopo novo. Textos editados pelo escritório não são tocados.
+ */
 export function garantirModeloPadrao(escritorioId: number) {
   if (!db.prepare('SELECT 1 FROM contrato_modelos WHERE escritorio_id = ?').get(escritorioId)) {
-    db.prepare('INSERT INTO contrato_modelos (escritorio_id, nome, texto) VALUES (?,?,?)').run(escritorioId, 'Prestação de serviços contábeis (padrão)', MODELO_PADRAO);
+    db.prepare('INSERT INTO contrato_modelos (escritorio_id, nome, texto, testemunhas) VALUES (?,?,?,1)').run(escritorioId, NOME_MODELO_PADRAO, MODELO_PADRAO);
+    return;
   }
+  db.prepare('UPDATE contrato_modelos SET texto = ?, testemunhas = 1 WHERE escritorio_id = ? AND texto = ?').run(MODELO_PADRAO, escritorioId, MODELO_PADRAO_V1);
+  db.prepare("UPDATE contratos SET escopo = ? WHERE escritorio_id = ? AND trim(escopo) = ? AND status != 'ENCERRADO'").run(ESCOPO_PADRAO, escritorioId, ESCOPO_PADRAO_V1);
 }
 
-export const Modelo = z.object({ nome: z.string().trim().min(2).max(120), texto: z.string().trim().min(20).max(60000) });
+export const Modelo = z.object({ nome: z.string().trim().min(2).max(120), texto: z.string().trim().min(20).max(60000), testemunhas: z.boolean().default(true) });
 
 export function listarModelos(escritorioId: number) {
   garantirModeloPadrao(escritorioId);
-  return db.prepare('SELECT id, nome, texto, criado_em FROM contrato_modelos WHERE escritorio_id = ? ORDER BY id').all(escritorioId);
+  return (db.prepare('SELECT id, nome, texto, testemunhas, criado_em FROM contrato_modelos WHERE escritorio_id = ? ORDER BY id').all(escritorioId) as any[]).map((m) => ({ ...m, testemunhas: !!m.testemunhas }));
 }
 
 export function salvarModelo(escritorioId: number, id: number | null, d: z.infer<typeof Modelo>) {
-  if (id == null) return Number(db.prepare('INSERT INTO contrato_modelos (escritorio_id, nome, texto) VALUES (?,?,?)').run(escritorioId, d.nome, d.texto).lastInsertRowid);
-  const r = db.prepare('UPDATE contrato_modelos SET nome = ?, texto = ? WHERE id = ? AND escritorio_id = ?').run(d.nome, d.texto, id, escritorioId);
+  if (id == null) return Number(db.prepare('INSERT INTO contrato_modelos (escritorio_id, nome, texto, testemunhas) VALUES (?,?,?,?)').run(escritorioId, d.nome, d.texto, d.testemunhas ? 1 : 0).lastInsertRowid);
+  const r = db.prepare('UPDATE contrato_modelos SET nome = ?, texto = ?, testemunhas = ? WHERE id = ? AND escritorio_id = ?').run(d.nome, d.texto, d.testemunhas ? 1 : 0, id, escritorioId);
   if (!r.changes) throw new ErroNegocio('Modelo não encontrado.', 404);
   return id;
 }
@@ -261,63 +222,166 @@ export function arquivoAssinado(escritorioId: number, id: number) {
 // Texto e PDF do contrato
 // ---------------------------------------------------------------------------------------------
 
-export function textoDoContrato(escritorioId: number, id: number): { titulo: string; texto: string } {
-  const c = contratoDoEscritorio(escritorioId, id);
-  garantirModeloPadrao(escritorioId);
-  const modelo = (c.modelo_id ? db.prepare('SELECT texto FROM contrato_modelos WHERE id = ?').get(c.modelo_id) : db.prepare('SELECT texto FROM contrato_modelos WHERE escritorio_id = ? ORDER BY id LIMIT 1').get(escritorioId)) as any;
-  const cli = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
-  const esc = db.prepare('SELECT * FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
-  const escNome = esc?.razao_social ?? (db.prepare('SELECT nome FROM escritorios WHERE id = ?').get(escritorioId) as any)?.nome ?? '';
-  const hoje = hojeBr();
-  const mesReaj = c.mes_reajuste ?? Number(c.inicio.slice(5, 7));
-  const indice = c.indice === 'FIXO' ? `percentual fixo de ${String(c.percentual_fixo).replace('.', ',')}%` : c.indice === 'NENHUM' ? 'índice que as partes vierem a acordar' : ROTULO_INDICE[c.indice];
-  const vals: Record<string, string> = {
-    'contratante.razao_social': cli.razao_social, 'contratante.documento': fmtDoc(cli.documento), 'contratante.responsavel': cli.contato_nome ?? '',
-    'contratada.razao_social': escNome, 'contratada.documento': fmtDoc(esc?.documento),
-    numero: String(c.numero).padStart(4, '0'), inicio: dataBr(c.inicio),
-    vigencia: c.fim ? `prazo determinado, até ${dataBr(c.fim)}` : 'prazo indeterminado',
-    valor: brl(c.valor), valor_extenso: valorPorExtenso(c.valor), dia_vencimento: String(c.dia_vencimento),
-    indice, mes_reajuste: MESES[mesReaj - 1],
-    decimo_terceiro: c.decimo_terceiro ? 'No mês de dezembro será devido, além do honorário mensal, um honorário adicional de igual valor (13º honorário), referente aos serviços de encerramento do exercício.' : '',
-    escopo: c.escopo || ESCOPO_PADRAO,
-    data: `${hoje.slice(8, 10)} de ${MESES[Number(hoje.slice(5, 7)) - 1]} de ${hoje.slice(0, 4)}`,
-  };
-  const texto = String(modelo?.texto ?? MODELO_PADRAO).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k) => vals[k] ?? `{{${k}}}`);
-  return { titulo: `Contrato nº ${vals.numero} — ${cli.nome_fantasia || cli.razao_social}`, texto };
+const ESTADOS: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão',
+  MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro',
+  RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
+};
+const fmtCep = (c?: string | null) => { const d = String(c ?? '').replace(/\D/g, ''); return d.length === 8 ? `${d.slice(0, 2)}.${d.slice(2, 5)}-${d.slice(5)}` : (c ?? ''); };
+const fmtCpf = (c?: string | null) => { const d = String(c ?? '').replace(/\D/g, ''); return d.length === 11 ? fmtDoc(d) : (c ?? ''); };
+
+/** "Rua X, nº 184, Bairro, Cidade, Estado, Cep 89.075-120" (null se não houver logradouro). */
+export function enderecoCompleto(e: any): string | null {
+  if (!e?.logradouro) return null;
+  return [e.logradouro, e.numero ? `nº ${e.numero}` : 's/nº', e.complemento, e.bairro, e.cidade, ESTADOS[String(e.uf ?? '').toUpperCase()] ?? e.uf, e.cep ? `Cep ${fmtCep(e.cep)}` : null]
+    .filter((x) => x && String(x).trim()).join(', ');
 }
 
+/** "FULANO, brasileiro, casado, empresário, portador do CPF nº ... e do RG nº ..." (null sem o nome). */
+export function qualificacaoRepresentante(e: any): string | null {
+  const nome = e?.rep_nome || (e?.documento?.length === 11 ? e.razao_social : null);
+  if (!nome) return null;
+  const cpf = e.rep_cpf || (e.documento?.length === 11 ? e.documento : null);
+  const docs = [cpf ? `portador do CPF nº ${fmtCpf(cpf)}` : null, e.rep_rg ? `${cpf ? 'do ' : 'portador do '}RG nº ${e.rep_rg}` : null].filter(Boolean).join(' e ');
+  return [String(nome).toUpperCase(), e.rep_nacionalidade, e.rep_estado_civil, e.rep_profissao, docs].filter((x) => x && String(x).trim()).join(', ');
+}
+
+interface DadosContrato { numero: number; inicio: string; fim?: string | null; valor: number; dia_vencimento: number; indice: string; percentual_fixo?: number | null; mes_reajuste?: number | null; decimo_terceiro: number | boolean; escopo?: string | null; assinado_em?: string | null }
+
+/** Valores dos campos {{...}} e o que falta no cadastro para o contrato sair completo. */
+export function valoresDoContrato(c: DadosContrato, cli: any, esc: any, escNome: string, hoje = hojeBr()) {
+  const faltas: string[] = [];
+  const ou = (v: string | null | undefined, falta: string) => { if (v && String(v).trim()) return String(v); faltas.push(falta); return FALTA; };
+  const mesReaj = c.mes_reajuste ?? Number(c.inicio.slice(5, 7));
+  const indice = c.indice === 'FIXO' ? `percentual fixo de ${String(c.percentual_fixo).replace('.', ',')}%` : c.indice === 'NENHUM' ? 'que as partes vierem a acordar' : ROTULO_INDICE[c.indice];
+  const dataRef = c.assinado_em || hoje;
+  const escopo = !c.escopo || c.escopo.trim() === ESCOPO_PADRAO_V1 ? ESCOPO_PADRAO : c.escopo;
+  const vals: Record<string, string> = {
+    'contratante.razao_social': cli.razao_social, 'contratante.documento': fmtDoc(cli.documento), 'contratante.tipo_documento': cli.documento?.length === 11 ? 'CPF' : 'CNPJ',
+    'contratante.endereco': ou(enderecoCompleto(cli), 'endereço do cliente'), 'contratante.responsavel': cli.contato_nome ?? '',
+    'representante.qualificacao': ou(qualificacaoRepresentante(cli), 'representante legal do cliente'),
+    'representante.nome': cli.rep_nome ?? FALTA, 'representante.cpf': cli.rep_cpf ? fmtCpf(cli.rep_cpf) : FALTA, 'representante.rg': cli.rep_rg ?? FALTA,
+    'contratada.razao_social': ou(esc?.razao_social ?? escNome, 'empresa do escritório'), 'contratada.documento': ou(fmtDoc(esc?.documento), 'CNPJ do escritório'),
+    'contratada.endereco': ou(enderecoCompleto(esc), 'endereço do escritório'), 'contratada.crc': ou(esc?.crc, 'CRC do escritório'),
+    numero: String(c.numero).padStart(4, '0'), inicio: dataBr(c.inicio),
+    vigencia: c.fim ? `prazo determinado, até ${dataBr(c.fim)}` : 'prazo indeterminado',
+    valor: brl(c.valor), valor_extenso: valorPorExtenso(c.valor), dia_vencimento: String(c.dia_vencimento).padStart(2, '0'), dia_vencimento_extenso: inteiroPorExtenso(c.dia_vencimento),
+    indice, mes_reajuste: MESES[mesReaj - 1],
+    decimo_terceiro: c.decimo_terceiro ? 'No mês de dezembro será devido, além do honorário mensal, um honorário adicional de igual valor (13º honorário), referente aos serviços de encerramento do exercício;' : '',
+    escopo,
+    cidade: ou(esc?.cidade, 'cidade do escritório'),
+    foro: esc?.cidade ? `${esc.cidade}${esc.uf ? ', ' + String(esc.uf).toUpperCase() : ''}` : FALTA,
+    data: `${dataRef.slice(8, 10)} de ${MESES[Number(dataRef.slice(5, 7)) - 1]} de ${dataRef.slice(0, 4)}`,
+  };
+  return { vals, faltas: [...new Set(faltas)] };
+}
+
+function modeloDoContrato(escritorioId: number, modeloId: number | null) {
+  garantirModeloPadrao(escritorioId);
+  const m = (modeloId ? db.prepare('SELECT texto, testemunhas FROM contrato_modelos WHERE id = ? AND escritorio_id = ?').get(modeloId, escritorioId) : null)
+    ?? db.prepare('SELECT texto, testemunhas FROM contrato_modelos WHERE escritorio_id = ? ORDER BY id LIMIT 1').get(escritorioId);
+  return { texto: String((m as any)?.texto ?? MODELO_PADRAO), testemunhas: (m as any)?.testemunhas !== 0 };
+}
+
+const escritorioDoContrato = (escritorioId: number) => db.prepare('SELECT * FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
+const nomeEscritorio = (escritorioId: number) => (db.prepare('SELECT nome FROM escritorios WHERE id = ?').get(escritorioId) as any)?.nome ?? '';
+
+export function textoDoContrato(escritorioId: number, id: number): { titulo: string; texto: string; faltas: string[]; testemunhas: boolean } {
+  const c = contratoDoEscritorio(escritorioId, id);
+  const modelo = modeloDoContrato(escritorioId, c.modelo_id);
+  const cli = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
+  const { vals, faltas } = valoresDoContrato(c, cli, escritorioDoContrato(escritorioId), nomeEscritorio(escritorioId));
+  return { titulo: `Contrato nº ${vals.numero} — ${cli.nome_fantasia || cli.razao_social}`, texto: preencherModelo(modelo.texto, vals), faltas, testemunhas: modelo.testemunhas };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Marca d'água do contrato
+// ---------------------------------------------------------------------------------------------
+
+const P_MARCA = (e: number) => `contrato_marca:${e}`;
+const P_MARCA_IMG = (e: number) => `contrato_marca_img:${e}`;
+export const MarcaDagua = z.object({ fonte: z.enum(['PROPRIA', 'LOGO', 'NENHUMA']), opacidade: z.number().min(0.03).max(1) });
+
+export function configMarca(escritorioId: number) {
+  const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(P_MARCA(escritorioId)) as any)?.valor;
+  const c = v ? JSON.parse(v) : {};
+  const temPropria = !!db.prepare('SELECT 1 FROM parametros WHERE nome = ? AND valor IS NOT NULL').get(P_MARCA_IMG(escritorioId));
+  const temLogo = !!(db.prepare('SELECT logo IS NOT NULL AS t FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any)?.t;
+  // sem escolha salva: usa a imagem enviada para o contrato ou, na falta dela, a logo da empresa do escritório
+  const fonte: 'PROPRIA' | 'LOGO' | 'NENHUMA' = c.fonte ?? (temPropria ? 'PROPRIA' : temLogo ? 'LOGO' : 'NENHUMA');
+  return { fonte, opacidade: typeof c.opacidade === 'number' ? c.opacidade : 0.12, temPropria, temLogo };
+}
+
+export function salvarMarca(escritorioId: number, d: z.infer<typeof MarcaDagua>) {
+  db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(P_MARCA(escritorioId), JSON.stringify(d));
+}
+
+export function tipoImagem(b: Buffer): 'image/png' | 'image/jpeg' | null {
+  if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+  return null;
+}
+
+export function salvarImagemMarca(escritorioId: number, img: Buffer) {
+  if (!tipoImagem(img)) throw new ErroNegocio('A marca d’água precisa ser uma imagem PNG ou JPG.');
+  if (img.length > 3 * 1024 * 1024) throw new ErroNegocio('Imagem acima de 3 MB. Use uma versão menor.');
+  db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(P_MARCA_IMG(escritorioId), img.toString('base64'));
+  const c = configMarca(escritorioId);
+  salvarMarca(escritorioId, { fonte: 'PROPRIA', opacidade: c.opacidade });
+}
+
+export function removerImagemMarca(escritorioId: number) {
+  db.prepare('DELETE FROM parametros WHERE nome = ?').run(P_MARCA_IMG(escritorioId));
+  const c = configMarca(escritorioId);
+  if (c.fonte === 'PROPRIA') salvarMarca(escritorioId, { fonte: c.temLogo ? 'LOGO' : 'NENHUMA', opacidade: c.opacidade });
+}
+
+export function imagemMarca(escritorioId: number): Buffer | null {
+  const c = configMarca(escritorioId);
+  if (c.fonte === 'PROPRIA') {
+    const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(P_MARCA_IMG(escritorioId)) as any)?.valor;
+    return v ? Buffer.from(v, 'base64') : null;
+  }
+  if (c.fonte === 'LOGO') {
+    const l = (db.prepare('SELECT logo FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any)?.logo;
+    return l ? Buffer.from(l) : null;
+  }
+  return null;
+}
+
+const marcaDoEscritorio = (escritorioId: number) => {
+  const img = imagemMarca(escritorioId);
+  return img ? { imagem: img, opacidade: configMarca(escritorioId).opacidade } : null;
+};
+
+// ---------------------------------------------------------------------------------------------
+// PDF
+// ---------------------------------------------------------------------------------------------
+
 export function pdfDoContrato(escritorioId: number, id: number): Promise<Buffer> {
-  const { titulo, texto } = textoDoContrato(escritorioId, id);
+  const { titulo, texto, testemunhas } = textoDoContrato(escritorioId, id);
   const c = contratoDoEscritorio(escritorioId, id);
   const cli = db.prepare('SELECT razao_social, documento FROM empresas WHERE id = ?').get(c.empresa_id) as any;
-  const esc = db.prepare('SELECT razao_social, documento FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 60, left: 64, right: 64 }, info: { Title: titulo } });
-    const partes: Buffer[] = [];
-    doc.on('data', (b) => partes.push(b)); doc.on('end', () => resolve(Buffer.concat(partes))); doc.on('error', reject);
-    const largura = doc.page.width - 128;
-    const blocos = texto.split(/\n{2,}/);
-    blocos.forEach((b, i) => {
-      const linhas = b.split('\n');
-      if (i === 0) { doc.font('Helvetica-Bold').fontSize(13).text(b.trim(), { align: 'center', width: largura }); doc.moveDown(1.2); return; }
-      for (const [k, l] of linhas.entries()) {
-        const titulo = /^CL[ÁA]USULA\b/i.test(l.trim()) || (/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9ºª\s–\-]+$/.test(l.trim()) && l.trim().length < 70 && k === 0);
-        doc.font(titulo ? 'Helvetica-Bold' : 'Helvetica').fontSize(10.5).text(l.trim(), { align: titulo ? 'left' : 'justify', width: largura, lineGap: 2 });
-      }
-      doc.moveDown(0.8);
-    });
-    // assinaturas
-    if (doc.y > doc.page.height - 200) doc.addPage();
-    doc.moveDown(2.5);
-    const y = doc.y, meia = (largura - 40) / 2;
-    const assinatura = (x: number, nome: string, docum: string, papel: string) => {
-      doc.moveTo(x, y).lineTo(x + meia, y).lineWidth(0.6).stroke();
-      doc.font('Helvetica-Bold').fontSize(9.5).text(nome ?? '', x, y + 5, { width: meia, align: 'center' });
-      doc.font('Helvetica').fontSize(9).text(`${fmtDoc(docum)}\n${papel}`, x, doc.y, { width: meia, align: 'center' });
-    };
-    assinatura(64, cli.razao_social, cli.documento, 'CONTRATANTE');
-    assinatura(64 + meia + 40, esc?.razao_social ?? 'CONTRATADA', esc?.documento ?? '', 'CONTRATADA');
-    doc.end();
+  const esc = escritorioDoContrato(escritorioId);
+  return gerarPdfContrato({
+    titulo, texto, testemunhas, marca: marcaDoEscritorio(escritorioId),
+    contratante: { nome: cli.razao_social, documento: fmtDoc(cli.documento) },
+    contratada: { nome: esc?.razao_social ?? nomeEscritorio(escritorioId), documento: fmtDoc(esc?.documento) },
+  });
+}
+
+/** PDF de exemplo do modelo, com um cliente fictício: para conferir texto e marca d'água antes de usar. */
+export function pdfExemplo(escritorioId: number, modeloId: number | null): Promise<Buffer> {
+  const modelo = modeloDoContrato(escritorioId, modeloId);
+  const esc = escritorioDoContrato(escritorioId);
+  const cli = { razao_social: 'CLIENTE EXEMPLO LTDA', documento: '11222333000181', logradouro: 'Rua das Flores', numero: '100', bairro: 'Centro', cidade: esc?.cidade ?? 'Blumenau', uf: esc?.uf ?? 'SC', cep: '89010000',
+    rep_nome: 'Fulano de Tal', rep_nacionalidade: 'brasileiro', rep_estado_civil: 'casado', rep_profissao: 'empresário', rep_cpf: '39053344705', rep_rg: '1234567' };
+  const c = { numero: 0, inicio: hojeBr(), valor: 350, dia_vencimento: 10, indice: 'IPCA', mes_reajuste: null, decimo_terceiro: false, escopo: ESCOPO_PADRAO };
+  const { vals } = valoresDoContrato(c, cli, esc, nomeEscritorio(escritorioId));
+  return gerarPdfContrato({
+    titulo: 'Contrato de exemplo', texto: preencherModelo(modelo.texto, vals), testemunhas: modelo.testemunhas, marca: marcaDoEscritorio(escritorioId),
+    contratante: { nome: cli.razao_social, documento: fmtDoc(cli.documento) },
+    contratada: { nome: esc?.razao_social ?? nomeEscritorio(escritorioId), documento: fmtDoc(esc?.documento) },
   });
 }
 
@@ -355,8 +419,8 @@ export async function sincronizarFaturamento(escritorioId: number, contratoId: n
   const vencTipo = 'DIA_FIXO';
   if (!tomadorId) {
     // endereço vem da Receita (necessário para o boleto e para o grupo IBS/CBS); sem a consulta, o cadastro fica marcado para conferir
-    let end: any = null;
-    if (cli.documento.length === 14) { try { end = await buscarCnpj(cli.documento); } catch { /* segue sem endereço */ } }
+    let end: any = cli.logradouro ? { cep: cli.cep, cod_municipio: cli.cod_municipio, logradouro: cli.logradouro, numero: cli.numero, complemento: cli.complemento, bairro: cli.bairro, municipio: cli.cidade, uf: cli.uf } : null;
+    if (!end && cli.documento.length === 14) { try { end = await buscarCnpj(cli.documento); } catch { /* segue sem endereço */ } }
     const r = db.prepare(`INSERT INTO tomadores (empresa_id, tipo_doc, documento, nome, inscricao_municipal, email, fone, cep, cod_municipio, logradouro, numero, complemento, bairro, cidade, uf,
         modo_faturamento, vencimento_tipo, vencimento_valor, enviar_email_auto, conferir, conferir_motivo)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(cfg.escritorio.id, cli.documento.length === 14 ? 'CNPJ' : 'CPF', cli.documento, cli.razao_social, cli.inscricao_municipal,
@@ -364,7 +428,7 @@ export async function sincronizarFaturamento(escritorioId: number, contratoId: n
       end?.bairro ?? null, end?.municipio ?? null, cli.uf ?? end?.uf ?? null, c.modo_faturamento, vencTipo, c.dia_vencimento, cli.email ? 1 : 0, end ? 0 : 1,
       end ? null : 'Criado pelo contrato de honorários sem consulta à Receita: confira endereço e e-mail.');
     tomadorId = Number(r.lastInsertRowid);
-    if (!end) avisos.push('O cliente foi criado na empresa do escritório sem endereço (a consulta à Receita não respondeu): complete o cadastro em Clientes antes de gerar boleto.');
+    if (!end) avisos.push('O cliente foi criado na empresa do escritório sem endereço (sem endereço na carteira e a consulta à Receita não respondeu): complete o cadastro em Clientes antes de gerar boleto.');
   } else {
     db.prepare('UPDATE tomadores SET modo_faturamento = ?, vencimento_tipo = ?, vencimento_valor = ? WHERE id = ?').run(c.modo_faturamento, vencTipo, c.dia_vencimento, tomadorId);
   }

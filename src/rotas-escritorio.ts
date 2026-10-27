@@ -6,7 +6,7 @@ import { ErroNegocio } from './servicos/emissao.js';
 import { ClienteCarteira, criarCliente, editarCliente, listarCarteira, visaoGeral } from './servicos/carteira.js';
 import { Certificado, excluirCertificado, listarCertificados, renovarCertificado, resumoCertificados, salvarCertificado, TIPOS_CERT } from './servicos/certificados.js';
 import { AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInicioDoControle, inicioDoControle, atualizarTarefa, entregarEmLote, excluirObrigacao, listarObrigacoes, listarTarefas, obrigacoesDoCliente, resumoTarefas, salvarObrigacao, salvarObrigacoesDoCliente } from './servicos/obrigacoes.js';
-import { CAMPOS_MODELO, ESCOPO_PADRAO, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
+import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, pacoteDoMes, statusCaptura } from './servicos/captura.js';
 import { ConfigAvisos, configAvisos, enviarResumo, montarResumo, salvarAvisos } from './servicos/avisos.js';
 
@@ -160,6 +160,25 @@ export async function rotasEscritorio(app: FastifyInstance) {
     });
     api.get('/api/escritorio/inadimplencia', async (req) => inadimplencia(u(req).escritorio_id));
     api.get('/api/escritorio/modelos', async (req) => listarModelos(u(req).escritorio_id));
+    api.get('/api/escritorio/contratos-exemplo', async (req, reply) => {
+      const pdf = await pdfExemplo(u(req).escritorio_id, Number((req.query as any).modelo) || null);
+      return reply.type('application/pdf').header('Content-Disposition', 'inline; filename="contrato-exemplo.pdf"').send(pdf);
+    });
+    api.get('/api/escritorio/contrato-marca', async (req) => configMarca(u(req).escritorio_id));
+    api.put('/api/escritorio/contrato-marca', async (req) => { salvarMarca(u(req).escritorio_id, MarcaDagua.parse(req.body)); return { ok: true }; });
+    api.post('/api/escritorio/contrato-marca/imagem', async (req) => {
+      let img: Buffer | null = null;
+      for await (const parte of req.parts()) if (parte.type === 'file') img = await parte.toBuffer();
+      if (!img) throw new ErroNegocio('Envie a imagem da marca d’água.');
+      salvarImagemMarca(u(req).escritorio_id, img);
+      return { ok: true };
+    });
+    api.get('/api/escritorio/contrato-marca/imagem', async (req, reply) => {
+      const img = imagemMarca(u(req).escritorio_id);
+      if (!img) throw new ErroNegocio('Nenhuma marca d’água definida.', 404);
+      return reply.type(tipoImagem(img) ?? 'application/octet-stream').send(img);
+    });
+    api.delete('/api/escritorio/contrato-marca/imagem', async (req) => { removerImagemMarca(u(req).escritorio_id); return { ok: true }; });
     api.post('/api/escritorio/modelos', async (req) => ({ id: salvarModelo(u(req).escritorio_id, null, Modelo.parse(req.body)) }));
     api.put('/api/escritorio/modelos/:id', async (req) => ({ id: salvarModelo(u(req).escritorio_id, id(req), Modelo.parse(req.body)) }));
     api.delete('/api/escritorio/modelos/:id', async (req) => { excluirModelo(u(req).escritorio_id, id(req)); return { ok: true }; });

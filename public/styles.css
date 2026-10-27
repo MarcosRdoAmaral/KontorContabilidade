@@ -331,3 +331,7 @@ a.link-cartao:hover { border-color: var(--laranja); transform: translateY(-1px);
 .previa-email { white-space: pre-wrap; background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--raio); padding: 14px 16px; font-family: ui-monospace, monospace; font-size: .82rem; line-height: 1.55; max-height: 420px; overflow: auto; }
 .resumo + .duas-colunas { margin-top: 8px; }
 .resumo.cinco { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.marca-dagua { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
+.marca-previa { background: #fff; border-radius: var(--raio); min-height: 150px; display: grid; place-items: center; padding: 10px; border: 1px solid var(--linha); }
+.marca-previa img { max-width: 100%; max-height: 180px; }
+@media (max-width: 700px) { .marca-dagua { grid-template-columns: 1fr; } }

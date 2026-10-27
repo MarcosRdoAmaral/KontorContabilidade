@@ -53,7 +53,7 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['obrigacoes'] },
   { r: /^\/api\/escritorio\/(tarefas|obrigacoes)(\/\d+|\/entregar|\/inicio)?$/, mod: ['obrigacoes'] },
   { r: /^\/api\/escritorio\/certificados(\/\d+(\/renovar)?)?$/, mod: ['certificados'] },
-  { r: /^\/api\/escritorio\/(honorarios\/config|contratos(\/\d+(\/(status|texto|pdf|assinado|reajustes|reajuste|decimo-terceiro))?)?|indices\/[A-Z]+|decimo-terceiro|inadimplencia|modelos(\/\d+)?)$/, mod: ['honorarios'] },
+  { r: /^\/api\/escritorio\/(honorarios\/config|contratos(\/\d+(\/(status|texto|pdf|assinado|reajustes|reajuste|decimo-terceiro))?)?|indices\/[A-Z]+|decimo-terceiro|inadimplencia|modelos(\/\d+)?|contratos-exemplo|contrato-marca(\/imagem)?)$/, mod: ['honorarios'] },
   { r: /^\/api\/escritorio\/captura(\/buscar|\/automatica|\/\d+\/pacote)?$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/avisos(\/enviar)?$/, mod: 'adm' },
   { r: /^\/api\/me(\/empresa|\/senha)?$/, mod: 'livre' },
@@ -103,7 +103,7 @@ export function recusaRota(u: Usuario, metodo: string, caminho: string): string 
   if (regra.mod === 'adm') return 'Somente administradores podem acessar as Configurações.';
   const meus = modulosDoUsuario(u);
   // qualquer exclusão (DELETE) exige a permissão própria "excluir", além do acesso à funcionalidade
-  if (metodo === 'DELETE' && !/\/logo$/.test(caminho) && !meus.includes('excluir')) return 'Seu usuário não tem permissão para excluir. Peça ao administrador (Configurações > Usuários e acessos).';
+  if (metodo === 'DELETE' && !/\/logo$|\/contrato-marca\/imagem$/.test(caminho) && !meus.includes('excluir')) return 'Seu usuário não tem permissão para excluir. Peça ao administrador (Configurações > Usuários e acessos).';
   return regra.mod.some((m) => meus.includes(m)) ? null : 'Seu usuário não tem acesso a esta funcionalidade.';
 }
 

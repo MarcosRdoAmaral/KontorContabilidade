@@ -826,6 +826,21 @@ const migracoes: string[] = [
     chave TEXT PRIMARY KEY,                   -- ex.: "cert:12:15" (certificado 12, aviso de 15 dias)
     enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
+  // 29: dados para o contrato (endereço e representante do cliente, CRC do escritório) e testemunhas no modelo
+  `ALTER TABLE empresas ADD COLUMN cep TEXT;
+  ALTER TABLE empresas ADD COLUMN logradouro TEXT;
+  ALTER TABLE empresas ADD COLUMN numero TEXT;
+  ALTER TABLE empresas ADD COLUMN complemento TEXT;
+  ALTER TABLE empresas ADD COLUMN bairro TEXT;
+  ALTER TABLE empresas ADD COLUMN cidade TEXT;
+  ALTER TABLE empresas ADD COLUMN crc TEXT;
+  ALTER TABLE empresas ADD COLUMN rep_nome TEXT;
+  ALTER TABLE empresas ADD COLUMN rep_cpf TEXT;
+  ALTER TABLE empresas ADD COLUMN rep_rg TEXT;
+  ALTER TABLE empresas ADD COLUMN rep_nacionalidade TEXT;
+  ALTER TABLE empresas ADD COLUMN rep_estado_civil TEXT;
+  ALTER TABLE empresas ADD COLUMN rep_profissao TEXT;
+  ALTER TABLE contrato_modelos ADD COLUMN testemunhas INTEGER NOT NULL DEFAULT 1;`,
 ];
 
 export function migrar(): void {

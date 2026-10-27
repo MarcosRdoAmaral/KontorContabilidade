@@ -174,6 +174,60 @@ test('escritório: carteira, obrigações, certificados, contratos, honorários 
     assert.equal((db.prepare('SELECT agenda_ativa FROM tomadores WHERE id = ?').get(tom.id) as any).agenda_ativa, 0);
     assert.equal((await call('PUT', `/api/escritorio/contratos/${ct.id}`, { empresa_id: simples, inicio: '2025-03-01', valor: 1 }, t)).status, 400);
 
+    // ---------- contrato no modelo novo: endereço, representante, marca d'água ----------
+    {
+      const { MODELO_PADRAO_V1, ESCOPO_PADRAO_V1, FALTA } = await import('../src/servicos/contrato-pdf.js');
+      // instalação da 1.0.0 com o modelo padrão antigo intacto passa para o novo
+      db.prepare('UPDATE contrato_modelos SET texto = ? WHERE escritorio_id = 1').run(MODELO_PADRAO_V1);
+      db.prepare('UPDATE contratos SET escopo = ? WHERE id = ?').run(ESCOPO_PADRAO_V1, ct.id);
+      const mods = (await call('GET', '/api/escritorio/modelos', undefined, t)).json;
+      assert.match(mods[0].texto, /CLÁUSULA NONA – DO FORO/); assert.equal(mods[0].testemunhas, true);
+      // contrato encerrado guarda o escopo antigo no banco, mas o PDF sai com o escopo novo
+      assert.match((db.prepare('SELECT escopo FROM contratos WHERE id = ?').get(ct.id) as any).escopo, /^- Escrituração contábil e elaboração/);
+      assert.match((await call('GET', `/api/escritorio/contratos/${ct.id}/texto`, undefined, t)).json.texto, /\n1\. Serviços Contábeis:\n- Escrituração contábil mensal/);
+      // sem endereço/representante: avisa o que falta e deixa a linha em branco
+      let tx = (await call('GET', `/api/escritorio/contratos/${ct.id}/texto`, undefined, t)).json;
+      assert.ok(tx.faltas.includes('endereço do cliente') && tx.faltas.includes('representante legal do cliente') && tx.faltas.includes('CRC do escritório'));
+      assert.ok(tx.texto.includes(FALTA));
+      // completa a carteira (cliente e escritório)
+      const r1 = await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11.222.333/0001-81', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', tem_funcionarios: true, email: 'padaria@x.com',
+        cep: '89075-120', logradouro: 'Rua Augusto Vivian', numero: '184', bairro: 'Itoupava Central', cidade: 'Blumenau',
+        rep_nome: 'Aldo Luiz', rep_cpf: '390.533.447-05', rep_rg: '5842932', rep_nacionalidade: 'brasileiro', rep_estado_civil: 'casado', rep_profissao: 'empresário' }, t);
+      assert.equal(r1.status, 200, JSON.stringify(r1.json));
+      await call('PUT', `/api/escritorio/carteira/${escritorio}`, { ...base, documento: '06.990.590/0001-23', razao_social: 'Contábil Itajaí Ltda', regime: 'SIMPLES', eh_escritorio: true,
+        cep: '89065345', logradouro: 'Rua Otto Anlauf Junior', numero: '44', bairro: 'Salto do Norte', cidade: 'Blumenau', crc: 'SC-009017' }, t);
+      assert.equal((await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11222333000181', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', rep_cpf: '123' }, t)).status, 400, 'CPF do representante incompleto');
+      tx = (await call('GET', `/api/escritorio/contratos/${ct.id}/texto`, undefined, t)).json;
+      assert.deepEqual(tx.faltas, []);
+      assert.match(tx.texto, /com sede na Rua Augusto Vivian, nº 184, Itoupava Central, Blumenau, Santa Catarina, Cep 89\.075-120/);
+      assert.match(tx.texto, /representada por ALDO LUIZ, brasileiro, casado, empresário, portador do CPF nº 390\.533\.447-05 e do RG nº 5842932/);
+      assert.match(tx.texto, /\(CRC\) sob o nº SC-009017/); assert.match(tx.texto, /foro da comarca de Blumenau, SC/); assert.match(tx.texto, /dia 10 \(dez\)/);
+      assert.match(tx.texto, /inscrita no CNPJ sob nº 11\.222\.333\/0001-81/);
+      const cart2 = (await call('GET', '/api/escritorio/carteira', undefined, t)).json.find((c: any) => c.id === simples);
+      assert.equal(cart2.rep_cpf, '39053344705'); assert.equal(cart2.cep, '89075120');
+      // marca d'água: sem nada, o PDF sai sem imagem; com a imagem enviada, ela vai em todas as páginas
+      assert.equal((await call('GET', '/api/escritorio/contrato-marca', undefined, t)).json.fonte, 'NENHUMA');
+      const semMarca = (await call('GET', `/api/escritorio/contratos/${ct.id}/pdf`, undefined, t)).raw;
+      assert.ok(!semMarca.includes('/Subtype /Image'));
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+      const corpo = Buffer.concat([Buffer.from('--x\r\nContent-Disposition: form-data; name="arquivo"; filename="logo.png"\r\nContent-Type: image/png\r\n\r\n'), png, Buffer.from('\r\n--x--\r\n')]);
+      const up2 = await app.inject({ method: 'POST', url: '/api/escritorio/contrato-marca/imagem', payload: corpo, headers: { authorization: `Bearer ${t}`, 'content-type': 'multipart/form-data; boundary=x' } });
+      assert.equal(up2.statusCode, 200, up2.body);
+      const mc = (await call('GET', '/api/escritorio/contrato-marca', undefined, t)).json;
+      assert.deepEqual([mc.fonte, mc.temPropria], ['PROPRIA', true]);
+      await call('PUT', '/api/escritorio/contrato-marca', { fonte: 'PROPRIA', opacidade: 1 }, t);
+      const comMarca = (await call('GET', `/api/escritorio/contratos/${ct.id}/pdf`, undefined, t)).raw;
+      assert.ok(comMarca.includes('/Subtype /Image'), 'PDF com a marca d’água');
+      assert.ok((comMarca.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length >= 3, 'contrato completo ocupa várias páginas');
+      const ex = await call('GET', '/api/escritorio/contratos-exemplo', undefined, t);
+      assert.equal(ex.status, 200); assert.equal(ex.raw.subarray(0, 4).toString(), '%PDF');
+      assert.equal((await call('DELETE', '/api/escritorio/contrato-marca/imagem', undefined, t)).status, 200);
+      assert.equal((await call('GET', '/api/escritorio/contrato-marca', undefined, t)).json.fonte, 'NENHUMA');
+      const txt2 = Buffer.from('não é imagem');
+      const ruim = await app.inject({ method: 'POST', url: '/api/escritorio/contrato-marca/imagem', payload: Buffer.concat([Buffer.from('--x\r\nContent-Disposition: form-data; name="arquivo"; filename="a.txt"\r\n\r\n'), txt2, Buffer.from('\r\n--x--\r\n')]), headers: { authorization: `Bearer ${t}`, 'content-type': 'multipart/form-data; boundary=x' } });
+      assert.equal(ruim.statusCode, 400);
+    }
+
     // ---------- visão geral, captura e avisos ----------
     const vg = (await call('GET', `/api/escritorio/visao?mes=${mes}`, undefined, t)).json;
     assert.equal(vg.clientes.ativos, 2); assert.ok(vg.tarefas.total > 0); assert.ok(vg.atrasadas.length > 0);

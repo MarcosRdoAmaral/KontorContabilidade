@@ -3518,12 +3518,27 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
         <label class="largo">Razão social / nome <input name="razao_social" required value="${esc(c.razao_social ?? '')}"></label>
         <label>Nome fantasia <input name="nome_fantasia" value="${esc(c.nome_fantasia ?? '')}"></label>
         <label>CNAE principal <input name="cnae" value="${esc(c.cnae ?? '')}"></label>
-        <label>CEP (para achar o município) <input name="cep"><span class="dica" data-municipio></span></label>
-        <label>Município (IBGE) <input name="cod_municipio" required maxlength="7" value="${esc(c.cod_municipio ?? '')}"></label>
-        <label>UF <input name="uf" maxlength="2" value="${esc(c.uf ?? '')}"></label>
         <label>Inscrição estadual <input name="inscricao_estadual" value="${esc(c.inscricao_estadual ?? '')}"></label>
         <label>Inscrição municipal <input name="inscricao_municipal" value="${esc(c.inscricao_municipal ?? '')}"></label>
         <input type="hidden" name="op_simp_nac">
+      </div></fieldset>
+      <fieldset><legend>Endereço (vai no contrato)</legend><div class="grade">
+        <label>CEP <input name="cep" value="${esc(c.cep ?? '')}"><span class="dica" data-municipio>Ao sair do campo, preenche rua, bairro e cidade.</span></label>
+        <label class="largo">Logradouro <input name="logradouro" value="${esc(c.logradouro ?? '')}"></label>
+        <label>Número <input name="numero" value="${esc(c.numero ?? '')}"></label>
+        <label>Complemento <input name="complemento" value="${esc(c.complemento ?? '')}"></label>
+        <label>Bairro <input name="bairro" value="${esc(c.bairro ?? '')}"></label>
+        <label>Cidade <input name="cidade" value="${esc(c.cidade ?? '')}"></label>
+        <label>UF <input name="uf" maxlength="2" value="${esc(c.uf ?? '')}"></label>
+        <label>Município (IBGE) <input name="cod_municipio" required maxlength="7" value="${esc(c.cod_municipio ?? '')}"></label>
+      </div></fieldset>
+      <fieldset><legend>Representante legal (vai no contrato)</legend><div class="grade">
+        <label class="largo">Nome <input name="rep_nome" value="${esc(c.rep_nome ?? '')}" placeholder="Sócio administrador ou titular"></label>
+        <label>CPF <input name="rep_cpf" value="${esc(c.rep_cpf ?? '')}"></label>
+        <label>RG <input name="rep_rg" value="${esc(c.rep_rg ?? '')}"></label>
+        <label>Nacionalidade <input name="rep_nacionalidade" value="${esc(c.rep_nacionalidade ?? '')}" placeholder="brasileiro(a)"></label>
+        <label>Estado civil <input name="rep_estado_civil" value="${esc(c.rep_estado_civil ?? '')}" placeholder="casado(a)"></label>
+        <label>Profissão <input name="rep_profissao" value="${esc(c.rep_profissao ?? '')}" placeholder="empresário(a)"></label>
       </div></fieldset>
       <fieldset><legend>Atendimento</legend><div class="grade">
         <label>Regime tributário <select name="regime">${Object.entries(tab.regimes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
@@ -3540,7 +3555,8 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
         <label class="largo"><span><input type="checkbox" name="contribuinte_icms" ${c.contribuinte_icms ? 'checked' : ''}> Contribuinte do ICMS (comércio/indústria: EFD ICMS/IPI, DeSTDA)</span></label>
         <label class="largo"><span><input type="checkbox" name="contribuinte_iss" ${c.contribuinte_iss ? 'checked' : ''}> Prestador de serviços (ISS)</span></label>
         <label class="largo"><span><input type="checkbox" name="eh_escritorio" ${c.eh_escritorio ? 'checked' : ''}> Esta é a empresa do próprio escritório</span>
-          <span class="dica">É ela que emite as notas e boletos de honorários. Não gera obrigações na agenda.${jaTemEscritorio && !c.eh_escritorio ? ' Já existe outra marcada: ao salvar, esta passa a ser a do escritório.' : ''}</span></label>
+          <span class="dica">É ela que emite as notas e boletos de honorários e aparece como CONTRATADA nos contratos. Não gera obrigações na agenda.${jaTemEscritorio && !c.eh_escritorio ? ' Já existe outra marcada: ao salvar, esta passa a ser a do escritório.' : ''}</span></label>
+        <label id="lbl-crc">Registro no CRC <input name="crc" value="${esc(c.crc ?? '')}" placeholder="SC-009017"></label>
         <label class="largo">Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
       </div></fieldset>
       <p class="erro" id="erro-cli"></p>
@@ -3550,6 +3566,8 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
     f.regime.value = c.regime ?? 'SIMPLES'; f.situacao.value = c.situacao;
     const enc = () => ($('#lbl-enc').hidden = f.situacao.value !== 'ENCERRADO');
     f.situacao.onchange = enc; enc();
+    const crc = () => ($('#lbl-crc').hidden = !f.eh_escritorio.checked);
+    f.eh_escritorio.onchange = crc; crc();
     f.cep.onblur = () => buscarCep(f);
     // a consulta da Receita informa a opção pelo Simples: vira o regime (só para cliente novo)
     f.op_simp_nac.onchange = () => { if (novo) f.regime.value = { 2: 'MEI', 3: 'SIMPLES' }[f.op_simp_nac.value] ?? (f.regime.value === 'SIMPLES' || f.regime.value === 'MEI' ? 'PRESUMIDO' : f.regime.value); };
@@ -3557,7 +3575,7 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const dados = lerForm(f);
-      delete dados.cep; delete dados.op_simp_nac;
+      delete dados.op_simp_nac;
       dados.uf = dados.uf ? dados.uf.toUpperCase() : null;
       try {
         if (novo) await api('POST', '/api/escritorio/carteira', dados); else await api('PUT', `/api/escritorio/carteira/${c.id}`, dados);
@@ -3887,9 +3905,12 @@ async function abaContratos() {
   corpo.querySelectorAll('[data-acoes]').forEach((b) => (b.onclick = () => acoesContrato(lista.find((c) => c.id === Number(b.dataset.acoes)))));
 }
 
-function acoesContrato(c) {
+async function acoesContrato(c) {
   const bt = (id, txt, cls = '') => `<button id="${id}" class="${cls}">${txt}</button>`;
+  let faltas = [];
+  try { faltas = (await api('GET', `/api/escritorio/contratos/${c.id}/texto`)).faltas ?? []; } catch { /* segue sem o aviso */ }
   abrirDialogo(`<h2>Contrato ${String(c.numero).padStart(4, '0')} — ${esc(c.cliente)}</h2>
+    ${faltas.length && c.status !== 'ENCERRADO' ? `<div class="banner teste">Falta no cadastro: <strong>${faltas.map(esc).join(', ')}</strong>. No PDF esses campos saem em branco (linha para preencher à mão). <a href="#/carteira" data-fechar>Completar na Carteira</a></div>` : ''}
     <dl class="dados"><dt>Situação</dt><dd>${selo(CONTRATO[c.status])}${c.assinado_em ? ` em ${dataBr(c.assinado_em)}` : ''}${c.encerrado_em ? ` · encerrado em ${dataBr(c.encerrado_em)}` : ''}</dd>
       <dt>Honorário</dt><dd>${brl(c.valor)} · ${MODO_FAT[c.modo_faturamento]} · vence dia ${c.dia_vencimento}</dd>
       <dt>Via assinada</dt><dd>${c.arquivo_nome ? esc(c.arquivo_nome) : 'não anexada'}</dd></dl>
@@ -4054,17 +4075,63 @@ async function abaInadimplencia() {
     : '<div class="vazio">Nenhum honorário em atraso.</div>';
 }
 
+/** Carrega uma imagem protegida pelo login num <img>. */
+async function baixarImagem(url, img) {
+  try { const r = await api('GET', url, undefined, { bruto: true }); img.src = URL.createObjectURL(await r.blob()); } catch { img.replaceWith(Object.assign(document.createElement('span'), { className: 'dica', textContent: 'Imagem não encontrada.' })); }
+}
+
 async function abaModelos() {
-  const [modelos, tab] = await Promise.all([api('GET', '/api/escritorio/modelos'), tabelasEscritorio()]);
+  const [modelos, tab, marca] = await Promise.all([api('GET', '/api/escritorio/modelos'), tabelasEscritorio(), api('GET', '/api/escritorio/contrato-marca')]);
   const corpo = $('#ho-corpo');
+  const opc = [[0.08, 'Bem clara (8%)'], [0.12, 'Clara (12%)'], [0.2, 'Média (20%)'], [0.35, 'Forte (35%)'], [1, 'Usar a imagem como está (ela já é clarinha)']];
   corpo.innerHTML = `
     <div class="topo" style="margin-bottom:12px"><p class="sutil" style="margin:0">O texto de cada contrato sai do modelo, com os campos entre chaves trocados pelos dados do cliente e do contrato.</p><button class="primario" id="novo-mod">Novo modelo</button></div>
-    <table class="tabela"><thead><tr><th>Modelo</th><th></th></tr></thead><tbody>${modelos.map((m) => `<tr><td>${esc(m.nome)}</td><td class="acoes-linha"><button data-ed="${m.id}">Editar</button></td></tr>`).join('')}</tbody></table>
+    <table class="tabela"><thead><tr><th>Modelo</th><th>Testemunhas</th><th></th></tr></thead><tbody>${modelos.map((m) => `<tr><td>${esc(m.nome)}</td><td>${m.testemunhas ? 'Sim' : 'Não'}</td><td class="acoes-linha"><button data-ex="${m.id}">Ver exemplo (PDF)</button> <button data-ed="${m.id}">Editar</button></td></tr>`).join('')}</tbody></table>
+    <h2>Marca d’água</h2>
+    <div class="cartao marca-dagua">
+      <div class="marca-previa" id="marca-previa">${marca.fonte === 'NENHUMA' ? '<span class="dica">Sem marca d’água</span>' : '<img alt="Marca d’água atual" id="marca-img">'}</div>
+      <form id="form-marca" class="grade">
+        <label class="largo">Imagem <select name="fonte">
+          <option value="PROPRIA" ${marca.temPropria ? '' : 'disabled'}>Imagem enviada para o contrato${marca.temPropria ? '' : ' (envie abaixo)'}</option>
+          <option value="LOGO" ${marca.temLogo ? '' : 'disabled'}>Logo da empresa do escritório${marca.temLogo ? '' : ' (não cadastrada)'}</option>
+          <option value="NENHUMA">Sem marca d’água</option></select></label>
+        <label class="largo">Intensidade <select name="opacidade">${opc.map(([v, t]) => `<option value="${v}" ${Math.abs(v - marca.opacidade) < 0.001 ? 'selected' : ''}>${t}</option>`).join('')}</select>
+          <span class="dica">A imagem é desenhada no centro de todas as páginas, atrás do texto.</span></label>
+        <div class="acoes largo"><button type="submit" class="primario">Salvar</button><button type="button" id="marca-enviar">${marca.temPropria ? 'Trocar imagem' : 'Enviar imagem (PNG ou JPG)'}</button>${marca.temPropria ? '<button type="button" class="perigo" id="marca-remover">Remover imagem</button>' : ''}<button type="button" id="marca-ex">Ver exemplo (PDF)</button></div>
+        <input type="file" id="marca-arq" accept="image/png,image/jpeg" hidden>
+      </form>
+    </div>
+    <h2>Como escrever o modelo</h2>
+    <ul class="dicas">
+      <li>A <strong>primeira linha</strong> é o título. Linhas que começam com <strong>CLÁUSULA</strong> viram título de cláusula, com uma linha separadora acima.</li>
+      <li><code>1. texto</code> vira item numerado; <code>1. Título:</code> (terminando em dois-pontos) vira subtítulo em negrito; <code>- texto</code> vira marcador.</li>
+      <li><code>**texto**</code> sai em negrito. Uma linha só com <code>---</code> desenha uma linha separadora.</li>
+      <li>Campos que faltam no cadastro saem como uma linha em branco para preencher à mão.</li>
+    </ul>
     <h2>Campos disponíveis</h2><dl class="dados">${tab.camposModelo.map(([k, v]) => `<dt><code>{{${esc(k)}}}</code></dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  if ($('#marca-img')) baixarImagem('/api/escritorio/contrato-marca/imagem', $('#marca-img'));
+  const fm = $('#form-marca');
+  fm.fonte.value = marca.fonte;
+  fm.onsubmit = async (ev) => {
+    ev.preventDefault();
+    try { await api('PUT', '/api/escritorio/contrato-marca', { fonte: fm.fonte.value, opacidade: Number(fm.opacidade.value) }); aviso('Marca d’água salva.'); abaModelos(); } catch (e) { aviso(mensagemErro(e)); }
+  };
+  $('#marca-enviar').onclick = () => $('#marca-arq').click();
+  $('#marca-arq').onchange = async (ev) => {
+    const fd = new FormData(); fd.append('arquivo', ev.target.files[0]);
+    try { await api('POST', '/api/escritorio/contrato-marca/imagem', fd); aviso('Imagem enviada.'); abaModelos(); } catch (e) { aviso(mensagemErro(e)); }
+  };
+  $('#marca-remover') && ($('#marca-remover').onclick = async () => {
+    if (!confirm('Remover a imagem da marca d’água?')) return;
+    try { await api('DELETE', '/api/escritorio/contrato-marca/imagem'); abaModelos(); } catch (e) { aviso(mensagemErro(e)); }
+  });
+  $('#marca-ex').onclick = () => baixar(`/api/escritorio/contratos-exemplo?modelo=${modelos[0]?.id ?? ''}`, 'contrato-exemplo.pdf', true);
+  corpo.querySelectorAll('[data-ex]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/contratos-exemplo?modelo=${b.dataset.ex}`, 'contrato-exemplo.pdf', true)));
   const form = (m) => abrirDialogo(`<form id="form-mod" style="min-width:min(760px,90vw)"><h2>${m ? 'Editar modelo' : 'Novo modelo'}</h2>
       <label>Nome <input name="nome" required value="${esc(m?.nome ?? '')}"></label>
       <label style="margin-top:10px">Texto <textarea name="texto" rows="22" style="font-family:ui-monospace,monospace;font-size:.85rem">${esc(m?.texto ?? modelos[0]?.texto ?? '')}</textarea></label>
-      <p class="dica">Parágrafos separados por uma linha em branco. A primeira linha é o título. Linhas que começam com “CLÁUSULA” saem em negrito.</p>
+      <label style="margin-top:10px"><span><input type="checkbox" name="testemunhas" ${m?.testemunhas !== false ? 'checked' : ''}> Incluir linhas de assinatura para duas testemunhas</span></label>
+      <p class="dica">Veja “Como escrever o modelo” na tela anterior. Use “Ver exemplo” para conferir o resultado.</p>
       <p class="erro" id="erro-mod"></p>
       <div class="acoes"><button class="primario" type="submit">Salvar</button>${m && podeExcluirRegistros() ? '<button type="button" class="perigo" id="exc-mod">Excluir</button>' : ''}<button type="button" data-fechar>Fechar</button></div></form>`, (d) => {
     $('#form-mod').onsubmit = async (ev) => {

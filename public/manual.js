@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.0.0';
+export const MANUAL_VERSAO = '1.1.0';
 
 export const MANUAL = [
   {
@@ -47,8 +47,10 @@ export const MANUAL = [
       <p>Três marcações definem as obrigações: <em>tem empregados</em> (folha, eSocial, FGTS, DCTFWeb, 13º), <em>contribuinte do ICMS</em> (EFD ICMS/IPI, DeSTDA) e <em>prestador de serviços</em> (ISS). Ao trocar o regime ou o perfil, as obrigações futuras ainda não iniciadas que deixaram de valer são retiradas; as de períodos passados ficam no histórico.</p>
       <h3>Situação</h3>
       <p><strong>Suspenso</strong> para de gerar obrigações. <strong>Encerrado</strong> pede a data: obrigações de períodos até ela continuam na agenda.</p>
+      <h3>Endereço e representante legal</h3>
+      <p>O endereço (o CEP preenche rua, bairro e cidade) e o representante legal (nome, CPF, RG, nacionalidade, estado civil e profissão) vão no contrato. Se faltarem, o contrato avisa e esses campos saem em branco no PDF, para preencher à mão.</p>
       <h3>Empresa do escritório</h3>
-      <p>Marque “Esta é a empresa do próprio escritório” no cadastro do escritório. É ela que emite as notas e os boletos de honorários; ela não gera obrigações na agenda.</p>
+      <p>Marque “Esta é a empresa do próprio escritório” no cadastro do escritório. É ela que emite as notas e os boletos de honorários e aparece como CONTRATADA nos contratos (com o endereço e o registro no CRC); ela não gera obrigações na agenda.</p>
       <h3>Obrigações do cliente</h3>
       <p>O botão <em>Obrigações</em> mostra quais entram pela regra e permite exceções: incluir sempre (ex.: EFD-Reinf para quem tem retenções), dispensar, ou definir outro responsável só para aquela obrigação.</p>
       <p class="dica">O botão ⋯ leva aos dados de emissão (certificado A1, logo, dados bancários), à emissão de NFS-e e às NF-e recebidas do cliente.</p>`,
@@ -87,6 +89,9 @@ export const MANUAL = [
       </ol>
       <h3>Contrato</h3>
       <p>Informe o cliente, início, valor, dia da emissão e do vencimento, como cobrar (só nota, nota + boleto ou só boleto), índice e mês do reajuste, 13º honorário e o escopo. O texto sai do modelo (aba Modelos de contrato) em PDF, pronto para enviar. Registre <em>Enviado</em> e <em>Assinado</em> e anexe a via assinada.</p>
+      <h3>Modelo e marca d’água</h3>
+      <p>O modelo padrão traz nove cláusulas (objeto, obrigações das partes, honorários, prazo e rescisão, confidencialidade, responsabilidade, LGPD e foro), com a qualificação completa das partes, numeração de página e linhas para as assinaturas e, se marcado no modelo, para duas testemunhas. Em <em>Modelos de contrato</em> você edita o texto (veja “Como escrever o modelo”) e confere o resultado em <em>Ver exemplo</em>.</p>
+      <p>Na mesma aba fica a <strong>marca d’água</strong>: envie a imagem (PNG ou JPG) ou use a logo da empresa do escritório e escolha a intensidade. Se a imagem já vier clarinha, escolha “Usar a imagem como está”. Ela sai no centro de todas as páginas, atrás do texto.</p>
       <h3>Faturamento automático</h3>
       <p>Ao assinar, o cliente vira cliente da empresa do escritório (com o endereço da Receita), com o honorário como serviço padrão e a emissão automática ligada. Todo mês, em Faturamento &gt; Emissão automática (empresa do escritório selecionada), os honorários ficam prontos para conferir e confirmar. Encerrar o contrato desliga a emissão.</p>
       <h3>Reajuste</h3>

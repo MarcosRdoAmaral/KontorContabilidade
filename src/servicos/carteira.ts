@@ -35,10 +35,28 @@ export const ClienteCarteira = z.object({
   contribuinte_iss: z.boolean().default(true),
   eh_escritorio: z.boolean().default(false),
   observacoes: opcional(z.string().trim().max(2000)),
+  cep: z.string().nullish().transform((c) => (c ? soDigitos(c) || null : null)),
+  logradouro: opcional(z.string().trim().max(150)),
+  numero: opcional(z.string().trim().max(20)),
+  complemento: opcional(z.string().trim().max(80)),
+  bairro: opcional(z.string().trim().max(80)),
+  cidade: opcional(z.string().trim().max(80)),
+  crc: opcional(z.string().trim().max(30)),
+  rep_nome: opcional(z.string().trim().max(150)),
+  rep_cpf: z.string().nullish().transform((c) => (c ? soDigitos(c) || null : null)).refine((c) => !c || c.length === 11, 'CPF do representante deve ter 11 dígitos'),
+  rep_rg: opcional(z.string().trim().max(30)),
+  rep_nacionalidade: opcional(z.string().trim().max(40)),
+  rep_estado_civil: opcional(z.string().trim().max(40)),
+  rep_profissao: opcional(z.string().trim().max(60)),
 }).refine((c) => c.situacao !== 'ENCERRADO' || !!c.encerrado_em, { path: ['encerrado_em'], message: 'Informe a data de encerramento' });
 export type ClienteCarteira = z.infer<typeof ClienteCarteira>;
 
 /** Opção pelo Simples usada na emissão da NFS-e, coerente com o regime da carteira. */
+const EXTRAS = ['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'crc', 'rep_nome', 'rep_cpf', 'rep_rg', 'rep_nacionalidade', 'rep_estado_civil', 'rep_profissao'] as const;
+function gravarExtras(id: number, d: ClienteCarteira) {
+  db.prepare(`UPDATE empresas SET ${EXTRAS.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).run(...EXTRAS.map((c) => (d as any)[c] ?? null), id);
+}
+
 const opSimples = (r: string) => (r === 'MEI' ? 2 : r === 'SIMPLES' ? 3 : 1);
 
 function conferirResponsavel(escritorioId: number, id?: number | null) {
@@ -57,7 +75,9 @@ export function criarCliente(escritorioId: number, d: ClienteCarteira): number {
       d.inscricao_municipal ?? null, d.inscricao_estadual ?? null, d.cnae ?? null, op, op === 3 ? 1 : null, d.regime, d.situacao, d.responsavel_id ?? null,
       d.cliente_desde ?? new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), d.situacao === 'ENCERRADO' ? d.encerrado_em ?? null : null,
       d.contato_nome ?? null, d.contato_fone ?? null, d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.eh_escritorio ? 1 : 0, d.observacoes ?? null);
-    return Number(r.lastInsertRowid);
+    const id = Number(r.lastInsertRowid);
+    gravarExtras(id, d);
+    return id;
   })();
 }
 
@@ -77,6 +97,7 @@ export function editarCliente(escritorioId: number, id: number, d: ClienteCartei
         op, op === 3 ? atual.reg_ap_trib_sn ?? 1 : null, d.regime, d.situacao, d.responsavel_id ?? null, d.cliente_desde ?? atual.cliente_desde,
         d.situacao === 'ENCERRADO' ? d.encerrado_em ?? null : null, d.contato_nome ?? null, d.contato_fone ?? null,
         d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.eh_escritorio ? 1 : 0, d.observacoes ?? null, d.situacao === 'ENCERRADO' ? 0 : 1, id);
+    gravarExtras(id, d);
     // novos responsáveis assumem as tarefas abertas que eram do anterior
     if ((d.responsavel_id ?? null) !== (atual.responsavel_id ?? null)) {
       db.prepare(`UPDATE tarefas SET responsavel_id = ? WHERE empresa_id = ? AND status IN ('PENDENTE','ANDAMENTO') AND (responsavel_id IS ? OR responsavel_id IS NULL)`)
@@ -93,7 +114,8 @@ export function listarCarteira(escritorioId: number, empresas: number[] | null =
   const filtro = empresas ? `AND e.id IN (${empresas.map(() => '?').join(',') || 'NULL'})` : '';
   const linhas = db.prepare(`SELECT e.id, e.documento, e.razao_social, e.nome_fantasia, e.regime, e.op_simp_nac, e.situacao, e.responsavel_id, u.nome AS responsavel,
       e.cliente_desde, e.encerrado_em, e.email, e.contato_nome, e.contato_fone, e.cod_municipio, e.uf, e.inscricao_municipal, e.inscricao_estadual, e.cnae,
-      e.tem_funcionarios, e.contribuinte_icms, e.contribuinte_iss, e.eh_escritorio, e.observacoes, e.cert_validade, (e.cert_pfx_enc IS NOT NULL) AS tem_certificado,
+      e.tem_funcionarios, e.contribuinte_icms, e.contribuinte_iss, e.eh_escritorio, e.observacoes, e.cert_validade,
+      e.cep, e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.crc, e.rep_nome, e.rep_cpf, e.rep_rg, e.rep_nacionalidade, e.rep_estado_civil, e.rep_profissao, (e.cert_pfx_enc IS NOT NULL) AS tem_certificado,
       (SELECT COUNT(*) FROM tarefas t WHERE t.empresa_id = e.id AND t.vencimento < ? AND t.status IN ('PENDENTE','ANDAMENTO')) AS atrasadas,
       (SELECT MIN(t.vencimento) FROM tarefas t WHERE t.empresa_id = e.id AND t.vencimento >= ? AND t.status IN ('PENDENTE','ANDAMENTO')) AS proximo_vencimento,
       (SELECT c.valor FROM contratos c WHERE c.empresa_id = e.id AND c.status = 'ASSINADO' ORDER BY c.inicio DESC LIMIT 1) AS honorario,
