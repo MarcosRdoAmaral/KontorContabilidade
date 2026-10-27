@@ -12,21 +12,33 @@ const ESC = '06990590000123', PADARIA = '11222333000181', ALFA = '45723174000110
 
 import { COM_PENDENCIAS, REGULAR, relatorioPdf } from './fixtures/situacao-fiscal.js';
 
-test('leitura do relatório de situação fiscal', async () => {
+test('leitura do relatório de situação fiscal (formato real, páginas giradas)', async () => {
   const { lerRelatorio, textoDoPdf } = await import('../src/servicos/situacao-fiscal.js');
-  const r = lerRelatorio(await textoDoPdf(await relatorioPdf(COM_PENDENCIAS)));
-  assert.equal(r.situacao, 'PENDENCIAS');
-  assert.deepEqual(r.secoes.map((s) => [s.tipo, s.titulo, s.itens.length]), [
-    ['PENDENCIA', 'Débito (SIEF)', 2], ['PENDENCIA', 'Omissão de DCTF (SIEF)', 1], ['PENDENCIA', 'Inscrição (SIDA)', 1], ['SUSPENSO', 'Débito com Exigibilidade Suspensa (SIEF)', 1],
-  ]);
-  const d = r.secoes[0].itens[0];
-  assert.deepEqual([d.receita, d.descricao, d.periodo, d.vencimento, d.valorOriginal, d.saldo, d.situacao], ['1082-01', 'CP-SEGURADOS', '06/2026', '2026-07-20', 1234.56, 1526.57, 'DEVEDOR']);
-  assert.equal(r.secoes[2].itens[0].saldo, 5432.1);
-  assert.equal(r.qtdPendencias, 4);
-  assert.equal(r.totalAberto, 7968.07, 'débitos consolidados + inscrição; suspenso não entra');
-  assert.match(r.certidao ?? '', /positiva com efeitos de negativa/i);
-  const reg = lerRelatorio(await textoDoPdf(await relatorioPdf(REGULAR)));
-  assert.deepEqual([reg.situacao, reg.qtdPendencias, reg.totalAberto], ['REGULAR', 0, 0]);
+  for (const girado of [true, false]) {
+    const r = lerRelatorio(await textoDoPdf(await relatorioPdf(COM_PENDENCIAS, { girado })));
+    assert.equal(r.situacao, 'PENDENCIAS', `girado=${girado}`);
+    assert.deepEqual(r.secoes.map((s) => [s.tipo, s.orgao, s.titulo, s.itens.length]), [
+      ['PENDENCIA', 'RFB', 'Débito (SIEF)', 3],
+      ['SUSPENSO', 'RFB', 'Débito com Exigibilidade Suspensa (SIEF)', 1],
+      ['SUSPENSO', 'RFB', 'Parcelamento com Exigibilidade Suspensa (SIEFPAR)', 1],
+      ['PENDENCIA', 'PGFN', 'Inscrição (SIDA)', 2],
+    ], `girado=${girado}`);
+    const [maed, patronal, terceiros] = r.secoes[0].itens;
+    assert.deepEqual([maed.receita, maed.descricao, maed.periodo, maed.vencimento, maed.valorOriginal, maed.saldo, maed.situacao, maed.notificacao],
+      ['1345-01', 'MAED - DCTF', '22/04/2024', '2026-07-01', 200, 206.34, 'DEVEDOR', '14174877105630']);
+    assert.deepEqual([patronal.periodo, patronal.saldoDevedor, patronal.saldo], ['07/2026', 4022.88, 4911.12]);
+    assert.equal(terceiros.periodo, '2025');
+    const [simples, cofins] = r.secoes[3].itens;
+    assert.deepEqual([simples.tipo, simples.inscricao, simples.receita, simples.descricao, simples.inscritoEm, simples.processo, simples.situacao],
+      ['INSCRICAO', '91.4.21.019567-04', '1507', 'SIMPLES NACIONAL', '2021-04-05', '12376.267.430/2021-63', 'ATIVA AJUIZADA']);
+    assert.equal(cofins.situacao, 'ATIVA A SER COBRADA');
+    assert.deepEqual([r.secoes[2].itens[0].tipo, r.secoes[2].itens[0].saldo, r.secoes[2].itens[0].descricao], ['PARCELAMENTO', 71447.12, 'Parcelamento Simplificado']);
+    assert.equal(r.totalAberto, 5129.42, 'soma dos débitos do SIEF (consolidado); suspensos e inscrições sem valor não entram');
+    assert.deepEqual([r.qtdPendencias, r.qtdInscricoes], [5, 2]);
+    assert.deepEqual([r.certidao, r.certidaoValidade], ['Positiva com Efeitos de Negativa', '2026-10-03']);
+  }
+  const reg = lerRelatorio(await textoDoPdf(await relatorioPdf(REGULAR, { girado: true })));
+  assert.deepEqual([reg.situacao, reg.qtdPendencias, reg.totalAberto, reg.certidao, reg.certidaoValidade], ['REGULAR', 0, 0, 'Negativa', '2027-03-30']);
   assert.equal(lerRelatorio('texto qualquer').situacao, 'VERIFICAR');
 });
 
@@ -55,7 +67,7 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     const ids: Record<string, number> = {};
     for (const doc of [PADARIA, ALFA, SEMPROC]) ids[doc] = (await call('POST', '/api/escritorio/carteira', { ...base, documento: doc, razao_social: `Cliente ${doc}`, regime: 'SIMPLES' }, t)).json.id;
 
-    const pdfPend = (await relatorioPdf(COM_PENDENCIAS)).toString('base64'), pdfReg = (await relatorioPdf(REGULAR)).toString('base64');
+    const pdfPend = (await relatorioPdf(COM_PENDENCIAS, { girado: true })).toString('base64'), pdfReg = (await relatorioPdf(REGULAR)).toString('base64');
     const chamadas: string[] = [];
     const emitirFila: Record<string, any[]> = {
       [PADARIA]: [{ tempoEspera: 2000 }, { pdf: pdfPend }],
@@ -94,9 +106,9 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     // ---------- tela ----------
     const painel = (await call('GET', '/api/escritorio/situacao-fiscal', undefined, t)).json;
     assert.equal(painel.clientes[0].empresa_id, ids[PADARIA], 'quem tem pendência vem primeiro');
-    assert.deepEqual([painel.resumo.comPendencias, painel.resumo.regulares, painel.resumo.totalAberto], [1, 1, 7968.07]);
+    assert.deepEqual([painel.resumo.comPendencias, painel.resumo.regulares, painel.resumo.totalAberto], [1, 1, 5129.42]);
     const det = (await call('GET', `/api/escritorio/situacao-fiscal/${painel.clientes[0].id}`, undefined, t)).json;
-    assert.equal(det.resumo.secoes[0].itens[1].receita, '2172-01'); assert.equal(det.historico.length, 1);
+    assert.equal(det.resumo.secoes[0].itens[1].receita, '1138-01'); assert.equal(det.historico.length, 1);
     const pdf = await call('GET', `/api/escritorio/situacao-fiscal/${painel.clientes[0].id}/pdf`, undefined, t);
     assert.equal(pdf.raw.subarray(0, 4).toString(), '%PDF');
     const vg = (await call('GET', '/api/escritorio/visao?mes=2026-10', undefined, t)).json;
@@ -105,6 +117,15 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     const api = (await call('POST', '/api/escritorio/situacao-fiscal/consultar', { ids: [ids[ALFA]] }, t)).json;
     assert.equal(api.erros, 1); assert.match(api.resultados[0].mensagem, /Integra Contador/);
     assert.ok(db.prepare('SELECT COUNT(*) AS n FROM situacao_fiscal').get());
+
+    // ---------- releitura de relatórios lidos pela versão antiga ----------
+    const { relerRelatoriosAntigos } = await import('../src/servicos/situacao-fiscal.js');
+    const idPend = painel.clientes[0].id;
+    db.prepare("UPDATE situacao_fiscal SET situacao = 'VERIFICAR', resumo_json = '{}', concluida_em = '2026-10-01 10:00:00' WHERE id = ?").run(idPend);
+    assert.ok((await relerRelatoriosAntigos()) >= 1);
+    const relido = db.prepare('SELECT situacao, concluida_em, total_aberto FROM situacao_fiscal WHERE id = ?').get(idPend) as any;
+    assert.deepEqual([relido.situacao, relido.concluida_em, relido.total_aberto], ['PENDENCIAS', '2026-10-01 10:00:00', 5129.42], 'relê sem trocar a data da consulta');
+    assert.equal(await relerRelatoriosAntigos(), 0, 'só uma vez');
 
     // ---------- consulta automática ----------
     const email = await import('../src/servicos/email.js');
@@ -129,7 +150,7 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     assert.equal(a1.ultimaOcorrencia, proxima); assert.match(a1.ultimoResultado!, /1 com pendências .*1 aguardando a Receita.*1 com erro.*E-mail enviado/);
     assert.equal(enviados.length, 1);
     assert.match(enviados[0].subject, /Situação fiscal dos clientes/);
-    assert.match(enviados[0].text, /CONTINUAM COM PENDÊNCIAS\n• Cliente 11222333000181: 4 pendência\(s\)/, 'a Padaria já tinha pendência');
+    assert.match(enviados[0].text, /CONTINUAM COM PENDÊNCIAS\n• Cliente 11222333000181: 5 pendência\(s\)/, 'a Padaria já tinha pendência');
     assert.match(enviados[0].text, /NÃO FOI POSSÍVEL CONSULTAR\n• Cliente 27865757000102: Sem procuração/);
     assert.match(enviados[0].text, /AINDA EM GERAÇÃO/);
     // mesma ocorrência: não consulta de novo; o relatório pendente é buscado quando liberar

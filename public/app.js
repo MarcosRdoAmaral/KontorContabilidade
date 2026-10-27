@@ -4469,21 +4469,37 @@ async function consultarSituacoes(ids, botao) {
 async function detalheSituacaoFiscal(id) {
   const d = await api('GET', `/api/escritorio/situacao-fiscal/${id}`);
   const r = d.resumo;
-  const tabela = (s) => {
-    const deb = s.itens.some((i) => i.receita);
-    return deb ? `<table class="tabela"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo</th><th>Situação</th></tr></thead><tbody>
-      ${s.itens.map((i) => i.receita ? `<tr><td><strong>${esc(i.receita)}</strong> ${esc(i.descricao ?? '')}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td><td class="num">${i.valorOriginal != null ? brl(i.valorOriginal) : ''}</td><td class="num">${i.saldo != null ? brl(i.saldo) : ''}</td><td>${esc(i.situacao ?? '')}</td></tr>`
-        : `<tr><td colspan="6">${esc(i.texto)}</td></tr>`).join('')}</tbody></table>`
-      : `<ul class="dicas">${s.itens.map((i) => `<li>${esc(i.texto)}</li>`).join('') || '<li class="dica">Sem detalhes no relatório: confira o PDF.</li>'}</ul>`;
-  };
-  const pend = r?.secoes?.filter((s) => s.tipo === 'PENDENCIA') ?? [], susp = r?.secoes?.filter((s) => s.tipo === 'SUSPENSO') ?? [];
+  const secoes = r?.secoes ?? [];
+  const debitos = secoes.filter((s) => s.tipo === 'PENDENCIA' && s.orgao !== 'PGFN').flatMap((s) => s.itens.map((i) => ({ ...i, secao: s.titulo })));
+  const inscricoes = secoes.filter((s) => s.tipo === 'PENDENCIA' && s.orgao === 'PGFN').flatMap((s) => s.itens);
+  const suspensos = secoes.filter((s) => s.tipo === 'SUSPENSO');
+  // resumo por tributo (o que vai no aviso ao cliente)
+  const porTributo = new Map();
+  for (const i of debitos.filter((x) => x.tipo === 'DEBITO')) {
+    const k = `${i.receita} ${i.descricao}`; const g = porTributo.get(k) ?? { nome: i.descricao, receita: i.receita, qtd: 0, total: 0, maisAntigo: i.vencimento };
+    g.qtd++; g.total += i.saldo ?? 0; if (i.vencimento && i.vencimento < g.maisAntigo) g.maisAntigo = i.vencimento; porTributo.set(k, g);
+  }
+  const hojeIso = hoje();
+  const certVencida = r?.certidaoValidade && r.certidaoValidade < hojeIso;
+  const linhaDeb = (i) => i.tipo === 'DEBITO' ? `<tr><td><strong>${esc(i.receita)}</strong> ${esc(i.descricao ?? '')}${i.notificacao ? `<br><span class="dica">Notificação ${esc(i.notificacao)}</span>` : ''}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td>
+      <td class="num">${i.valorOriginal != null ? brl(i.valorOriginal) : ''}</td><td class="num">${i.saldo != null ? `<strong>${brl(i.saldo)}</strong>` : ''}</td><td>${esc(i.situacao ?? '')}</td></tr>`
+    : `<tr><td colspan="6">${esc(i.texto)}</td></tr>`;
   abrirDialogo(`<div class="dlg-largo"><h2>Situação fiscal — ${esc(d.cliente)}</h2>
-    <p class="sutil">${fmtDoc(d.documento)} · consultado em ${dhBr(d.concluida_em)}${d.usuario ? ` por ${esc(d.usuario)}` : ''}${r?.certidao ? ` · certidão: <strong>${esc(r.certidao)}</strong>` : ''}</p>
+    <p class="sutil">${fmtDoc(d.documento)} · consultado em ${dhBr(d.concluida_em)}${d.usuario ? ` por ${esc(d.usuario)}` : ''}</p>
+    ${r?.certidao ? `<p>Última certidão: <strong>${esc(r.certidao)}</strong>${r.certidaoValidade ? ` — ${certVencida ? `<span class="cor-vermelho">vencida em ${dataBr(r.certidaoValidade)}</span>` : `válida até ${dataBr(r.certidaoValidade)}`}` : ''}</p>` : ''}
     ${d.situacao === 'REGULAR' ? '<div class="cartao"><strong class="cor-verde">Sem pendências</strong> nos controles da Receita Federal e da Procuradoria-Geral da Fazenda Nacional.</div>' : ''}
     ${d.situacao === 'VERIFICAR' ? '<div class="banner teste">Não foi possível ler as pendências do relatório automaticamente. Abra o PDF para conferir.</div>' : ''}
-    ${pend.length ? `<p><strong>${d.qtd_pendencias}</strong> pendência(s)${d.total_aberto ? ` · saldo de <strong class="cor-vermelho">${brl(d.total_aberto)}</strong>` : ''}</p>` : ''}
-    ${pend.map((s) => `<h3>${esc(s.titulo)}</h3>${tabela(s)}`).join('')}
-    ${susp.length ? `<h3>Com exigibilidade suspensa (não impedem a certidão)</h3>${susp.map(tabela).join('')}` : ''}
+    ${d.situacao === 'PENDENCIAS' ? `<div class="resumo">
+      <div class="cartao alerta-cartao"><div class="sutil">Débitos na Receita Federal</div><div class="valor cor-vermelho">${brl(r.totalAberto)}</div><div class="dica">${debitos.length} débito(s), saldo com multa e juros</div></div>
+      <div class="cartao ${inscricoes.length ? 'alerta-cartao' : ''}"><div class="sutil">Inscrições em dívida ativa (PGFN)</div><div class="valor">${inscricoes.length}</div><div class="dica">${inscricoes.filter((i) => /ajuizad/i.test(i.situacao ?? '')).length} ajuizada(s)</div></div>
+    </div>` : ''}
+    ${porTributo.size ? `<h3>Impostos em aberto na Receita Federal</h3><table class="tabela"><thead><tr><th>Tributo</th><th class="num">Débitos</th><th>Vencimento mais antigo</th><th class="num">Saldo</th></tr></thead><tbody>
+      ${[...porTributo.values()].sort((x, y) => y.total - x.total).map((g) => `<tr><td><strong>${esc(g.receita)}</strong> ${esc(g.nome)}</td><td class="num">${g.qtd}</td><td>${dataBr(g.maisAntigo)}</td><td class="num"><strong>${brl(g.total)}</strong></td></tr>`).join('')}</tbody></table>` : ''}
+    ${debitos.length ? `<details><summary><strong>Todos os débitos (${debitos.length})</strong></summary><table class="tabela" style="margin-top:8px"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo (c/ multa e juros)</th><th>Situação</th></tr></thead><tbody>${debitos.map(linhaDeb).join('')}</tbody></table></details>` : ''}
+    ${inscricoes.length ? `<h3>Inscrições em dívida ativa (PGFN)</h3><table class="tabela"><thead><tr><th>Inscrição</th><th>Tributo</th><th>Inscrito em</th><th>Situação</th><th>Processo</th></tr></thead><tbody>
+      ${inscricoes.map((i) => i.tipo === 'INSCRICAO' ? `<tr><td>${esc(i.inscricao)}</td><td>${esc(i.receita ?? '')} ${esc(i.descricao ?? '')}</td><td>${dataBr(i.inscritoEm)}</td><td>${esc(i.situacao ?? '')}</td><td><span class="dica">${esc(i.processo ?? '')}</span></td></tr>` : `<tr><td colspan="5">${esc(i.texto)}</td></tr>`).join('')}</tbody></table>
+      <p class="dica">O relatório não traz o valor das inscrições em dívida ativa: consulte os valores no Regularize (PGFN).</p>` : ''}
+    ${suspensos.length ? `<h3>Com exigibilidade suspensa (não impedem a certidão)</h3><ul class="dicas">${suspensos.flatMap((s) => s.itens.map((i) => `<li>${i.tipo === 'PARCELAMENTO' ? `Parcelamento ${esc(i.inscricao)}${i.descricao ? ` (${esc(i.descricao)})` : ''}: ${brl(i.saldo)} suspenso` : i.tipo === 'DEBITO' ? `${esc(i.receita)} ${esc(i.descricao ?? '')} — ${esc(i.periodo ?? '')}, vence ${dataBr(i.vencimento)}: ${brl(i.saldo)} (${esc(i.situacao ?? '')})` : esc(i.texto)}</li>`)).join('')}</ul>` : ''}
     <p class="dica">Os valores são lidos do relatório da Receita; em caso de dúvida, vale o PDF.</p>
     ${d.historico.length > 1 ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.historico.slice(1).map((h) => `<li>${dhBr(h.concluida_em ?? h.solicitada_em)} — ${h.status === 'PRONTA' ? (SIT_FISCAL[h.situacao]?.[0] ?? h.situacao) + (h.situacao === 'PENDENCIAS' ? ` (${brl(h.total_aberto)})` : '') : h.status === 'ERRO' ? 'erro' : 'aguardando'} ${h.tem_pdf ? `<button data-pdfh="${h.id}">PDF</button>` : ''}</li>`).join('')}</ul>` : ''}
     <div class="acoes">${d.tem_pdf ? '<button class="primario" id="sf-pdf">Abrir o relatório (PDF)</button>' : ''}<button data-fechar>Fechar</button></div></div>`, (dlg) => {

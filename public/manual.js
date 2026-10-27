@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.5.1';
+export const MANUAL_VERSAO = '1.5.2';
 
 export const MANUAL = [
   {
@@ -138,7 +138,7 @@ export const MANUAL = [
       <p>Em Escritório &gt; Situação fiscal, marque os clientes e clique em <em>Consultar selecionados</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador.</p>
       <h3>Resultado</h3>
       <ul>
-        <li><strong>Com pendências:</strong> o botão <em>Detalhes</em> lista as pendências por tipo (débito, omissão, inscrição), com receita, período, vencimento e saldo. Débitos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão.</li>
+        <li><strong>Com pendências:</strong> o botão <em>Detalhes</em> mostra o total dos débitos na Receita Federal (saldo com multa e juros), os <strong>impostos em aberto agrupados por tributo</strong>, a lista completa dos débitos (com período, vencimento e número da notificação, no caso das multas por atraso) e as inscrições em dívida ativa na PGFN, com a situação (ajuizada ou a ser cobrada). O relatório não traz o valor das inscrições: consulte no Regularize. Débitos e parcelamentos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão. A última certidão aparece com a validade, em vermelho se estiver vencida.</li>
         <li><strong>Regular:</strong> o relatório não trouxe pendências.</li>
         <li><strong>Conferir o PDF:</strong> o relatório veio num formato que o sistema não conseguiu ler; abra o PDF.</li>
       </ul>

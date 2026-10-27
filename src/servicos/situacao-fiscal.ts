@@ -18,55 +18,107 @@ const PROTOCOLO_VALIDO_MS = 12 * 3600e3;
 // Leitura do relatório
 // ---------------------------------------------------------------------------------------------
 
-export interface ItemPendencia { texto: string; receita?: string | null; descricao?: string | null; periodo?: string | null; vencimento?: string | null; valorOriginal?: number | null; saldo?: number | null; situacao?: string | null }
-export interface SecaoRelatorio { titulo: string; tipo: 'PENDENCIA' | 'SUSPENSO'; itens: ItemPendencia[] }
-export interface RelatorioLido { situacao: 'REGULAR' | 'PENDENCIAS' | 'VERIFICAR'; secoes: SecaoRelatorio[]; totalAberto: number; qtdPendencias: number; certidao: string | null }
+export interface ItemPendencia {
+  tipo: 'DEBITO' | 'INSCRICAO' | 'PARCELAMENTO' | 'OUTRO';
+  texto: string;
+  receita?: string | null; descricao?: string | null; periodo?: string | null; vencimento?: string | null;
+  valorOriginal?: number | null; saldoDevedor?: number | null; saldo?: number | null; situacao?: string | null;
+  notificacao?: string | null; inscricao?: string | null; processo?: string | null; inscritoEm?: string | null; ajuizadoEm?: string | null;
+}
+export interface SecaoRelatorio { titulo: string; tipo: 'PENDENCIA' | 'SUSPENSO'; orgao: 'RFB' | 'PGFN'; itens: ItemPendencia[] }
+export interface RelatorioLido {
+  situacao: 'REGULAR' | 'PENDENCIAS' | 'VERIFICAR'; secoes: SecaoRelatorio[];
+  /** Soma dos débitos com valor (SIEF): saldo consolidado, com multa e juros. Inscrições na PGFN não trazem valor no relatório. */
+  totalAberto: number; qtdPendencias: number; qtdInscricoes: number;
+  certidao: string | null; certidaoValidade: string | null;
+  /** Versão da leitura: relatórios lidos por uma versão antiga são relidos do PDF guardado. */
+  versao?: number;
+}
+
+export const VERSAO_LEITURA = 2;
 
 const MOEDA = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
 const num = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'));
+const isoBr = (s?: string | null) => (s && /^\d{2}\/\d{2}\/\d{4}$/.test(s) ? s.split('/').reverse().join('-') : null);
+/** Cabeçalho e rodapé que se repetem em todas as páginas. */
 const LIXO = [
-  /^p[áa]gina\s+\d+/i, /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}(:\d{2})?$/, /^minist[ée]rio da/i, /^secretaria especial/i, /^receita federal do brasil$/i,
-  /^procuradoria-geral da fazenda nacional$/i, /^informa[çc][õo]es de apoio/i, /^por meio do e-cac/i, /^emitido em/i, /^relat[óo]rio de situa[çc][ãa]o fiscal/i,
+  /^p[áa]gina\b/i, /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}(:\d{2})?$/, /^minist[ée]rio d[ao]/i, /^secretaria especial/i, /^receita federal do brasil$/i,
+  /^procuradoria-geral da fazenda nacional/i, /^informa[çc][õo]es de apoio/i, /^por meio d[oe]/i, /^autor pedido/i, /^emitido em/i, /^relat[óo]rio de situa[çc][ãa]o fiscal/i,
+  /^(cnpj|cpf):\s*[\d.]+\s*-\s+\S/i, // "CNPJ: 10.512.356 - NOME DA EMPRESA" (cabeçalho de cada página)
 ];
-const CABECALHO = [/^receita\s+pa\/?exerc/i, /sdo\.?\s*devedor/i, /^inscri[çc][ãa]o\s+receita/i, /^cnpj:\s*[\d./-]+$/i, /^cpf:\s*[\d.-]+$/i, /^(cnpj|cpf)\s*[\d./-]+$/i];
+const CABECALHO = [/^receita\s+pa\/?\s*exerc/i, /sdo\.?\s*dev/i, /^inscri[çc][ãa]o\s+receita/i, /^(cnpj|cpf):\s*[\d./-]+$/i, /^(cnpj|cpf)\s*[\d./-]+$/i];
+const PERIODO = String.raw`(?:\d{1,2}[ºo°]?\s*TRIM\/\d{4}|\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{4}|\d{4})`;
+const RE_DEBITO = new RegExp(String.raw`^(\d{4}-\d{2})\s*-\s*(.+?)\s+(${PERIODO})\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$`, 'i');
+const RE_INSCRICAO = /^(\d{2}\.\d\.\d{2}\.\d{6}-\d{2})\s+(\d{4})-*\s*(.*?)\s+(\d{2}\/\d{2}\/\d{4})\s+(?:(\d{2}\/\d{2}\/\d{4})\s+)?([\d.]+\/\d{4}-\d{2})\s*(.*)$/;
 
 /** Interpreta o texto do relatório (uma linha por linha do PDF). */
 export function lerRelatorio(texto: string): RelatorioLido {
-  const linhas = texto.replace(/\r/g, '').split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const linhas = texto.replace(/\r/g, '').split('\n').map((l) => l.replace(/_{3,}/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
   const secoes: SecaoRelatorio[] = [];
-  let atual: SecaoRelatorio | null = null;
+  let atual: SecaoRelatorio | null = null, ultimo: ItemPendencia | null = null, orgao: 'RFB' | 'PGFN' = 'RFB';
   const semPendencia = /n[ãa]o foram detectadas pend[êe]ncias/i.test(texto);
-  const certidao = texto.match(/certid[ãa]o emitida[\s\S]{0,40}?(positiva com efeitos de negativa|positiva|negativa)/i)?.[1] ?? null;
+  const cert = /certid[ãa]o\s+(positiva com efeitos de negativa|positiva|negativa)\s*:?[\s\S]{0,160}?data de validade:\s*(\d{2}\/\d{2}\/\d{4})/i.exec(texto)
+    ?? /certid[ãa]o emitida[\s\S]{0,120}?(positiva com efeitos de negativa|positiva|negativa)/i.exec(texto);
   for (const l of linhas) {
+    if (/^diagn[óo]stico fiscal na procuradoria/i.test(l)) { orgao = 'PGFN'; atual = null; continue; }
+    if (/^diagn[óo]stico fiscal/i.test(l)) { orgao = /procuradoria/i.test(l) && !/receita/i.test(l) ? 'PGFN' : 'RFB'; atual = null; continue; }
     const pend = /^pend[êe]ncia\s*[-–]\s*(.+)$/i.exec(l);
-    if (pend) { atual = { titulo: pend[1].trim(), tipo: 'PENDENCIA', itens: [] }; secoes.push(atual); continue; }
-    if (/^d[ée]bito com exigibilidade suspensa/i.test(l)) { atual = { titulo: l, tipo: 'SUSPENSO', itens: [] }; secoes.push(atual); continue; }
-    if (/^(diagn[óo]stico fiscal|final do relat[óo]rio|dados cadastrais|certid[ãa]o emitida|s[óo]cios e administradores|n[ãa]o foram detectadas)/i.test(l)) { atual = null; continue; }
+    if (pend) { atual = { titulo: pend[1].trim(), tipo: 'PENDENCIA', orgao, itens: [] }; secoes.push(atual); ultimo = null; continue; }
+    if (/^(d[ée]bito|parcelamento)s? com exigibilidade suspensa/i.test(l)) { atual = { titulo: l, tipo: 'SUSPENSO', orgao, itens: [] }; secoes.push(atual); ultimo = null; continue; }
+    if (/^(final do relat[óo]rio|dados cadastrais|certid[ãa]o emitida|s[óo]cios e administradores|op[çc][ãa]o pelo simples|n[ãa]o foram detectadas)/i.test(l)) { atual = null; continue; }
     if (!atual || LIXO.some((r) => r.test(l)) || CABECALHO.some((r) => r.test(l))) continue;
-    const item: ItemPendencia = { texto: l };
-    // débito: "1082-01 - CP-SEGURADOS 06/2023 20/07/2023 1.234,56 1.234,56 ... DEVEDOR"
-    const deb = /^(\d{4}-\d{2})\s*-\s*(.+?)\s+((?:\d{1,2}[ºo°]?\s*TRIM\/\d{4})|(?:\d{2}\/\d{4})|(?:\d{2}\/\d{2}\/\d{4})|(?:\d{4}))\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$/i.exec(l);
+    // linhas de continuação: ficam no item anterior
+    const notif = /^notifica[çc][ãa]o de lan[çc]amento:\s*(\S+)/i.exec(l);
+    if (notif && ultimo) { ultimo.notificacao = notif[1]; continue; }
+    const sit = /^situa[çc][ãa]o:\s*(.+)$/i.exec(l);
+    if (sit && ultimo) { ultimo.situacao = sit[1].trim(); continue; }
+    const deb = RE_DEBITO.exec(l);
     if (deb) {
-      const valores = deb[5].match(MOEDA) ?? [];
-      Object.assign(item, {
-        receita: deb[1], descricao: deb[2].trim(), periodo: deb[3], vencimento: deb[4].split('/').reverse().join('-'),
-        valorOriginal: valores[0] ? num(valores[0]) : null, saldo: valores.length ? num(valores[valores.length - 1]) : null,
+      const v = deb[5].match(MOEDA) ?? [];
+      ultimo = {
+        tipo: 'DEBITO', texto: l, receita: deb[1], descricao: deb[2].trim(), periodo: deb[3], vencimento: isoBr(deb[4]),
+        valorOriginal: v[0] ? num(v[0]) : null, saldoDevedor: v[1] ? num(v[1]) : null, saldo: v.length ? num(v[v.length - 1]) : null,
         situacao: deb[5].replace(MOEDA, '').trim() || null,
-      });
-    } else {
-      const valores = l.match(MOEDA) ?? [];
-      if (valores.length) item.saldo = num(valores[valores.length - 1]);
+      };
+      atual.itens.push(ultimo); continue;
     }
-    atual.itens.push(item);
+    const ins = RE_INSCRICAO.exec(l);
+    if (ins) {
+      ultimo = { tipo: 'INSCRICAO', texto: l, inscricao: ins[1], receita: ins[2], descricao: ins[3].trim() || null, inscritoEm: isoBr(ins[4]), ajuizadoEm: isoBr(ins[5] ?? null), processo: ins[6], situacao: null };
+      atual.itens.push(ultimo); continue;
+    }
+    const parc = /^parcelamento:\s*(\S+).*?(?:valor suspenso|saldo):\s*([\d.]+,\d{2})/i.exec(l);
+    if (parc) { ultimo = { tipo: 'PARCELAMENTO', texto: l, inscricao: parc[1], saldo: num(parc[2]) }; atual.itens.push(ultimo); continue; }
+    // descrição da receita que quebrou de linha ("SIMPLES" / "NACIONAL") ou observação do parcelamento
+    if (ultimo && !/\d{2}\/\d{2}\/\d{4}/.test(l) && !MOEDA.test(l)) {
+      MOEDA.lastIndex = 0;
+      if (ultimo.tipo === 'INSCRICAO') ultimo.descricao = `${ultimo.descricao ?? ''} ${l}`.trim();
+      else if (ultimo.tipo === 'PARCELAMENTO') ultimo.descricao = `${ultimo.descricao ?? ''} ${l}`.trim();
+      else ultimo.texto += ` ${l}`;
+      continue;
+    }
+    MOEDA.lastIndex = 0;
+    const v = l.match(MOEDA) ?? [];
+    ultimo = { tipo: 'OUTRO', texto: l, saldo: v.length ? num(v[v.length - 1]) : null };
+    atual.itens.push(ultimo);
   }
   const pendentes = secoes.filter((s) => s.tipo === 'PENDENCIA');
+  const itens = pendentes.flatMap((s) => s.itens);
   const qtd = pendentes.reduce((n, s) => n + Math.max(1, s.itens.length), 0);
-  const total = Math.round(pendentes.flatMap((s) => s.itens).reduce((t, i) => t + (i.saldo ?? 0), 0) * 100) / 100;
-  const situacao = pendentes.length ? 'PENDENCIAS' : semPendencia ? 'REGULAR' : 'VERIFICAR';
-  return { situacao, secoes, totalAberto: total, qtdPendencias: pendentes.length ? qtd : 0, certidao };
+  const total = Math.round(itens.filter((i) => i.tipo !== 'INSCRICAO').reduce((t, i) => t + (i.saldo ?? 0), 0) * 100) / 100;
+  return {
+    versao: VERSAO_LEITURA,
+    situacao: pendentes.length ? 'PENDENCIAS' : semPendencia ? 'REGULAR' : 'VERIFICAR', secoes, totalAberto: total,
+    qtdPendencias: pendentes.length ? qtd : 0, qtdInscricoes: itens.filter((i) => i.tipo === 'INSCRICAO').length,
+    certidao: cert ? cert[1].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\b(Com|De)\b/g, (x) => x.toLowerCase()) : null,
+    certidaoValidade: cert?.[2] ? isoBr(cert[2]) : null,
+  };
 }
 
-/** Texto do PDF, linha a linha (agrupa os pedaços de texto pela altura). */
+/**
+ * Texto do PDF, linha a linha. Agrupa os pedaços de texto pela linha em que estão, considerando páginas
+ * em que o texto é desenhado girado (o relatório da Receita usa texto a 90°, mostrado deitado na tela).
+ */
 export async function textoDoPdf(pdf: Buffer): Promise<string> {
   // @ts-ignore — build "legacy" do pdf.js roda em Node sem navegador
   const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -74,14 +126,18 @@ export async function textoDoPdf(pdf: Buffer): Promise<string> {
   const saida: string[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const pg = await doc.getPage(p);
-    const itens = (await pg.getTextContent()).items.filter((i: any) => i.str !== undefined && String(i.str).trim() !== '')
-      .map((i: any) => ({ x: i.transform[4], y: i.transform[5], s: String(i.str) }));
-    const linhas: { y: number; it: { x: number; s: string }[] }[] = [];
-    for (const it of [...itens].sort((a, b) => b.y - a.y)) {
-      const l = linhas.find((k) => Math.abs(k.y - it.y) < 2.5);
-      l ? l.it.push(it) : linhas.push({ y: it.y, it: [it] });
+    const itens = (await pg.getTextContent()).items.filter((i: any) => i.str !== undefined && String(i.str).trim() !== '').map((i: any) => {
+      const [a, b, , , e, f] = i.transform as number[];
+      // linha = coordenada perpendicular ao texto; posição = ao longo do texto (ordem de leitura)
+      if (Math.abs(b) > Math.abs(a)) return b > 0 ? { linha: e, pos: f, s: String(i.str) } : { linha: -e, pos: -f, s: String(i.str) };
+      return a >= 0 ? { linha: -f, pos: e, s: String(i.str) } : { linha: f, pos: -e, s: String(i.str) };
+    });
+    const linhas: { linha: number; it: { pos: number; s: string }[] }[] = [];
+    for (const it of [...itens].sort((x, y) => x.linha - y.linha)) {
+      const l = linhas.find((k) => Math.abs(k.linha - it.linha) < 2.5);
+      l ? l.it.push(it) : linhas.push({ linha: it.linha, it: [it] });
     }
-    for (const l of linhas) saida.push(l.it.sort((a, b) => a.x - b.x).map((i) => i.s).join(' ').replace(/\s+/g, ' ').trim());
+    for (const l of linhas.sort((x, y) => x.linha - y.linha)) saida.push(l.it.sort((a, b) => a.pos - b.pos).map((i) => i.s).join(' ').replace(/\s+/g, ' ').trim());
   }
   return saida.join('\n');
 }
@@ -97,11 +153,11 @@ function ultimaPendente(empresaId: number) {
   return db.prepare(`SELECT * FROM situacao_fiscal WHERE empresa_id = ? AND status = 'SOLICITADA' AND protocolo IS NOT NULL ORDER BY id DESC LIMIT 1`).get(empresaId) as any;
 }
 
-async function concluir(id: number, pdf: Buffer) {
+async function concluir(id: number, pdf: Buffer, manterData = false) {
   let texto = '';
   try { texto = await textoDoPdf(pdf); } catch { /* PDF guardado mesmo sem leitura */ }
-  const r = texto ? lerRelatorio(texto) : { situacao: 'VERIFICAR' as const, secoes: [], totalAberto: 0, qtdPendencias: 0, certidao: null };
-  db.prepare(`UPDATE situacao_fiscal SET status = 'PRONTA', situacao = ?, resumo_json = ?, total_aberto = ?, qtd_pendencias = ?, pdf = ?, texto = ?, erro = NULL, concluida_em = datetime('now') WHERE id = ?`)
+  const r: RelatorioLido = texto ? lerRelatorio(texto) : { versao: VERSAO_LEITURA, situacao: 'VERIFICAR', secoes: [], totalAberto: 0, qtdPendencias: 0, qtdInscricoes: 0, certidao: null, certidaoValidade: null };
+  db.prepare(`UPDATE situacao_fiscal SET status = 'PRONTA', situacao = ?, resumo_json = ?, total_aberto = ?, qtd_pendencias = ?, pdf = ?, texto = ?, erro = NULL, concluida_em = ${manterData ? 'COALESCE(concluida_em, datetime(\'now\'))' : "datetime('now')"} WHERE id = ?`)
     .run(r.situacao, JSON.stringify(r), r.totalAberto, r.qtdPendencias, pdf, texto, id);
   return r;
 }
@@ -331,4 +387,12 @@ export async function sitfisAutomatico(agora = new Date(), opcoes: { transporte?
     } finally { emExecucao.delete(id); }
   }
   return feitos;
+}
+
+/** Relê, do PDF guardado, os relatórios lidos por uma versão antiga da leitura (sem nova consulta ao SERPRO). */
+export async function relerRelatoriosAntigos() {
+  const antigos = db.prepare(`SELECT id, pdf FROM situacao_fiscal WHERE status = 'PRONTA' AND pdf IS NOT NULL
+    AND (resumo_json IS NULL OR COALESCE(json_extract(resumo_json, '$.versao'), 0) < ?)`).all(VERSAO_LEITURA) as { id: number; pdf: Uint8Array }[];
+  for (const a of antigos) { try { await concluir(a.id, Buffer.from(a.pdf), true); } catch { /* segue com os demais */ } }
+  return antigos.length;
 }
