@@ -67,16 +67,18 @@ function conferirResponsavel(escritorioId: number, id?: number | null) {
 
 export function criarCliente(escritorioId: number, d: ClienteCarteira): number {
   conferirResponsavel(escritorioId, d.responsavel_id);
-  if (db.prepare('SELECT 1 FROM empresas WHERE escritorio_id = ? AND documento = ?').get(escritorioId, d.documento)) throw new ErroNegocio('Este CNPJ/CPF já está na carteira.', 409);
+  const existe = db.prepare('SELECT na_carteira FROM empresas WHERE escritorio_id = ? AND documento = ?').get(escritorioId, d.documento) as any;
+  if (existe) throw new ErroNegocio(existe.na_carteira ? 'Este CNPJ/CPF já está na carteira.' : 'Este CNPJ/CPF está cadastrado como empresa do sistema (Cadastros > Empresas). Para ele ser também cliente, marque lá "Também é cliente da contabilidade".', 409);
   return db.transaction(() => {
     if (d.eh_escritorio) db.prepare('UPDATE empresas SET eh_escritorio = 0 WHERE escritorio_id = ?').run(escritorioId);
     const op = opSimples(d.regime);
     const r = db.prepare(`INSERT INTO empresas (escritorio_id, documento, razao_social, nome_fantasia, cod_municipio, uf, email, inscricao_municipal, inscricao_estadual, cnae,
-        op_simp_nac, reg_ap_trib_sn, regime, situacao, responsavel_id, cliente_desde, encerrado_em, contato_nome, contato_fone, tem_funcionarios, contribuinte_icms, contribuinte_iss, eh_escritorio, observacoes)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(escritorioId, d.documento, d.razao_social, d.nome_fantasia ?? null, d.cod_municipio, d.uf ?? null, d.email ?? null,
+        op_simp_nac, reg_ap_trib_sn, regime, situacao, responsavel_id, cliente_desde, encerrado_em, contato_nome, contato_fone, tem_funcionarios, contribuinte_icms, contribuinte_iss, eh_escritorio, observacoes, na_carteira, gerencia)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(escritorioId, d.documento, d.razao_social, d.nome_fantasia ?? null, d.cod_municipio, d.uf ?? null, d.email ?? null,
       d.inscricao_municipal ?? null, d.inscricao_estadual ?? null, d.cnae ?? null, op, op === 3 ? 1 : null, d.regime, d.situacao, d.responsavel_id ?? null,
       d.cliente_desde ?? new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), d.situacao === 'ENCERRADO' ? d.encerrado_em ?? null : null,
-      d.contato_nome ?? null, d.contato_fone ?? null, d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.eh_escritorio ? 1 : 0, d.observacoes ?? null);
+      d.contato_nome ?? null, d.contato_fone ?? null, d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.eh_escritorio ? 1 : 0, d.observacoes ?? null,
+      d.eh_escritorio ? 0 : 1, d.eh_escritorio ? 1 : 0); // o escritório é empresa do sistema, não cliente
     const id = Number(r.lastInsertRowid);
     gravarExtras(id, d);
     if (d.eh_escritorio) sincronizarCarteiraInteira(escritorioId); else sincronizarClienteNoCadastro(escritorioId, id);
@@ -86,27 +88,26 @@ export function criarCliente(escritorioId: number, d: ClienteCarteira): number {
 
 export function editarCliente(escritorioId: number, id: number, d: ClienteCarteira) {
   conferirResponsavel(escritorioId, d.responsavel_id);
-  const atual = db.prepare('SELECT * FROM empresas WHERE id = ? AND escritorio_id = ?').get(id, escritorioId) as any;
+  const atual = db.prepare('SELECT * FROM empresas WHERE id = ? AND escritorio_id = ? AND na_carteira = 1').get(id, escritorioId) as any;
   if (!atual) throw new ErroNegocio('Cliente não encontrado.', 404);
   const outro = db.prepare('SELECT id FROM empresas WHERE escritorio_id = ? AND documento = ? AND id != ?').get(escritorioId, d.documento, id);
   if (outro) throw new ErroNegocio('Outro cliente da carteira já usa este CNPJ/CPF.', 409);
   db.transaction(() => {
-    if (d.eh_escritorio) db.prepare('UPDATE empresas SET eh_escritorio = 0 WHERE escritorio_id = ? AND id != ?').run(escritorioId, id);
     const op = opSimples(d.regime);
     db.prepare(`UPDATE empresas SET documento=?, razao_social=?, nome_fantasia=?, cod_municipio=?, uf=?, email=?, inscricao_municipal=?, inscricao_estadual=?, cnae=?,
         op_simp_nac=?, reg_ap_trib_sn=?, regime=?, situacao=?, responsavel_id=?, cliente_desde=?, encerrado_em=?, contato_nome=?, contato_fone=?,
-        tem_funcionarios=?, contribuinte_icms=?, contribuinte_iss=?, eh_escritorio=?, observacoes=?, ativo=? WHERE id = ?`)
+        tem_funcionarios=?, contribuinte_icms=?, contribuinte_iss=?, observacoes=?, ativo=? WHERE id = ?`)
       .run(d.documento, d.razao_social, d.nome_fantasia ?? null, d.cod_municipio, d.uf ?? null, d.email ?? null, d.inscricao_municipal ?? null, d.inscricao_estadual ?? null, d.cnae ?? null,
         op, op === 3 ? atual.reg_ap_trib_sn ?? 1 : null, d.regime, d.situacao, d.responsavel_id ?? null, d.cliente_desde ?? atual.cliente_desde,
         d.situacao === 'ENCERRADO' ? d.encerrado_em ?? null : null, d.contato_nome ?? null, d.contato_fone ?? null,
-        d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.eh_escritorio ? 1 : 0, d.observacoes ?? null, d.situacao === 'ENCERRADO' ? 0 : 1, id);
+        d.tem_funcionarios ? 1 : 0, d.contribuinte_icms ? 1 : 0, d.contribuinte_iss ? 1 : 0, d.observacoes ?? null, d.situacao === 'ENCERRADO' ? 0 : 1, id);
     gravarExtras(id, d);
     // novos responsáveis assumem as tarefas abertas que eram do anterior
     if ((d.responsavel_id ?? null) !== (atual.responsavel_id ?? null)) {
       db.prepare(`UPDATE tarefas SET responsavel_id = ? WHERE empresa_id = ? AND status IN ('PENDENTE','ANDAMENTO') AND (responsavel_id IS ? OR responsavel_id IS NULL)`)
         .run(d.responsavel_id ?? null, id, atual.responsavel_id ?? null);
     }
-    if (d.eh_escritorio && !atual.eh_escritorio) sincronizarCarteiraInteira(escritorioId); else sincronizarClienteNoCadastro(escritorioId, id);
+    sincronizarClienteNoCadastro(escritorioId, id);
   })();
   limparTarefasQueNaoSeAplicam(id);
 }
@@ -126,7 +127,7 @@ export function listarCarteira(escritorioId: number, empresas: number[] | null =
       (SELECT c.status FROM contratos c WHERE c.empresa_id = e.id AND c.status != 'ENCERRADO' ORDER BY c.id DESC LIMIT 1) AS contrato_status,
       (SELECT MIN(validade) FROM certificados ce WHERE ce.empresa_id = e.id AND ce.renovado = 0) AS outro_cert_validade
     FROM empresas e LEFT JOIN usuarios u ON u.id = e.responsavel_id
-    WHERE e.escritorio_id = ? ${filtro} ORDER BY e.eh_escritorio DESC, (e.situacao = 'ENCERRADO'), COALESCE(e.nome_fantasia, e.razao_social)`).all(hoje, hoje, escritorioId, ...(empresas ?? [])) as any[];
+    WHERE e.escritorio_id = ? AND e.na_carteira = 1 ${filtro} ORDER BY (e.situacao = 'ENCERRADO'), COALESCE(e.nome_fantasia, e.razao_social)`).all(hoje, hoje, escritorioId, ...(empresas ?? [])) as any[];
   return linhas.map((c) => {
     const validades = [c.cert_validade?.slice(0, 10), c.outro_cert_validade].filter(Boolean).sort();
     const cert = validades[0] ?? null;

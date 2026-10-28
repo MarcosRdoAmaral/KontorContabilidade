@@ -352,10 +352,11 @@ function trocarSenha({ obrigatoria = false } = {}) {
 
 async function carregarEmpresas() {
   estado.empresas = await api('GET', '/api/empresas');
-  if (!estado.empresas.some((e) => e.id === estado.empresaId)) estado.empresaId = estado.empresas[0]?.id ?? null;
+  const ativas = estado.empresas.filter((e) => e.ativo !== 0); // inativas ficam só na tela Empresas
+  if (!ativas.some((e) => e.id === estado.empresaId)) estado.empresaId = ativas[0]?.id ?? null;
   const sel = $('#empresa-atual');
-  sel.innerHTML = estado.empresas.length
-    ? estado.empresas.map((e) => `<option value="${e.id}" ${e.id === estado.empresaId ? 'selected' : ''}>${esc(e.nome_fantasia || e.razao_social)}</option>`).join('')
+  sel.innerHTML = ativas.length
+    ? ativas.map((e) => `<option value="${e.id}" ${e.id === estado.empresaId ? 'selected' : ''}>${esc(e.nome_fantasia || e.razao_social)}</option>`).join('')
     : '<option>Nenhuma empresa cadastrada</option>';
   infoEmpresa();
 }
@@ -2711,10 +2712,10 @@ async function telaTomadores() {
 }
 
 /** Importa clientes de uma planilha (xlsx/csv) com CNPJ e, se houver, o nome; o sistema consulta cada CNPJ e deixa o cadastro marcado para conferir. */
-function importarPlanilhaClientes() {
-  const base = `/api/empresas/${estado.empresaId}/tomadores/planilha`;
+function importarPlanilhaClientes(carteira = false) {
+  const base = carteira ? '/api/escritorio/carteira/planilha' : `/api/empresas/${estado.empresaId}/tomadores/planilha`;
   abrirDialogo(`<div class="imp-planilha"><h2>Importar clientes de planilha</h2>
-    <p class="sutil">Envie um arquivo Excel (.xlsx) ou .csv com o <strong>CNPJ</strong> (ou CPF) e, se quiser, o nome do cliente, em qualquer coluna. Para cada CNPJ o sistema consulta a Receita Federal e preenche o cadastro, que fica marcado como <em>Falta conferir</em>. CPF precisa do nome na planilha.</p>
+    <p class="sutil">Envie um arquivo Excel (.xlsx) ou .csv com o <strong>CNPJ</strong> (ou CPF) e, se quiser, o nome do cliente, em qualquer coluna. Para cada CNPJ o sistema consulta a Receita Federal e preenche o cadastro${carteira ? ', com o regime pela opção do Simples (MEI, Simples ou Lucro Presumido). Depois confira regime, perfil e responsável de cada um' : ', que fica marcado como <em>Falta conferir</em>'}. CPF precisa do nome na planilha.</p>
     <input type="file" id="pl-arq" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
     <div id="pl-corpo"></div>
     <div class="acoes"><button type="button" data-fechar>Fechar</button></div></div>`, (dlg) => {
@@ -2740,10 +2741,10 @@ function importarPlanilhaClientes() {
             catch (e) { novos.slice(i, i + 5).forEach((l) => res.push({ documento: l.documento, ok: false, mensagem: mensagemErro(e) })); }
           }
           const ok = res.filter((x) => x.ok);
-          prog.innerHTML = `<div class="banner"><strong>${ok.length} cliente(s) criado(s)</strong>${res.length - ok.length ? `, ${res.length - ok.length} com problema` : ''}. Todos ficam marcados como <em>Falta conferir</em>.</div>
+          prog.innerHTML = `<div class="banner"><strong>${ok.length} cliente(s) criado(s)</strong>${res.length - ok.length ? `, ${res.length - ok.length} com problema` : ''}.${carteira ? ' Confira o regime, o perfil e o responsável de cada um.' : ' Todos ficam marcados como <em>Falta conferir</em>.'}</div>
             <div class="rolagem" style="max-height:220px"><table class="tabela"><tbody>${res.map((x) => `<tr><td>${fmtDoc(x.documento)}</td><td>${esc(x.nome ?? '')}</td><td class="${x.ok ? 'cor-verde' : 'cor-vermelho'}">${esc(x.mensagem)}</td></tr>`).join('')}</tbody></table></div>
-            <div class="acoes"><button class="primario" id="pl-ver">Ver clientes a conferir</button></div>`;
-          prog.querySelector('#pl-ver').onclick = () => { telaTomadores.filtro = 'conferir'; dlg.close(); telaTomadores(); };
+            <div class="acoes"><button class="primario" id="pl-ver">${carteira ? 'Ver a Carteira' : 'Ver clientes a conferir'}</button></div>`;
+          prog.querySelector('#pl-ver').onclick = () => { dlg.close(); if (carteira) telaCarteira(); else { telaTomadores.filtro = 'conferir'; telaTomadores(); } };
         };
       } catch (e) { corpo.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; }
     };
@@ -2901,9 +2902,14 @@ function formEmpresa(e) {
         <label class="largo">Razão social <input name="razao_social" required value="${esc(e.razao_social ?? '')}"></label>
         <label>Nome fantasia <input name="nome_fantasia" value="${esc(e.nome_fantasia ?? '')}"></label>
         <label>Inscrição municipal <input name="inscricao_municipal" value="${esc(e.inscricao_municipal ?? '')}"></label>
-        <label>CEP (para achar o município) <input name="cep"><span class="dica" data-municipio></span></label>
+        <label>CEP <input name="cep" value="${esc(e.cep ?? '')}"><span class="dica" data-municipio></span></label>
         <label>Município (IBGE) <input name="cod_municipio" required maxlength="7" value="${esc(e.cod_municipio ?? '')}"></label>
         <label>UF <input name="uf" maxlength="2" value="${esc(e.uf ?? '')}"></label>
+        <label>Cidade <input name="cidade" value="${esc(e.cidade ?? '')}"></label>
+        <label class="largo">Logradouro <input name="logradouro" value="${esc(e.logradouro ?? '')}"></label>
+        <label>Número <input name="numero" value="${esc(e.numero ?? '')}"></label>
+        <label>Complemento <input name="complemento" value="${esc(e.complemento ?? '')}"></label>
+        <label>Bairro <input name="bairro" value="${esc(e.bairro ?? '')}"></label>
         <label>E-mail <input name="email" type="email" value="${esc(e.email ?? '')}"></label>
         <label>Simples Nacional <select name="op_simp_nac" data-num>
           <option value="3">Optante ME/EPP</option><option value="2">MEI</option><option value="1">Não optante</option></select></label>
@@ -2925,6 +2931,11 @@ function formEmpresa(e) {
           </div>
         </div>
       </div>
+      <fieldset class="sub"><legend>Uso no sistema</legend><div class="grade">
+        <label class="largo check"><input type="checkbox" name="eh_escritorio" ${e.eh_escritorio ? 'checked' : ''}> Esta é a empresa do escritório<span class="dica">Emite as notas e boletos dos honorários e aparece como CONTRATADA nos contratos (com o endereço e o CRC).</span></label>
+        <label data-crc>Registro no CRC <input name="crc" value="${esc(e.crc ?? '')}" placeholder="SC-009017"></label>
+        <label class="largo check" data-cli><input type="checkbox" name="na_carteira" ${e.na_carteira ? 'checked' : ''}> Também é cliente da contabilidade<span class="dica">Aparece na Carteira de clientes, com obrigações e situação fiscal. Deixe desmarcado para uma empresa que só usa o sistema.</span></label>
+      </div></fieldset>
       <p class="erro" id="erro-empresa"></p>
       <div class="acoes"><button class="primario" type="submit">Salvar empresa</button><button type="button" data-fechar>Fechar</button></div>
     </form>`, (d) => {
@@ -2937,10 +2948,11 @@ function formEmpresa(e) {
     ligarConsultaCnpj(f, 'empresa');
     const sn = () => (f.reg_ap_trib_sn.disabled = f.op_simp_nac.value !== '3');
     f.op_simp_nac.onchange = sn; sn();
+    const uso = () => { f.querySelector('[data-crc]').hidden = !f.eh_escritorio.checked; f.querySelector('[data-cli]').hidden = f.eh_escritorio.checked; };
+    f.eh_escritorio.onchange = uso; uso();
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const corpo = lerForm(f);
-      delete corpo.cep;
       if (corpo.ambiente === 1 && e.ambiente !== 1 && !confirm('Mudar para PRODUÇÃO? As próximas notas terão valor fiscal.')) return;
       try {
         e.id ? await api('PUT', `/api/empresas/${e.id}`, corpo) : await api('POST', '/api/empresas', corpo);
@@ -3002,13 +3014,13 @@ async function telaEmpresas() {
   await carregarEmpresas();
   const lista = estado.empresas;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Empresas</h1><p class="sutil">Prestadores que emitem pelo escritório. Cada um com seu certificado A1.</p></div>
+    <div class="topo"><div><h1>Empresas</h1><p class="sutil">Empresas que usam e gerenciam o sistema (o escritório e quem emite por ele), cada uma com seu certificado A1. Os clientes da contabilidade ficam em Escritório &gt; Carteira de clientes.</p></div>
       <button class="primario" id="novo">Cadastrar empresa</button></div>
     ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Empresa</th><th>Documento</th><th>Regime</th><th>Ambiente</th><th>Certificado</th><th></th></tr></thead><tbody>
-      ${lista.map((e, i) => `<tr><td>${esc(e.razao_social)}</td><td>${fmtDoc(e.documento)}</td><td>${['', 'Não optante', 'MEI', 'Simples ME/EPP'][e.op_simp_nac]}</td>
+      ${lista.map((e, i) => `<tr class="${e.ativo === 0 ? 'inativo' : ''}"><td>${esc(e.razao_social)}${e.eh_escritorio ? ' <span class="selo-carteira">Escritório</span>' : ''}${e.na_carteira ? ' <span class="selo-carteira">Também cliente</span>' : ''}${e.ativo === 0 ? ' <span class="selo-conferir">Inativa</span>' : ''}</td><td>${fmtDoc(e.documento)}</td><td>${['', 'Não optante', 'MEI', 'Simples ME/EPP'][e.op_simp_nac]}</td>
         <td>${e.ambiente === 1 ? 'Produção' : 'Testes'}</td><td>${e.modo_emissao === 'PORTAL' ? 'Portal (CNPJ e senha)' : e.tem_certificado ? `até ${dataBr(e.cert_validade)}` : '<span class="pendente-txt">Falta enviar</span>'}</td>
-        <td><button data-editar="${i}">Editar</button> ${e.modo_emissao === 'PORTAL' ? '' : `<button data-cert="${i}">Certificado</button>`} <button data-logo="${i}">${e.tem_logo ? 'Logo ✓' : 'Logo'}</button> <button data-banco="${i}">Dados bancários</button>${estado.usuario.mestre ? ` <button class="perigo" data-excluir="${i}">Excluir</button>` : ''}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Cadastre a primeira empresa cliente do escritório.</div>'}`;
+        <td><button data-editar="${i}">Editar</button> ${e.modo_emissao === 'PORTAL' ? '' : `<button data-cert="${i}">Certificado</button>`} <button data-logo="${i}">${e.tem_logo ? 'Logo ✓' : 'Logo'}</button> <button data-banco="${i}">Dados bancários</button>${estado.usuario.papel === 'admin' || estado.usuario.tipo === 'adm' ? ` <button data-ativo="${i}">${e.ativo === 0 ? 'Reativar' : 'Inativar'}</button>` : ''}${estado.usuario.mestre ? ` <button class="perigo" data-excluir="${i}">Excluir</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="vazio">Cadastre a empresa do escritório (marque "Esta é a empresa do escritório").</div>'}`;
   $('#novo').onclick = () => formEmpresa();
   conteudo.querySelectorAll('[data-editar]').forEach((b) => (b.onclick = () => formEmpresa(lista[b.dataset.editar])));
   conteudo.querySelectorAll('[data-cert]').forEach((b) => (b.onclick = () => formCertificado(lista[b.dataset.cert])));
@@ -3019,6 +3031,11 @@ async function telaEmpresas() {
     $('#empresa-atual').value = estado.empresaId; infoEmpresa(); location.hash = '#/banco';
   }));
   conteudo.querySelectorAll('[data-excluir]').forEach((b) => (b.onclick = () => excluirEmpresa(lista[b.dataset.excluir])));
+  conteudo.querySelectorAll('[data-ativo]').forEach((b) => (b.onclick = async () => {
+    const e = lista[b.dataset.ativo], ativar = e.ativo === 0;
+    if (!ativar && !confirm(`Inativar ${e.razao_social}? Ela sai do seletor de empresas e nada é apagado; dá para reativar depois.`)) return;
+    try { await api('POST', `/api/empresas/${e.id}/ativo`, { ativo: ativar }); aviso(ativar ? 'Empresa reativada.' : 'Empresa inativada.'); await carregarEmpresas(); telaEmpresas(); } catch (er) { aviso(mensagemErro(er)); }
+  }));
 }
 
 /** Exclusão definitiva de uma empresa: só o usuário master, confirmando com a senha master. */
@@ -3220,8 +3237,9 @@ async function telaAtualizacoes() {
 }
 
 async function telaUsuarios() {
-  const lista = await api('GET', '/api/usuarios');
-  const nomeEmpresa = (id) => esc(estado.empresas.find((e) => e.id === Number(id))?.razao_social ?? id);
+  const [lista, todas] = await Promise.all([api('GET', '/api/usuarios'), api('GET', '/api/empresas?todas=1').catch(() => estado.empresas)]);
+  telaUsuarios.todas = todas; // empresas do sistema e clientes da carteira, para restringir o acesso
+  const nomeEmpresa = (id) => esc(todas.find((e) => e.id === Number(id))?.razao_social ?? id);
   corpoConfig().innerHTML = `
     <div class="topo"><div><h2>Usuários e acessos</h2>
       <p class="sutil"><strong>Administrador</strong> tem acesso total e redefine senhas. <strong>Normal</strong> acessa só as funcionalidades marcadas para ele.</p></div>
@@ -3271,7 +3289,7 @@ function formUsuario(x, lista) {
         <p class="dica">Configurações (usuários, e-mail, backup, ativação de licença) são sempre exclusivas de administradores.</p>
       </fieldset>
       <fieldset id="grupo-empresas" style="margin-top:12px"><legend>Empresas que este usuário pode acessar</legend>
-        ${estado.empresas.map((e) => `<label><span><input type="checkbox" name="emp" value="${e.id}" ${vinculadas.has(e.id) ? 'checked' : ''}> ${esc(e.razao_social)}</span></label>`).join('')}
+        ${(telaUsuarios.todas ?? estado.empresas).map((e) => `<label><span><input type="checkbox" name="emp" value="${e.id}" ${vinculadas.has(e.id) ? 'checked' : ''}> ${esc(e.razao_social)}${e.gerencia ? '' : ' <span class="dica">(cliente)</span>'}</span></label>`).join('')}
         <p class="dica">Sem nenhuma marcada, o usuário enxerga todas as empresas.</p>
       </fieldset>
       <p class="erro" id="erro-usuario"></p>
@@ -3456,7 +3474,7 @@ async function telaEscritorio() {
   const pend = t.total - t.entregues - t.dispensadas;
   const regimes = (await tabelasEscritorio()).regimes;
   const passos = [
-    [!h.escritorioConfigurado, 'Marque na <a href="#/carteira">Carteira</a> qual empresa é o próprio escritório (ela emite as notas e boletos de honorários).'],
+    [!h.escritorioConfigurado, 'Marque em <a href="#/empresas">Cadastros &gt; Empresas</a> qual é a empresa do escritório (ela emite as notas e boletos de honorários).'],
     [v.clientes.ativos === 0, 'Cadastre os clientes em <a href="#/carteira">Carteira de clientes</a>: com o regime e o perfil, o sistema monta a agenda de obrigações de cada um.'],
     [v.clientes.ativos > 0 && v.clientes.semContrato === v.clientes.ativos, 'Crie os contratos em <a href="#/honorarios">Contratos e honorários</a>. Contrato assinado liga o faturamento mensal automático.'],
   ].filter((p) => p[0]);
@@ -3501,10 +3519,10 @@ async function telaCarteira() {
   const podeEditar = estado.usuario.papel !== 'cliente' && pode('carteira');
   const [lista, tab, equipe, fora] = await Promise.all([api('GET', '/api/escritorio/carteira'), tabelasEscritorio(), equipeEscritorio(), podeEditar ? api('GET', '/api/escritorio/carteira/fora').catch(() => []) : []]);
   const f = telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' };
-  const escCart = lista.find((c) => c.eh_escritorio);
+  const escCart = estado.empresas.find((e) => e.eh_escritorio); // a empresa do escritório (Cadastros > Empresas)
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Carteira de clientes</h1><p class="sutil">Cadastro único dos clientes: regime, perfil e responsável definem as obrigações; a cobrança dos honorários (nota, boleto, serviços padrão) fica em <em>Faturamento</em>, no botão ⋯ ou dentro de Editar.</p></div>
-      ${podeEditar ? `<div>${fora.length ? `<button id="trazer-cli" title="Clientes cadastrados só como avulsos na empresa do escritório">Trazer avulsos (${fora.length})</button> ` : ''}${escCart && pode('tomadores') ? '<button id="avulsos-cli" title="Quem o escritório fatura mas não é cliente da contabilidade">Clientes avulsos</button> ' : ''}<button class="primario" id="novo-cli">Novo cliente</button></div>` : ''}</div>
+      ${podeEditar ? `<div>${fora.length ? `<button id="trazer-cli" title="Clientes cadastrados só como avulsos na empresa do escritório">Trazer avulsos (${fora.length})</button> ` : ''}${escCart && pode('tomadores') ? '<button id="avulsos-cli" title="Quem o escritório fatura mas não é cliente da contabilidade">Clientes avulsos</button> ' : ''}<button id="imp-cli">Importar planilha</button> <button class="primario" id="novo-cli">Novo cliente</button></div>` : ''}</div>
     <div class="filtros">
       <label style="flex:1 1 240px">Buscar <input type="search" id="f-q" placeholder="Nome ou CNPJ/CPF" value="${esc(f.q)}"></label>
       <label>Situação <select id="f-sit"><option value="">Todas</option>${Object.entries(SITUACAO_CLI).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label>
@@ -3521,7 +3539,7 @@ async function telaCarteira() {
       && (!q || norm(c.razao_social).includes(q) || norm(c.nome_fantasia).includes(q) || (qd && c.documento.includes(qd))));
     $('#cont-cli').textContent = `${vis.filter((c) => !c.eh_escritorio).length} cliente(s) na lista.`;
     $('#lista-cli').innerHTML = vis.length ? vis.map((c) => `<tr class="${c.situacao === 'ENCERRADO' ? 'inativo' : ''}">
-      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong>${c.eh_escritorio ? ' <span class="selo PZ-PRAZO">Escritório</span>' : ''}<br><span class="dica">${fmtDoc(c.documento)}${c.nome_fantasia ? ' · ' + esc(c.razao_social) : ''}</span></td>
+      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong><br><span class="dica">${fmtDoc(c.documento)}${c.nome_fantasia ? ' · ' + esc(c.razao_social) : ''}</span></td>
       <td>${esc(tab.regimes[c.regime] ?? '—')}${c.regime && !c.regime_informado ? '<br><span class="dica">pelo cadastro de emissão</span>' : ''}</td>
       <td>${esc(c.responsavel ?? '—')}</td>
       <td>${c.eh_escritorio ? '—' : c.atrasadas ? `<span class="cor-vermelho"><strong>${c.atrasadas}</strong> atrasada(s)</span>` : c.proximo_vencimento ? `próximo ${dataBr(c.proximo_vencimento)}` : '<span class="dica">nada em aberto</span>'}</td>
@@ -3529,7 +3547,7 @@ async function telaCarteira() {
       <td class="num">${c.eh_escritorio ? '—' : c.honorario ? brl(c.honorario) : c.contrato_status ? `<span class="dica">${CONTRATO[c.contrato_status][0]}</span>` : '<span class="dica">sem contrato</span>'}</td>
       <td>${selo(SITUACAO_CLI[c.situacao])}</td>
       <td class="acoes-linha">${podeEditar ? `<button data-ed="${c.id}">Editar</button> ` : ''}${!c.eh_escritorio && pode('obrigacoes') ? `<button data-ob="${c.id}">Obrigações</button> ` : ''}<button data-mais="${c.id}" aria-label="Mais ações">⋯</button></td></tr>`).join('')
-      : `<tr><td colspan="8"><div class="vazio" style="border:0">${lista.length ? 'Nenhum cliente com esses filtros.' : 'Cadastre o primeiro cliente da carteira. Comece pelo próprio escritório.'}</div></td></tr>`;
+      : `<tr><td colspan="8"><div class="vazio" style="border:0">${lista.length ? 'Nenhum cliente com esses filtros.' : 'Cadastre o primeiro cliente da carteira, ou importe uma planilha com os CNPJs.'}</div></td></tr>`;
     conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formCliente(lista.find((c) => c.id === Number(b.dataset.ed)), tab, equipe)));
     conteudo.querySelectorAll('[data-ob]').forEach((b) => (b.onclick = () => obrigacoesDoCliente(lista.find((c) => c.id === Number(b.dataset.ob)), equipe)));
     conteudo.querySelectorAll('[data-mais]').forEach((b) => (b.onclick = () => maisAcoesCliente(lista.find((c) => c.id === Number(b.dataset.mais)))));
@@ -3540,6 +3558,7 @@ async function telaCarteira() {
   $('#f-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
   $('#novo-cli') && ($('#novo-cli').onclick = () => formCliente(null, tab, equipe, lista.some((c) => c.eh_escritorio)));
   $('#trazer-cli') && ($('#trazer-cli').onclick = () => trazerDeClientes(fora, tab));
+  $('#imp-cli') && ($('#imp-cli').onclick = () => importarPlanilhaClientes(true));
   $('#avulsos-cli') && ($('#avulsos-cli').onclick = () => irParaEmpresa(escCart.id, '#/tomadores'));
   pintar();
   if (telaCarteira.abrirNovo && $('#novo-cli')) { telaCarteira.abrirNovo = false; $('#novo-cli').click(); }
@@ -3589,10 +3608,7 @@ function maisAcoesCliente(c) {
     pode('honorarios') && !c.eh_escritorio && ['#/honorarios', 'Contrato e honorários'],
     pode('certificados') && ['#/certificados', 'Certificados'],
     pode('captura') && ['#/captura', 'Captura de documentos'],
-    pode('empresas') && ['emp:#/empresas', 'Dados de emissão, certificado A1 e logo'],
-    pode('emitir') && ['emp:#/emitir', 'Emitir NFS-e por este cliente'],
-    pode('tomadores') && [`emp:#/tomadores`, c.eh_escritorio ? 'Clientes avulsos do escritório' : 'Tomadores das NFS-e deste cliente'],
-    pode('compras') && ['emp:#/nfe-sefaz', 'NF-e recebidas (SEFAZ)'],
+    pode('situacao') && ['#/situacao', 'Situação fiscal'],
   ].filter(Boolean);
   abrirDialogo(`<h2>${esc(c.nome_fantasia || c.razao_social)}</h2>
     <dl class="dados"><dt>CNPJ/CPF</dt><dd>${fmtDoc(c.documento)}</dd><dt>Contato</dt><dd>${esc(c.contato_nome ?? '—')}${c.contato_fone ? ' · ' + esc(c.contato_fone) : ''}</dd>
@@ -3655,9 +3671,6 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
         <label class="largo"><span><input type="checkbox" name="tem_funcionarios" ${c.tem_funcionarios ? 'checked' : ''}> Tem empregados (folha, eSocial, FGTS, DCTFWeb, 13º)</span></label>
         <label class="largo"><span><input type="checkbox" name="contribuinte_icms" ${c.contribuinte_icms ? 'checked' : ''}> Contribuinte do ICMS (comércio/indústria: EFD ICMS/IPI, DeSTDA)</span></label>
         <label class="largo"><span><input type="checkbox" name="contribuinte_iss" ${c.contribuinte_iss ? 'checked' : ''}> Prestador de serviços (ISS)</span></label>
-        <label class="largo"><span><input type="checkbox" name="eh_escritorio" ${c.eh_escritorio ? 'checked' : ''}> Esta é a empresa do próprio escritório</span>
-          <span class="dica">É ela que emite as notas e boletos de honorários e aparece como CONTRATADA nos contratos. Não gera obrigações na agenda.${jaTemEscritorio && !c.eh_escritorio ? ' Já existe outra marcada: ao salvar, esta passa a ser a do escritório.' : ''}</span></label>
-        <label id="lbl-crc">Registro no CRC <input name="crc" value="${esc(c.crc ?? '')}" placeholder="SC-009017"></label>
         <label class="largo">Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
       </div></fieldset>
       <p class="erro" id="erro-cli"></p>
@@ -3668,8 +3681,6 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
     f.regime.value = c.regime ?? 'SIMPLES'; f.situacao.value = c.situacao;
     const enc = () => ($('#lbl-enc').hidden = f.situacao.value !== 'ENCERRADO');
     f.situacao.onchange = enc; enc();
-    const crc = () => ($('#lbl-crc').hidden = !f.eh_escritorio.checked);
-    f.eh_escritorio.onchange = crc; crc();
     f.cep.onblur = () => buscarCep(f);
     // a consulta da Receita informa a opção pelo Simples: vira o regime (só para cliente novo)
     f.op_simp_nac.onchange = () => { if (novo) f.regime.value = { 2: 'MEI', 3: 'SIMPLES' }[f.op_simp_nac.value] ?? (f.regime.value === 'SIMPLES' || f.regime.value === 'MEI' ? 'PRESUMIDO' : f.regime.value); };
@@ -4285,7 +4296,7 @@ async function abaFaturamento() {
     </div>
     <h2>Situação</h2>
     <dl class="dados">
-      <dt>Empresa do escritório</dt><dd>${e ? `${esc(e.razao_social)} (${fmtDoc(e.documento)}) ${ok(true)}` : `${ok(false)} — marque em <a href="#/carteira">Carteira</a> &gt; Editar &gt; “Esta é a empresa do próprio escritório”.`}</dd>
+      <dt>Empresa do escritório</dt><dd>${e ? `${esc(e.razao_social)} (${fmtDoc(e.documento)}) ${ok(true)}` : `${ok(false)} — marque em <a href="#/empresas">Cadastros &gt; Empresas</a> &gt; Editar &gt; “Esta é a empresa do escritório”.`}</dd>
       <dt>Emissão da NFS-e</dt><dd>${!e ? '—' : e.modo_emissao === 'PORTAL' ? 'Pelo portal (só boletos aqui)' : e.tem_certificado ? `Certificado A1 ${ok(true)}` : `${ok(false)} — envie o certificado em Empresas.`}</dd>
       <dt>Boleto (Ailos)</dt><dd>${!e ? '—' : cfg.contaBancaria ? `Dados bancários ${ok(true)}` : `${ok(false)} — preencha em Empresas &gt; Dados bancários (só para “Nota + boleto” e “Só boleto”).`}</dd>
     </dl>
@@ -4347,7 +4358,7 @@ async function telaCaptura() {
       <td><span class="dica">NF-e:</span> ${ultima(l.ultima_consulta, l.ultimo_resultado, l.ultimo_erro, l.proxima_consulta, l.pode_consultar, l.tem_certificado)}
         ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado)}`}</td>
       <td>${!l.tem_certificado ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
-      <td class="acoes-linha">${l.eh_escritorio ? '' : `<button data-notas="${l.id}">Notas</button> `}${pode('compras') ? `<button data-ver="${l.id}">Compras</button> ` : ''}<button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
+      <td class="acoes-linha"><button data-notas="${l.id}">Notas</button> <button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
     </tbody></table></div>
     <p class="dica">O pacote do mês (ZIP) traz os XML das notas de compra, de venda e de serviço (prestadas e tomadas), com planilhas de conferência.</p>`;
   $('#mes-cap').onchange = (ev) => { telaCaptura.mes = ev.target.value || mesAtual(); telaCaptura(); };
@@ -4364,7 +4375,6 @@ async function telaCaptura() {
   };
   const auto = (ligar) => async () => { try { const r = await api('POST', '/api/escritorio/captura/automatica', { ligar }); aviso(`Busca automática ${ligar ? 'ligada' : 'desligada'} para ${r.alterados} cliente(s).`); telaCaptura(); } catch (er) { aviso(mensagemErro(er)); } };
   $('#cap-auto-on').onclick = auto(true); $('#cap-auto-off').onclick = auto(false);
-  conteudo.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = () => irParaEmpresa(Number(b.dataset.ver), '#/nfe-sefaz')));
   conteudo.querySelectorAll('[data-pac]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/captura/${b.dataset.pac}/pacote?mes=${mes}`, `documentos_${mes}.zip`)));
   conteudo.querySelectorAll('[data-notas]').forEach((b) => (b.onclick = () => notasCapturadas(lista.find((l) => l.id === Number(b.dataset.notas)), mes)));
 }
@@ -4378,6 +4388,10 @@ async function notasCapturadas(cli, mes) {
   const tabNfse = (l, outra) => l.length ? `<table class="tabela"><thead><tr><th>Competência</th><th>Nº</th><th>${outra}</th><th class="num">Valor</th><th class="num">ISS</th><th></th></tr></thead><tbody>
     ${l.map((n) => { const p = outra === 'Tomador' ? [n.tomador_nome, n.tomador_documento] : [n.prestador_nome, n.prestador_documento]; return `<tr class="${n.situacao === 'CANCELADA' ? 'inativo' : ''}"><td>${dataBr(n.competencia)}</td><td>${esc(n.numero ?? '')}</td><td>${esc(p[0] ?? '')}<br><span class="dica">${fmtDoc(p[1] ?? '')}</span></td><td class="num">${brl(n.valor)}</td><td class="num">${brl(n.iss)}${n.iss_retido ? '<br><span class="dica">retido</span>' : ''}</td><td class="acoes-linha">${sit(n.situacao)} ${xml(n.chave)}</td></tr>`; }).join('')}</tbody></table>` : '<p class="dica">Nenhuma nota neste mês.</p>';
   abrirDialogo(`<div class="dlg-largo"><h2>${esc(cli.cliente)} — ${rotuloMes(mes)}</h2>
+    <h3>NF-e de compra (${d.compras.length}) <span class="dica">${total(d.compras)}</span></h3>
+    ${d.compras.length ? `<table class="tabela"><thead><tr><th>Emissão</th><th>Nº</th><th>Fornecedor</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+      ${d.compras.map((v) => `<tr class="${v.situacao === 'CANCELADA' ? 'inativo' : ''}"><td>${dataBr(v.emissao)}</td><td>${esc(v.numero ?? '')}</td><td>${esc(v.emitente_nome ?? '')}<br><span class="dica">${fmtDoc(v.emitente_documento ?? '')}</span></td><td class="num">${brl(v.valor)}</td><td class="acoes-linha">${sit(v.situacao)}${v.completa ? '' : ' <span class="dica">só resumo</span>'}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="dica">Nenhuma NF-e de compra neste mês.</p>'}
     <h3>NF-e de venda (${d.vendas.length}) <span class="dica">${total(d.vendas)}</span></h3>
     ${d.vendas.length ? `<table class="tabela"><thead><tr><th>Emissão</th><th>Nº</th><th>Destinatário</th><th class="num">Valor</th><th></th></tr></thead><tbody>
       ${d.vendas.map((v) => `<tr class="${v.situacao === 'CANCELADA' ? 'inativo' : ''}"><td>${dataBr(v.emissao)}</td><td>${esc(v.numero ?? '')}${v.modelo === '65' ? ' <span class="dica">NFC-e</span>' : ''}</td><td>${esc(v.destinatario_nome ?? 'Consumidor')}<br><span class="dica">${fmtDoc(v.destinatario_documento ?? '')}</span></td><td class="num">${brl(v.valor)}</td><td class="acoes-linha">${sit(v.situacao)} ${xml(v.chave)}</td></tr>`).join('')}</tbody></table>`

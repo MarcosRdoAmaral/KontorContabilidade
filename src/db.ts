@@ -911,6 +911,15 @@ const migracoes: string[] = [
   // 32: cadastro único — o cliente da carteira é o mesmo cliente (tomador) da empresa do escritório
   `ALTER TABLE tomadores ADD COLUMN carteira_empresa_id INTEGER REFERENCES empresas(id);
   CREATE INDEX ix_tomadores_carteira ON tomadores(carteira_empresa_id);`,
+  // 33: empresas do sistema (quem gerencia/emite) separadas dos clientes da carteira
+  `ALTER TABLE empresas ADD COLUMN na_carteira INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE empresas ADD COLUMN gerencia INTEGER NOT NULL DEFAULT 0;
+  UPDATE empresas SET gerencia = 1, na_carteira = 0 WHERE eh_escritorio = 1;
+  -- cadastradas pela tela Empresas (sem regime da carteira) e nunca usadas como cliente
+  UPDATE empresas SET gerencia = 1, na_carteira = 0 WHERE regime IS NULL AND eh_escritorio = 0
+    AND id NOT IN (SELECT empresa_id FROM tarefas) AND id NOT IN (SELECT empresa_id FROM contratos);
+  -- quem já emitiu notas pelo sistema continua como empresa (e cliente, se for o caso)
+  UPDATE empresas SET gerencia = 1 WHERE id IN (SELECT empresa_id FROM notas);`,
 ];
 
 export function migrar(): void {

@@ -192,7 +192,7 @@ export function gerarTarefas(escritorioId: number, mes: string): number {
   garantirCatalogo(escritorioId);
   const obrig = db.prepare('SELECT * FROM obrigacoes WHERE escritorio_id = ? AND ativa = 1').all(escritorioId) as LinhaObrigacao[];
   const clientes = db.prepare(`SELECT id, regime, op_simp_nac, tem_funcionarios, contribuinte_icms, contribuinte_iss, situacao, cliente_desde, encerrado_em, feriados_extra, responsavel_id, eh_escritorio
-    FROM empresas WHERE escritorio_id = ?`).all(escritorioId) as LinhaCliente[];
+    FROM empresas WHERE escritorio_id = ? AND na_carteira = 1`).all(escritorioId) as LinhaCliente[];
   const excecoes = new Map<string, { aplica: number; responsavel_id: number | null }>();
   for (const x of db.prepare(`SELECT eo.* FROM empresa_obrigacoes eo JOIN empresas e ON e.id = eo.empresa_id WHERE e.escritorio_id = ?`).all(escritorioId) as any[]) excecoes.set(`${x.empresa_id}:${x.obrigacao_id}`, x);
   const ins = db.prepare('INSERT OR IGNORE INTO tarefas (empresa_id, obrigacao_id, competencia, vencimento, responsavel_id) VALUES (?,?,?,?,?)');

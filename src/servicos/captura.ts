@@ -37,7 +37,7 @@ export function statusCaptura(escritorioId: number, mes: string, empresas: numbe
          AND NOT EXISTS (SELECT 1 FROM nfse_capturadas c WHERE c.empresa_id = e.id AND c.chave = n.chave_acesso)) AS nfse_sistema,
       (SELECT COUNT(*) FROM nfse_capturadas c WHERE c.empresa_id = e.id AND c.papel = 'TOMADOR' AND c.xml IS NOT NULL AND c.competencia BETWEEN ? AND ?) AS nfse_tomadas
     FROM empresas e LEFT JOIN nfe_distribuicao d ON d.empresa_id = e.id LEFT JOIN adn_distribuicao a ON a.empresa_id = e.id
-    WHERE e.escritorio_id = ? AND e.situacao != 'ENCERRADO' ${filtro} ORDER BY e.eh_escritorio DESC, cliente`).all(de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, escritorioId, ...(empresas ?? [])) as any[];
+    WHERE e.escritorio_id = ? AND (e.na_carteira = 1 OR e.eh_escritorio = 1) AND e.situacao != 'ENCERRADO' ${filtro} ORDER BY e.eh_escritorio DESC, cliente`).all(de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, escritorioId, ...(empresas ?? [])) as any[];
   const agora = new Date().toISOString();
   return linhas.map((l) => {
     const certOk = !!l.tem_certificado && !(l.cert_validade && l.cert_validade < agora);
@@ -118,7 +118,9 @@ export function notasDoMes(escritorioId: number, empresaId: number, mes: string)
   const e = db.prepare('SELECT documento FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId) as any;
   if (!e) throw new ErroNegocio('Cliente não encontrado.', 404);
   const de = `${mes}-01`, ate = fimDoMes(mes);
-  return { vendas: listarSaidas(escritorioId, e.documento, de, ate), nfse: listarNfseCapturadas(empresaId, de, ate) };
+  const compras = db.prepare(`SELECT chave, numero, serie, emitente_documento, emitente_nome, emissao, valor, situacao, (xml IS NOT NULL) AS completa FROM nfe_recebidas
+    WHERE empresa_id = ? AND oculta = 0 AND substr(emissao, 1, 10) BETWEEN ? AND ? ORDER BY emissao`).all(empresaId, de, ate) as any[];
+  return { compras: compras.map((c) => ({ ...c, completa: !!c.completa })), vendas: listarSaidas(escritorioId, e.documento, de, ate), nfse: listarNfseCapturadas(empresaId, de, ate) };
 }
 
 /**

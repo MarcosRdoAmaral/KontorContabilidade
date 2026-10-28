@@ -31,7 +31,7 @@ export function sincronizarClienteNoCadastro(escritorioId: number, empresaId: nu
   const esc = empresaDoEscritorio(escritorioId);
   if (!esc || esc === empresaId) return null;
   return db.transaction(() => {
-    let e = db.prepare('SELECT * FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId) as any;
+    let e = db.prepare('SELECT * FROM empresas WHERE id = ? AND escritorio_id = ? AND na_carteira = 1').get(empresaId, escritorioId) as any;
     if (!e) return null;
     let t = db.prepare('SELECT * FROM tomadores WHERE empresa_id = ? AND carteira_empresa_id = ?').get(esc, empresaId) as any;
     if (!t) {
@@ -63,7 +63,7 @@ export function sincronizarClienteNoCadastro(escritorioId: number, empresaId: nu
 export function sincronizarCarteiraInteira(escritorioId: number): number {
   const esc = empresaDoEscritorio(escritorioId);
   if (!esc) return 0;
-  const ids = (db.prepare('SELECT id FROM empresas WHERE escritorio_id = ? AND id != ?').all(escritorioId, esc) as { id: number }[]).map((r) => r.id);
+  const ids = (db.prepare('SELECT id FROM empresas WHERE escritorio_id = ? AND id != ? AND na_carteira = 1').all(escritorioId, esc) as { id: number }[]).map((r) => r.id);
   for (const id of ids) sincronizarClienteNoCadastro(escritorioId, id);
   // tomadores ligados a empresas de outro escritório-empresa (o escritório mudou de empresa) ficam soltos
   db.prepare('UPDATE tomadores SET carteira_empresa_id = NULL WHERE carteira_empresa_id IS NOT NULL AND empresa_id IN (SELECT id FROM empresas WHERE escritorio_id = ? AND id != ?)').run(escritorioId, esc);

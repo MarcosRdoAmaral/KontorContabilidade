@@ -70,7 +70,9 @@ test('escritório: carteira, obrigações, certificados, contratos, honorários 
     const emp = db.prepare('SELECT op_simp_nac, reg_ap_trib_sn FROM empresas WHERE id = ?').get(simples) as any;
     assert.deepEqual([emp.op_simp_nac, emp.reg_ap_trib_sn], [3, 1], 'regime da carteira vale para a emissão de NFS-e');
     const cart = (await call('GET', '/api/escritorio/carteira', undefined, t)).json;
-    assert.equal(cart.length, 3); assert.equal(cart[0].id, escritorio, 'o escritório aparece primeiro');
+    assert.equal(cart.length, 2); assert.ok(!cart.some((c: any) => c.id === escritorio), 'o escritório é empresa do sistema, não cliente da carteira');
+    const emps = (await call('GET', '/api/empresas', undefined, t)).json;
+    assert.deepEqual(emps.map((e: any) => e.id), [escritorio], 'Cadastros > Empresas mostra só as empresas do sistema');
 
     // ---------- obrigações ----------
     const mes = '2099-11';
@@ -194,8 +196,11 @@ test('escritório: carteira, obrigações, certificados, contratos, honorários 
         cep: '89075-120', logradouro: 'Rua Augusto Vivian', numero: '184', bairro: 'Itoupava Central', cidade: 'Blumenau',
         rep_nome: 'Aldo Luiz', rep_cpf: '390.533.447-05', rep_rg: '5842932', rep_nacionalidade: 'brasileiro', rep_estado_civil: 'casado', rep_profissao: 'empresário' }, t);
       assert.equal(r1.status, 200, JSON.stringify(r1.json));
-      await call('PUT', `/api/escritorio/carteira/${escritorio}`, { ...base, documento: '06.990.590/0001-23', razao_social: 'Contábil Itajaí Ltda', regime: 'SIMPLES', eh_escritorio: true,
+      // o escritório se edita em Cadastros > Empresas
+      assert.equal((await call('PUT', `/api/escritorio/carteira/${escritorio}`, { ...base, documento: '06.990.590/0001-23', razao_social: 'Contábil Itajaí Ltda', regime: 'SIMPLES' }, t)).status, 404);
+      const re = await call('PUT', `/api/empresas/${escritorio}`, { documento: '06.990.590/0001-23', razao_social: 'Contábil Itajaí Ltda', cod_municipio: base.cod_municipio, uf: 'SC', op_simp_nac: 3, eh_escritorio: true,
         cep: '89065345', logradouro: 'Rua Otto Anlauf Junior', numero: '44', bairro: 'Salto do Norte', cidade: 'Blumenau', crc: 'SC-009017' }, t);
+      assert.equal(re.status, 200, JSON.stringify(re.json));
       assert.equal((await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11222333000181', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', rep_cpf: '123' }, t)).status, 400, 'CPF do representante incompleto');
       tx = (await call('GET', `/api/escritorio/contratos/${ct.id}/texto`, undefined, t)).json;
       assert.deepEqual(tx.faltas, []);

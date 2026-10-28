@@ -138,7 +138,7 @@ export class Integra {
 
   static para(escritorioId: number, transporte?: Transporte) {
     const esc = db.prepare('SELECT documento FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
-    if (!esc) throw new ErroNegocio('Marque na Carteira qual empresa é o escritório: ela é a contratante do Integra Contador.');
+    if (!esc) throw new ErroNegocio('Marque em Cadastros > Empresas qual é a empresa do escritório: ela é a contratante do Integra Contador.');
     return new Integra(escritorioId, transporte ?? transporteReal(escritorioId), esc.documento);
   }
 

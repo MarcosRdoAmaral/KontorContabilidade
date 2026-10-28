@@ -401,7 +401,7 @@ export function configHonorarios(escritorioId: number) {
 
 export function salvarConfigHonorarios(escritorioId: number, servicoId: number | null) {
   const esc = db.prepare('SELECT id FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
-  if (!esc) throw new ErroNegocio('Marque primeiro qual empresa da carteira é o próprio escritório (Carteira > editar > "Esta é a empresa do escritório").');
+  if (!esc) throw new ErroNegocio('Marque primeiro qual é a empresa do escritório (Cadastros > Empresas > Editar > "Esta é a empresa do escritório").');
   if (servicoId && !db.prepare('SELECT 1 FROM servicos WHERE id = ? AND empresa_id = ?').get(servicoId, esc.id)) throw new ErroNegocio('Serviço não encontrado na empresa do escritório.');
   db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(`${P_SERVICO}:${escritorioId}`, servicoId ? String(servicoId) : null);
 }
@@ -411,7 +411,7 @@ export async function sincronizarFaturamento(escritorioId: number, contratoId: n
   const c = contratoDoEscritorio(escritorioId, contratoId);
   const cfg = configHonorarios(escritorioId);
   const avisos: string[] = [];
-  if (!cfg.escritorio) return { avisos: ['O faturamento automático não foi ligado: marque na Carteira qual empresa é o próprio escritório.'] };
+  if (!cfg.escritorio) return { avisos: ['O faturamento automático não foi ligado: marque em Cadastros > Empresas qual é a empresa do escritório.'] };
   if (!cfg.servicoId) return { avisos: ['O faturamento automático não foi ligado: escolha o serviço de honorários em Contratos e honorários > Configurar faturamento.'] };
   if (cfg.escritorio.id === c.empresa_id) return { avisos: ['O contrato é do próprio escritório: não há faturamento a ligar.'] };
   let cli = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;

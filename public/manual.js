@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.8.0';
+export const MANUAL_VERSAO = '1.9.0';
 
 export const MANUAL = [
   {
@@ -13,7 +13,8 @@ export const MANUAL = [
       <p>O Kontor Gestão Contabilidade é o sistema de gestão do escritório de contabilidade: carteira de clientes, agenda de obrigações e prazos, certificados e procurações, contratos e honorários e captura de documentos. Ele traz junto tudo o que o Kontor Gestão faz — emissão de NFS-e pelo <strong>Emissor Nacional</strong>, boletos, despesas, extrato e relatórios — para o escritório e para os clientes que emitem por ele.</p>
       <h3>Para começar a gestão do escritório</h3>
       <ol>
-        <li><strong>Carteira:</strong> cadastre o próprio escritório e marque “Esta é a empresa do próprio escritório”. Depois cadastre os clientes (com o CNPJ, os dados vêm da Receita), com regime, responsável e perfil.</li>
+        <li><strong>Empresa do escritório:</strong> em Cadastros &gt; Empresas, cadastre o escritório e marque “Esta é a empresa do escritório”.</li>
+        <li><strong>Carteira:</strong> cadastre os clientes (ou importe uma planilha com os CNPJs) (com o CNPJ, os dados vêm da Receita), com regime, responsável e perfil.</li>
         <li><strong>Equipe:</strong> em Configurações &gt; Usuários e acessos, crie um usuário para cada pessoa; eles aparecem como responsáveis.</li>
         <li><strong>Obrigações:</strong> confira o catálogo (Obrigações e prazos &gt; Catálogo) e a data “Controlar prazos a partir de”.</li>
         <li><strong>Honorários:</strong> cadastre o serviço de honorários na empresa do escritório, escolha-o em Contratos e honorários &gt; Configurar faturamento e crie os contratos.</li>
@@ -49,8 +50,10 @@ export const MANUAL = [
       <p><strong>Suspenso</strong> para de gerar obrigações. <strong>Encerrado</strong> pede a data: obrigações de períodos até ela continuam na agenda.</p>
       <h3>Endereço e representante legal</h3>
       <p>O endereço (o CEP preenche rua, bairro e cidade) e o representante legal (nome, CPF, RG, nacionalidade, estado civil e profissão) vão no contrato. Se faltarem, o contrato avisa e esses campos saem em branco no PDF, para preencher à mão.</p>
-      <h3>Empresa do escritório</h3>
-      <p>Marque “Esta é a empresa do próprio escritório” no cadastro do escritório. É ela que emite as notas e os boletos de honorários e aparece como CONTRATADA nos contratos (com o endereço e o registro no CRC); ela não gera obrigações na agenda.</p>
+      <h3>Clientes e empresas são cadastros separados</h3>
+      <p>A Carteira tem só os clientes da contabilidade. O próprio escritório (e qualquer empresa que use o sistema para emitir) fica em <strong>Cadastros → Empresas</strong>, onde se marca “Esta é a empresa do escritório”: ela emite as notas e os boletos de honorários e aparece como CONTRATADA nos contratos, com o endereço e o registro no CRC.</p>
+      <h3>Importar planilha</h3>
+      <p>Em <em>Importar planilha</em>, envie um Excel (.xlsx) ou .csv com o CNPJ (ou CPF e nome) em qualquer coluna. Para cada CNPJ o sistema consulta a Receita e cria o cliente com razão social, endereço, município, e-mail e o regime pela opção do Simples (MEI, Simples ou, se não optante, Lucro Presumido). Confira depois o regime, o perfil e o responsável de cada um.</p>
       <h3>Cadastro único</h3>
       <p>A Carteira é o único cadastro de clientes do escritório. A cobrança dos honorários de cada cliente fica em <strong>Faturamento</strong> (no botão ⋯ do cliente ou dentro de <em>Editar</em>): o que emitir (nota, boleto ou os dois), vencimento, e-mails de cobrança, serviços padrão com o valor, descontos, multa e juros e a descrição da nota. Nome, CNPJ/CPF, e-mail, telefone e endereço são sempre os da Carteira.</p>
       <p>Quem o escritório fatura mas não é cliente da contabilidade fica em <em>Clientes avulsos</em> (botão no topo da Carteira). Os avulsos que forem virar clientes aparecem em <em>Trazer avulsos</em>: escolha o regime de cada um e eles entram na Carteira, sem duplicar.</p>
@@ -88,7 +91,7 @@ export const MANUAL = [
     corpo: `
       <h3>Configurar uma vez</h3>
       <ol>
-        <li>Marque na Carteira qual empresa é o escritório.</li>
+        <li>Marque em Cadastros &gt; Empresas qual é a empresa do escritório.</li>
         <li>Com ela selecionada no topo, cadastre o serviço de honorários em Cadastros &gt; Serviços (e, para boletos, os Dados bancários).</li>
         <li>Em Contratos e honorários &gt; Configurar faturamento, escolha esse serviço.</li>
       </ol>

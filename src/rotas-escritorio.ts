@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from './db.js';
 import { exigirLogin, exigirPapel, restritoAEmpresas, type Usuario } from './auth.js';
 import { ErroNegocio } from './servicos/emissao.js';
+import { analisarPlanilhaCarteira, importarParaCarteira } from './servicos/importar-clientes.js';
 import { clientesForaDaCarteira, empresaDoEscritorio, sincronizarClienteNoCadastro } from './servicos/cadastro-unico.js';
 import { ClienteCarteira, criarCliente, editarCliente, listarCarteira, visaoGeral } from './servicos/carteira.js';
 import { Certificado, excluirCertificado, listarCertificados, renovarCertificado, resumoCertificados, salvarCertificado, TIPOS_CERT } from './servicos/certificados.js';
@@ -49,6 +50,15 @@ export async function rotasEscritorio(app: FastifyInstance) {
       editarCliente(u(req).escritorio_id, id(req), ClienteCarteira.parse(req.body));
       return { ok: true };
     });
+    // importar clientes de uma planilha (CNPJ/CPF em qualquer coluna)
+    api.post('/api/escritorio/carteira/planilha/analisar', { bodyLimit: 8 * 1024 * 1024, preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const b = z.object({ nome: z.string().max(200).default('planilha.xlsx'), base64: z.string().min(20) }).parse(req.body);
+      return analisarPlanilhaCarteira(u(req).escritorio_id, b.nome, Buffer.from(b.base64, 'base64'));
+    });
+    api.post('/api/escritorio/carteira/planilha/importar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const b = z.object({ itens: z.array(z.object({ documento: z.string().max(20), nome: z.string().max(300).nullish() })).min(1).max(10) }).parse(req.body);
+      return { resultados: await importarParaCarteira(u(req).escritorio_id, b.itens) };
+    });
     // clientes que só existem em "Clientes" da empresa do escritório: trazer para a carteira (cadastro único)
     api.get('/api/escritorio/carteira/fora', async (req) => clientesForaDaCarteira(u(req).escritorio_id));
     api.post('/api/escritorio/carteira/trazer', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
@@ -72,7 +82,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/carteira/:id/faturamento', async (req) => {
       checar(req, id(req));
       const esc = empresaDoEscritorio(u(req).escritorio_id);
-      if (!esc) throw new ErroNegocio('Marque primeiro na Carteira qual empresa é o próprio escritório: é ela que emite a nota e o boleto dos honorários.');
+      if (!esc) throw new ErroNegocio('Marque primeiro em Cadastros > Empresas qual é a empresa do escritório: é ela que emite a nota e o boleto dos honorários.');
       if (esc === id(req)) throw new ErroNegocio('O escritório não fatura para si mesmo.');
       const tid = sincronizarClienteNoCadastro(u(req).escritorio_id, id(req));
       const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(tid) as any;

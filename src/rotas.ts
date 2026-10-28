@@ -1,5 +1,5 @@
 import { excluirEmpresa, resumoExclusao } from './servicos/excluir-empresa.js';
-import { CAMPOS_BLOQUEADOS } from './servicos/cadastro-unico.js';
+import { CAMPOS_BLOQUEADOS, sincronizarCarteiraInteira, sincronizarClienteNoCadastro } from './servicos/cadastro-unico.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db.js';
@@ -65,6 +65,16 @@ const Empresa = z.object({
   modo_emissao: z.enum(['CERTIFICADO', 'PORTAL']).default('CERTIFICADO'),
   portal_login: z.string().trim().max(60).nullish(),
   portal_senha: z.string().max(200).nullish(),
+  // uso no sistema
+  eh_escritorio: z.boolean().default(false),
+  na_carteira: z.boolean().default(false),
+  crc: z.string().trim().max(30).nullish(),
+  cep: z.string().nullish().transform((c) => (c ? soDigitos(c) || null : null)),
+  logradouro: z.string().trim().max(150).nullish(),
+  numero: z.string().trim().max(20).nullish(),
+  complemento: z.string().trim().max(80).nullish(),
+  bairro: z.string().trim().max(80).nullish(),
+  cidade: z.string().trim().max(80).nullish(),
 }).refine((e) => e.modo_emissao !== 'PORTAL' || !!e.portal_login, { path: ['portal_login'], message: 'Informe o usuário (CNPJ) de acesso ao portal' });
 
 const Tomador = z.object({
@@ -235,22 +245,51 @@ export async function rotas(app: FastifyInstance) {
     });
 
     // ---------- Empresas (prestadores) ----------
+    // empresas do sistema (quem gerencia/emite); os clientes ficam na Carteira. ?todas=1 inclui os clientes (restrição de usuários)
     api.get('/api/empresas', async (req) => {
       const usr = u(req);
+      const so = (req.query as any)?.todas === '1' ? '' : 'AND e.gerencia = 1';
       const linhas = restritoAEmpresas(usr)
-        ? db.prepare('SELECT e.* FROM empresas e JOIN usuario_empresas ue ON ue.empresa_id = e.id WHERE ue.usuario_id = ? ORDER BY razao_social').all(usr.id)
-        : db.prepare('SELECT * FROM empresas WHERE escritorio_id = ? ORDER BY razao_social').all(usr.escritorio_id);
+        ? db.prepare(`SELECT e.* FROM empresas e JOIN usuario_empresas ue ON ue.empresa_id = e.id WHERE ue.usuario_id = ? ${so} ORDER BY razao_social`).all(usr.id)
+        : db.prepare(`SELECT e.* FROM empresas e WHERE e.escritorio_id = ? ${so} ORDER BY razao_social`).all(usr.escritorio_id);
       return linhas.map(semCert);
+    });
+    /** Grava o uso da empresa no sistema: escritório (CONTRATADA dos honorários), também cliente, CRC e endereço. */
+    const gravarUso = (escritorioId: number, id: number, d: z.infer<typeof Empresa>) => {
+      if (d.eh_escritorio) db.prepare('UPDATE empresas SET eh_escritorio = 0 WHERE escritorio_id = ? AND id != ?').run(escritorioId, id);
+      db.prepare(`UPDATE empresas SET gerencia = 1, eh_escritorio = ?, na_carteira = ?, crc = ?, cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, cidade = ? WHERE id = ?`)
+        .run(d.eh_escritorio ? 1 : 0, d.na_carteira && !d.eh_escritorio ? 1 : 0, d.crc ?? null, d.cep ?? null, d.logradouro ?? null, d.numero ?? null, d.complemento ?? null, d.bairro ?? null, d.cidade ?? null, id);
+      if (d.eh_escritorio) sincronizarCarteiraInteira(escritorioId);
+      else if (d.na_carteira) sincronizarClienteNoCadastro(escritorioId, id);
+    };
+    api.post('/api/empresas/:id/ativo', { preHandler: exigirPapel('admin') }, async (req) => {
+      const id = Number((req.params as any).id);
+      checarEmpresa(req, id);
+      const { ativo } = z.object({ ativo: z.boolean() }).parse(req.body);
+      db.prepare('UPDATE empresas SET ativo = ? WHERE id = ?').run(ativo ? 1 : 0, id);
+      return { ok: true };
     });
 
     api.post('/api/empresas', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const d = Empresa.parse(req.body);
+      // já é cliente da carteira: passa a ser também empresa do sistema, sem duplicar
+      const ja = db.prepare('SELECT id, gerencia FROM empresas WHERE escritorio_id = ? AND documento = ?').get(u(req).escritorio_id, d.documento) as any;
+      if (ja?.gerencia) throw new ErroNegocio('Esta empresa já está cadastrada.', 409);
+      if (ja) {
+        db.prepare(`UPDATE empresas SET razao_social=?, nome_fantasia=?, inscricao_municipal=?, cod_municipio=?, uf=?, email=?, op_simp_nac=?, reg_ap_trib_sn=?, reg_esp_trib=?, p_tot_trib_sn=?, ambiente=?, serie=?, modo_emissao=?, portal_login=? WHERE id=?`)
+          .run(d.razao_social, d.nome_fantasia ?? null, d.inscricao_municipal ?? null, d.cod_municipio, d.uf ?? null, d.email || null, d.op_simp_nac, d.op_simp_nac === 3 ? d.reg_ap_trib_sn ?? 1 : null,
+            d.reg_esp_trib, d.p_tot_trib_sn ?? null, d.ambiente, d.serie, d.modo_emissao, d.modo_emissao === 'PORTAL' ? d.portal_login ?? null : null, ja.id);
+        if (d.modo_emissao === 'PORTAL' && d.portal_senha) db.prepare('UPDATE empresas SET portal_senha_enc = ? WHERE id = ?').run(cifrarTexto(d.portal_senha), ja.id);
+        gravarUso(u(req).escritorio_id, ja.id, { ...d, na_carteira: true });
+        return { id: ja.id };
+      }
       const r = db.prepare(`INSERT INTO empresas (escritorio_id, documento, razao_social, nome_fantasia, inscricao_municipal, cod_municipio, uf, email,
         op_simp_nac, reg_ap_trib_sn, reg_esp_trib, p_tot_trib_sn, ambiente, serie, modo_emissao, portal_login, portal_senha_enc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(u(req).escritorio_id, d.documento, d.razao_social, d.nome_fantasia ?? null, d.inscricao_municipal ?? null, d.cod_municipio,
           d.uf ?? null, d.email || null, d.op_simp_nac, d.op_simp_nac === 3 ? d.reg_ap_trib_sn ?? 1 : null, d.reg_esp_trib,
           d.p_tot_trib_sn ?? null, d.ambiente, d.serie, d.modo_emissao, d.modo_emissao === 'PORTAL' ? d.portal_login ?? null : null,
           d.modo_emissao === 'PORTAL' && d.portal_senha ? cifrarTexto(d.portal_senha) : null);
+      gravarUso(u(req).escritorio_id, Number(r.lastInsertRowid), d);
       return { id: Number(r.lastInsertRowid) };
     });
 
@@ -266,6 +305,7 @@ export async function rotas(app: FastifyInstance) {
       // a senha só muda quando uma nova é digitada; ao voltar para certificado, ela é apagada
       if (d.modo_emissao !== 'PORTAL') db.prepare('UPDATE empresas SET portal_senha_enc = NULL WHERE id = ?').run(id);
       else if (d.portal_senha) db.prepare('UPDATE empresas SET portal_senha_enc = ? WHERE id = ?').run(cifrarTexto(d.portal_senha), id);
+      gravarUso(u(req).escritorio_id, id, d);
       return { ok: true };
     });
 

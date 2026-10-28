@@ -52,7 +52,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira$/, mod: ['carteira', 'visao', 'obrigacoes', 'certificados', 'honorarios', 'captura'] },
-  { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer)?$/, mod: ['carteira'] },
+  { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer|\/planilha\/(analisar|importar))?$/, mod: ['carteira'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira\/\d+\/faturamento$/, mod: ['carteira'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['carteira', 'obrigacoes'] },
   { r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['obrigacoes'] },
@@ -72,7 +72,7 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/empresas\/\d+\/contabilidade(\/|$)/, mod: 'adm' },
   { r: /^\/api\/(usuarios|email\/config|email\/testar|backup|tabelas|licenca|contabilidade)(\/|$)/, mod: 'adm' },
   { m: 'POST', r: /^\/api\/empresas\/\d+\/certificado$/, mod: ['empresas', 'certificados'] }, // A1 do cliente, também por Escritório > Certificados
-  { r: /^\/api\/empresas(\/\d+)?$|^\/api\/empresas\/\d+\/(certificado|logo)$/, mod: ['empresas'] },
+  { r: /^\/api\/empresas(\/\d+)?$|^\/api\/empresas\/\d+\/(certificado|logo|ativo)$/, mod: ['empresas'] },
   { m: 'POST', r: /^\/api\/tomadores\/\d+\/descricao$/, mod: ['emitir', 'tomadores'] },
   { m: 'GET', r: /^\/api\/empresas\/\d+\/tomadores$/, mod: ['tomadores', 'emitir', 'cobrancas'] },
   { m: 'PUT', r: /^\/api\/tomadores\/\d+$/, mod: ['tomadores', 'carteira'] }, // faturamento do cliente, pela Carteira

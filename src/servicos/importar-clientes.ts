@@ -4,6 +4,7 @@ import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
 import { consultarCnpj } from './consulta-cnpj.js';
 import { cnpjValido, cpfValido } from '../nfse/validacao.js';
+import { ClienteCarteira, criarCliente } from './carteira.js';
 
 // ---------------------------------------------------------------------------
 // Leitura da planilha (xlsx lido direto do zip; csv/txt também)
@@ -69,9 +70,17 @@ export interface LinhaPlanilha { linha: number; documento: string | null; tipo: 
 
 export function analisarPlanilha(empresaId: number, arquivo: string, buf: Buffer) {
   if (!db.prepare('SELECT 1 FROM empresas WHERE id = ?').get(empresaId)) throw new ErroNegocio('Empresa não encontrada.', 404);
+  return analisar(arquivo, buf, new Set((db.prepare("SELECT documento FROM tomadores WHERE empresa_id = ? AND documento IS NOT NULL").all(empresaId) as { documento: string }[]).map((x) => x.documento)));
+}
+
+/** Planilha para a Carteira: "já cadastrado" é quem já está na carteira ou é empresa do sistema. */
+export function analisarPlanilhaCarteira(escritorioId: number, arquivo: string, buf: Buffer) {
+  return analisar(arquivo, buf, new Set((db.prepare('SELECT documento FROM empresas WHERE escritorio_id = ?').all(escritorioId) as { documento: string }[]).map((x) => x.documento)));
+}
+
+function analisar(arquivo: string, buf: Buffer, existentes: Set<string>) {
   const celulas = buf.subarray(0, 2).toString() === 'PK' ? lerXlsx(buf) : /\.xlsx?$/i.test(arquivo) && buf.subarray(0, 4).toString('hex') === 'd0cf11e0'
     ? (() => { throw new ErroNegocio('Arquivo .xls antigo: salve a planilha como .xlsx (ou .csv) e envie de novo.'); })() : lerCsv(buf);
-  const existentes = new Set((db.prepare("SELECT documento FROM tomadores WHERE empresa_id = ? AND documento IS NOT NULL").all(empresaId) as { documento: string }[]).map((x) => x.documento));
   const vistos = new Set<string>();
   const linhas: LinhaPlanilha[] = [];
   celulas.forEach((row, i) => {
@@ -127,6 +136,49 @@ export async function importarLote(empresaId: number, itens: { documento: string
       res.push({ documento: doc, ok: true, id: Number(r.lastInsertRowid), nome: d.nome, mensagem: motivos.length ? `Criado; conferir: ${motivos.join('; ')}` : 'Criado; falta conferir.' });
     } catch (e) {
       res.push({ documento: doc, ok: false, mensagem: (e as Error).message });
+    }
+    if (doc.length === 14) await new Promise((r) => setTimeout(r, 250)); // respeita as bases públicas
+  }
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// Importação para a Carteira: consulta o CNPJ e cria o cliente com o regime pela opção do Simples
+// ---------------------------------------------------------------------------
+const REGIME_DO_SIMPLES: Record<number, 'MEI' | 'SIMPLES' | 'PRESUMIDO'> = { 2: 'MEI', 3: 'SIMPLES', 1: 'PRESUMIDO' };
+
+export async function importarParaCarteira(escritorioId: number, itens: { documento: string; nome?: string | null }[], buscar = consultarCnpj): Promise<ResultadoItem[]> {
+  const res: ResultadoItem[] = [];
+  const esc = db.prepare('SELECT cod_municipio, uf, cidade FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  for (const it of itens) {
+    const doc = it.documento.replace(/\D/g, '');
+    try {
+      if (db.prepare('SELECT 1 FROM empresas WHERE escritorio_id = ? AND documento = ?').get(escritorioId, doc)) { res.push({ documento: doc, ok: false, mensagem: 'Já cadastrado.' }); continue; }
+      const avisos: string[] = [];
+      let d: any;
+      if (doc.length === 14) {
+        if (!cnpjValido(doc)) throw new ErroNegocio('CNPJ inválido.');
+        const r = await buscar(doc);
+        if (!r.cod_municipio) throw new ErroNegocio('A Receita não informou o município: cadastre este cliente à mão.');
+        const regime = r.op_simp_nac ? REGIME_DO_SIMPLES[r.op_simp_nac] : 'SIMPLES';
+        if (!r.op_simp_nac) avisos.push('regime não informado pela Receita (ficou Simples)');
+        else if (regime === 'PRESUMIDO') avisos.push('não optante do Simples: ficou Lucro Presumido, confira se é Real');
+        if (!r.ativa) avisos.push(`situação na Receita: ${r.situacao ?? 'não ativa'}`);
+        d = { documento: doc, razao_social: r.razao_social || it.nome, nome_fantasia: r.nome_fantasia, cod_municipio: r.cod_municipio, uf: r.uf, email: r.email, cnae: r.cnae,
+          regime, contato_fone: r.fone, cep: r.cep, logradouro: r.logradouro, numero: r.numero, complemento: r.complemento, bairro: r.bairro, cidade: r.municipio };
+      } else {
+        if (!cpfValido(doc)) throw new ErroNegocio('CPF inválido.');
+        if (!it.nome) throw new ErroNegocio('CPF precisa do nome na planilha.');
+        if (!esc?.cod_municipio) throw new ErroNegocio('Para CPF, cadastre antes a empresa do escritório (o município dela é usado).');
+        d = { documento: doc, razao_social: it.nome, cod_municipio: esc.cod_municipio, uf: esc.uf, cidade: esc.cidade, regime: 'PF' };
+        avisos.push('pessoa física: município do escritório, confira o endereço');
+      }
+      d.observacoes = `Importado de planilha em ${hoje.split('-').reverse().join('/')}: confira regime, perfil e responsável.`;
+      const id = criarCliente(escritorioId, ClienteCarteira.parse(d));
+      res.push({ documento: doc, ok: true, id, nome: d.razao_social, mensagem: avisos.length ? `Criado; conferir: ${avisos.join('; ')}` : 'Criado.' });
+    } catch (e: any) {
+      res.push({ documento: doc, ok: false, mensagem: e?.issues ? e.issues.map((x: any) => x.message).join('; ') : e.message });
     }
     if (doc.length === 14) await new Promise((r) => setTimeout(r, 250)); // respeita as bases públicas
   }

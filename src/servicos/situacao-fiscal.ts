@@ -234,7 +234,7 @@ export function painelSituacao(escritorioId: number, empresas: number[] | null =
       s.id, s.status, s.situacao, s.total_aberto, s.qtd_pendencias, s.erro, s.liberar_em, s.solicitada_em, s.concluida_em, (s.pdf IS NOT NULL) AS tem_pdf
     FROM empresas e LEFT JOIN usuarios u ON u.id = e.responsavel_id
     LEFT JOIN situacao_fiscal s ON s.id = (SELECT MAX(id) FROM situacao_fiscal x WHERE x.empresa_id = e.id)
-    WHERE e.escritorio_id = ? AND e.situacao = 'ATIVO' AND e.eh_escritorio = 0 ${filtro}
+    WHERE e.escritorio_id = ? AND e.situacao = 'ATIVO' AND e.na_carteira = 1 ${filtro}
     ORDER BY CASE s.situacao WHEN 'PENDENCIAS' THEN 0 WHEN 'VERIFICAR' THEN 1 ELSE 2 END, cliente`).all(escritorioId, ...(empresas ?? [])) as any[])
     .map((l) => ({ ...l, tem_pdf: !!l.tem_pdf }));
 }
@@ -313,7 +313,7 @@ export function proximaOcorrencia(dias: number[], hoje: string): string {
 
 export function statusAgenda(escritorioId: number) {
   const a = lerAgenda(escritorioId);
-  const clientes = (db.prepare("SELECT COUNT(*) AS n FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND eh_escritorio = 0").get(escritorioId) as any).n as number;
+  const clientes = (db.prepare("SELECT COUNT(*) AS n FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND na_carteira = 1").get(escritorioId) as any).n as number;
   return { ...a, proxima: a.ativo ? proximaOcorrencia(a.dias, hojeBr()) : null, clientes, chamadasPorMes: clientes * 2 * a.dias.length };
 }
 
@@ -363,7 +363,7 @@ export async function sitfisAutomatico(agora = new Date(), opcoes: { transporte?
       if (vez) {
         // grava antes de começar: se o programa fechar no meio, a próxima abertura só busca os pendentes
         gravarAgenda(id, { ...a, ultimaOcorrencia: devida, ultimaExecucao: new Date().toISOString(), ultimoResultado: 'Em andamento…' });
-        const ids = (db.prepare("SELECT id FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND eh_escritorio = 0 ORDER BY id").all(id) as { id: number }[]).map((x) => x.id);
+        const ids = (db.prepare("SELECT id FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND na_carteira = 1 ORDER BY id").all(id) as { id: number }[]).map((x) => x.id);
         const r = await consultarVarios(id, usuario, ids, opcoes);
         const l = linhasDoResumo(id, ids);
         const resumo = `${r.prontos} relatório(s), ${r.comPendencias} com pendências (${l.novas.length} nova(s))${r.aguardando ? `, ${r.aguardando} aguardando a Receita` : ''}${r.erros ? `, ${r.erros} com erro` : ''}.`;
