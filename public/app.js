@@ -4069,11 +4069,21 @@ async function acoesContrato(c) {
       try { const r = await api('POST', `/api/escritorio/contratos/${c.id}/status`, { status: s, data }); d.close(); avisosDaAcao(r, 'Contrato atualizado.'); abaContratos(); } catch (e) { erro(e); }
     };
     on('ct-env', status('ENVIADO'));
+    // window.prompt() não existe no aplicativo instalado (Electron): a data vem de uma janela própria
     on('ct-ass', () => {
-      const data = prompt('Data da assinatura (dd/mm/aaaa):', dataBr(hoje()));
-      if (data == null) return;
-      const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(data.trim());
-      status('ASSINADO', null, m ? `${m[3]}-${m[2]}-${m[1]}` : hoje())();
+      abrirDialogo(`<form id="form-ass"><h2>Marcar como assinado — contrato ${String(c.numero).padStart(4, '0')}</h2>
+        <p class="sutil">${esc(c.cliente)}: ao confirmar, o faturamento mensal do honorário é ligado na empresa do escritório.</p>
+        <label>Data da assinatura <input type="date" name="data" required value="${hoje()}"></label>
+        <p class="erro" id="erro-ass"></p>
+        <div class="acoes"><button class="primario" type="submit">Confirmar assinatura</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d2) => {
+        const f = d2.querySelector('#form-ass');
+        f.onsubmit = async (ev) => {
+          ev.preventDefault();
+          const bt = f.querySelector('button[type=submit]'); bt.disabled = true;
+          try { const r = await api('POST', `/api/escritorio/contratos/${c.id}/status`, { status: 'ASSINADO', data: f.data.value || hoje() }); d2.close(); avisosDaAcao(r, 'Contrato assinado.'); abaContratos(); }
+          catch (e) { bt.disabled = false; $('#erro-ass').textContent = mensagemErro(e); }
+        };
+      });
     });
     on('ct-enc', status('ENCERRADO', 'Encerrar o contrato? A emissão automática do honorário deste cliente será desligada.'));
     on('ct-exc', async () => { if (!confirm('Excluir este contrato?')) return; try { await api('DELETE', `/api/escritorio/contratos/${c.id}`); d.close(); abaContratos(); } catch (e) { erro(e); } });
