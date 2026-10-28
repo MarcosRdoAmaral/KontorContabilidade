@@ -37,7 +37,8 @@ export interface Usuario {
 export function modulosDoUsuario(u: Pick<Usuario, 'tipo' | 'permissoes'>): Modulo[] {
   if (u.tipo === 'adm') return TODOS_MODULOS;
   if (u.permissoes == null) return TODOS_MODULOS.filter((m) => m !== 'excluir'); // exclusão nunca é liberada por padrão
-  try { return (JSON.parse(u.permissoes) as string[]).filter((m): m is Modulo => m in MODULOS); } catch { return []; }
+  // na ordem do menu (o escritório primeiro), qualquer que seja a ordem em que as permissões foram gravadas
+  try { const l = JSON.parse(u.permissoes) as string[]; return TODOS_MODULOS.filter((m) => l.includes(m)); } catch { return []; }
 }
 
 type Regra = { m?: string; r: RegExp; mod: Modulo[] | 'adm' | 'livre' };

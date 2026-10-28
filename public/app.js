@@ -400,8 +400,15 @@ async function iniciar() {
   if (estado.usuario.trocar_senha) { $('#app').hidden = true; return trocarSenha({ obrigatoria: true }); }
   await carregarEmpresas();
   atualizarLicenca();
-  if (!location.hash || !telaPermitida((location.hash.split('/')[1] || 'painel'))) location.hash = '#/' + (estado.usuario.modulos[0] ?? 'config');
+  // ao abrir, começa pela Visão geral do escritório (ou pela primeira tela liberada para o usuário)
+  const nomeInicial = location.hash.split('/')[1];
+  if (!nomeInicial || !telaPermitida(nomeInicial)) location.hash = '#/' + telaInicial();
   rotear();
+}
+
+function telaInicial() {
+  const m = estado.usuario.modulos;
+  return ['visao', 'obrigacoes', 'carteira'].find((x) => m.includes(x)) ?? m.find((x) => x !== 'excluir') ?? 'config';
 }
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
@@ -417,7 +424,8 @@ const rotas = {
 };
 
 function rotear() {
-  const [, nome = 'painel', param] = location.hash.split('/');
+  const [, nomeHash, param] = location.hash.split('/');
+  const nome = nomeHash || telaInicial();
   if ($('#dialogo').open) $('#dialogo').close(); // trocar de tela fecha a janela aberta
   document.querySelectorAll('#menu details.grupo').forEach((g) => { const ativo = [...g.querySelectorAll('a')].some((a) => a.getAttribute('href') === `#/${nome}` && !a.hidden); g.classList.toggle('tem-ativo', ativo); if (ativo) g.open = true; });
   document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === `#/${nome}` || (a.id === 'menu-doc' && nome === 'relatorios' && param === 'documentacao')));
