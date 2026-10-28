@@ -66,6 +66,19 @@ test('cadastro único: carteira e Clientes do escritório são o mesmo cliente',
     assert.equal(tomadores().length, 4, 'nenhum cliente duplicado');
     assert.deepEqual((await call('GET', '/api/escritorio/carteira/fora', undefined, t)).json.map((x: any) => x.id), [semMun]);
 
+    // faturamento pela Carteira; quem só tem a Carteira edita só clientes da carteira
+    const fat = (await call('GET', `/api/escritorio/carteira/${padaria}/faturamento`, undefined, t)).json;
+    assert.deepEqual([fat.empresa_id, fat.tomador.id], [esc, tomPadaria]);
+    assert.equal((await call('GET', `/api/escritorio/carteira/${esc}/faturamento`, undefined, t)).status, 400, 'o escritório não fatura para si');
+    await call('POST', '/api/usuarios', { login: 'bia', nome: 'Bia', senha: 'senha-segura-3', tipo: 'normal', permissoes: ['carteira'] }, t);
+    db.prepare("UPDATE usuarios SET trocar_senha = 0 WHERE login = 'BIA'").run();
+    const tb = (await call('POST', '/api/login', { usuario: 'bia', senha: 'senha-segura-3' })).json.token;
+    const corpoFat = { tipo_doc: 'CNPJ', documento: PADARIA, nome: 'x', modo_faturamento: 'BOLETO', vencimento_tipo: 'DIA_FIXO', vencimento_valor: 15 };
+    assert.equal((await call('PUT', `/api/tomadores/${tomPadaria}`, corpoFat, tb)).status, 200);
+    assert.equal((db.prepare('SELECT modo_faturamento FROM tomadores WHERE id = ?').get(tomPadaria) as any).modo_faturamento, 'BOLETO');
+    assert.equal((await call('PUT', `/api/tomadores/${semMun}`, { ...corpoFat, documento: '27865757000102' }, tb)).status, 403);
+    assert.equal((await call('GET', `/api/empresas/${esc}/servicos`, undefined, tb)).status, 200);
+
     // sincronizar de novo não muda nada (roda ao abrir o sistema)
     const { sincronizarTodosOsEscritorios } = await import('../src/servicos/cadastro-unico.js');
     sincronizarTodosOsEscritorios(); sincronizarTodosOsEscritorios();

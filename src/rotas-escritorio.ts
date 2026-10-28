@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from './db.js';
 import { exigirLogin, exigirPapel, restritoAEmpresas, type Usuario } from './auth.js';
 import { ErroNegocio } from './servicos/emissao.js';
-import { clientesForaDaCarteira } from './servicos/cadastro-unico.js';
+import { clientesForaDaCarteira, empresaDoEscritorio, sincronizarClienteNoCadastro } from './servicos/cadastro-unico.js';
 import { ClienteCarteira, criarCliente, editarCliente, listarCarteira, visaoGeral } from './servicos/carteira.js';
 import { Certificado, excluirCertificado, listarCertificados, renovarCertificado, resumoCertificados, salvarCertificado, TIPOS_CERT } from './servicos/certificados.js';
 import { REGIMES, AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, definirInicioDoControle, inicioDoControle, atualizarTarefa, entregarEmLote, excluirObrigacao, listarObrigacoes, listarTarefas, obrigacoesDoCliente, resumoTarefas, salvarObrigacao, salvarObrigacoesDoCliente } from './servicos/obrigacoes.js';
@@ -67,6 +67,17 @@ export async function rotasEscritorio(app: FastifyInstance) {
         }
       });
       return { resultados };
+    });
+    // faturamento do cliente (o cliente/tomador da empresa do escritório ligado à carteira)
+    api.get('/api/escritorio/carteira/:id/faturamento', async (req) => {
+      checar(req, id(req));
+      const esc = empresaDoEscritorio(u(req).escritorio_id);
+      if (!esc) throw new ErroNegocio('Marque primeiro na Carteira qual empresa é o próprio escritório: é ela que emite a nota e o boleto dos honorários.');
+      if (esc === id(req)) throw new ErroNegocio('O escritório não fatura para si mesmo.');
+      const tid = sincronizarClienteNoCadastro(u(req).escritorio_id, id(req));
+      const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(tid) as any;
+      const sp = db.prepare('SELECT servico_id, valor, descricao, padrao FROM tomador_servicos WHERE tomador_id = ? ORDER BY padrao DESC, id').all(tid) as any[];
+      return { empresa_id: esc, tomador: { ...t, servicos_padrao: sp.map((x) => ({ ...x, padrao: !!x.padrao })) } };
     });
     api.get('/api/escritorio/carteira/:id/obrigacoes', async (req) => { checar(req, id(req)); return obrigacoesDoCliente(u(req).escritorio_id, id(req)); });
     api.put('/api/escritorio/carteira/:id/obrigacoes', async (req) => {

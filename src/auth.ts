@@ -51,6 +51,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira$/, mod: ['carteira', 'visao', 'obrigacoes', 'certificados', 'honorarios', 'captura'] },
   { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer)?$/, mod: ['carteira'] },
+  { m: 'GET', r: /^\/api\/escritorio\/carteira\/\d+\/faturamento$/, mod: ['carteira'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['carteira', 'obrigacoes'] },
   { r: /^\/api\/escritorio\/carteira\/\d+\/obrigacoes$/, mod: ['obrigacoes'] },
   { r: /^\/api\/escritorio\/(tarefas|obrigacoes)(\/\d+|\/entregar|\/inicio)?$/, mod: ['obrigacoes'] },
@@ -71,8 +72,9 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/empresas(\/\d+)?$|^\/api\/empresas\/\d+\/(certificado|logo)$/, mod: ['empresas'] },
   { m: 'POST', r: /^\/api\/tomadores\/\d+\/descricao$/, mod: ['emitir', 'tomadores'] },
   { m: 'GET', r: /^\/api\/empresas\/\d+\/tomadores$/, mod: ['tomadores', 'emitir', 'cobrancas'] },
+  { m: 'PUT', r: /^\/api\/tomadores\/\d+$/, mod: ['tomadores', 'carteira'] }, // faturamento do cliente, pela Carteira
   { r: /^\/api\/empresas\/\d+\/tomadores(\/planilha\/(analisar|importar))?$|^\/api\/tomadores\/\d+$/, mod: ['tomadores'] },
-  { m: 'GET', r: /^\/api\/empresas\/\d+\/servicos$/, mod: ['servicos', 'emitir'] },
+  { m: 'GET', r: /^\/api\/empresas\/\d+\/servicos$/, mod: ['servicos', 'emitir', 'carteira'] },
   { r: /^\/api\/empresas\/\d+\/servicos$|^\/api\/servicos\/\d+$/, mod: ['servicos'] },
   { m: 'GET', r: /^\/api\/empresas\/\d+\/conta-bancaria$/, mod: ['banco', 'empresas', 'cobrancas', 'emitir'] },
   { r: /^\/api\/empresas\/\d+\/conta-bancaria$/, mod: ['banco', 'empresas'] },

@@ -347,6 +347,8 @@ export async function rotas(app: FastifyInstance) {
       const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(id) as any;
       if (!t) throw new ErroNegocio('Tomador não encontrado.', 404);
       checarEmpresa(req, t.empresa_id);
+      // quem só tem a Carteira edita apenas o faturamento dos clientes da carteira
+      if (!t.carteira_empresa_id && !modulosDoUsuario(u(req)).includes('tomadores')) throw new ErroNegocio('Sem permissão para editar este cliente.', 403);
       // cliente da carteira: identificação, contato e endereço só mudam na Carteira
       const d = Tomador.parse(t.carteira_empresa_id ? { ...(req.body as any), ...Object.fromEntries(CAMPOS_BLOQUEADOS.map((c) => [c, t[c] ?? null])) } : req.body);
       conferirServicosPadrao(t.empresa_id, d.servicos_padrao);

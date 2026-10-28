@@ -1939,7 +1939,7 @@ async function telaAgenda() {
       <td><span class="${STATUS_AGENDA[i.status][1]}">${STATUS_AGENDA[i.status][0]}</span>${i.mensagem && i.status !== 'PULADA' ? `<br><span class="dica">${esc(i.mensagem)}</span>` : ''}</td>
       <td class="acoes-linha">${i.status === 'PRONTA' || i.status === 'ERRO' ? `<button data-exe="${i.tomador_id}:${i.servico_id}">${i.status === 'ERRO' ? 'Tentar de novo' : 'Emitir'}</button> <button data-pul="${i.tomador_id}:${i.servico_id}">Pular</button>` : i.status === 'PULADA' ? `<button data-des="${i.tomador_id}:${i.servico_id}">Desfazer</button>` : i.nota_id ? `<a href="#/nota/${i.nota_id}">Ver nota</a>` : ''}</td></tr>`).join('')).join('')}
     </tbody></table></div>`
-    : '<div class="vazio">Nenhum cliente com serviço padrão. Abra um cliente, cadastre o serviço e o valor na aba <strong>Serviços padrão</strong> e volte aqui para agendar. <a href="#/tomadores">Ir para Clientes</a></div>'}`;
+    : '<div class="vazio">Nenhum cliente com serviço padrão. Abra um cliente, cadastre o serviço e o valor na aba <strong>Serviços padrão</strong> e volte aqui para agendar. ' + (empresa()?.eh_escritorio ? '<a href="#/carteira">Ir para a Carteira (botão Faturamento)</a>' : '<a href="#/tomadores">Ir para os tomadores</a>') + '</div>'}`;
   $('#mes-ag').onchange = (ev) => { telaAgenda.mes = ev.target.value || mesAtual(); telaAgenda(); };
   const recarregar = async () => { const y = window.scrollY; await telaAgenda(); window.scrollTo(0, y); };
   const par = (v) => v.split(':').map(Number);
@@ -2512,26 +2512,29 @@ function ligarConsultaCnpj(form, modo) {
 // ---------------------------------------------------------------------------
 
 const NOME_MODO = { NOTA: 'Nota', NOTA_BOLETO: 'Nota + boleto', BOLETO: 'Só boleto' };
-async function formTomador(t, aoSalvar) {
-  const servicosEmpresa = await api('GET', `/api/empresas/${estado.empresaId}/servicos`).catch(() => []);
+/** opcoes.daCarteira: aberto pela Carteira, mostra só o faturamento (o cadastro é o da carteira); opcoes.empresaId: empresa do tomador. */
+async function formTomador(t, aoSalvar, opcoes = {}) {
+  const empresaId = opcoes.empresaId ?? estado.empresaId, daCarteira = !!opcoes.daCarteira;
+  const servicosEmpresa = await api('GET', `/api/empresas/${empresaId}/servicos`).catch(() => []);
   t ??= { tipo_doc: 'CNPJ', modo_faturamento: 'NOTA', vencimento_tipo: 'PRAZO', vencimento_valor: 10, enviar_email_auto: 0 };
   abrirDialogo(`
-    <form id="form-tomador"><h2>${t.id ? 'Editar cliente' : 'Novo cliente'}</h2>
-      <nav class="abas" id="abas-cliente"><a href="#" data-aba="cadastro" class="ativo">Cadastro</a><a href="#" data-aba="servicos">Serviços padrão${t.servicos_padrao?.length ? ' •' : ''}</a><a href="#" data-aba="descontos">Descontos${t.desconto_valor ? ' •' : ''}</a><a href="#" data-aba="descricao">Descrição da nota${t.descricao_modelo ? ' •' : ''}</a></nav>
+    <form id="form-tomador"><h2>${daCarteira ? `Faturamento — ${esc(t.nome)}` : t.id ? 'Editar cliente' : 'Novo cliente'}</h2>
+      ${daCarteira ? '<p class="sutil">Como o escritório cobra este cliente: a nota e o boleto dos honorários saem pela empresa do escritório. Nome, documento, contato e endereço são os do cadastro da Carteira.</p>' : ''}
+      <nav class="abas" id="abas-cliente"><a href="#" data-aba="cadastro" class="ativo">${daCarteira ? 'Cobrança' : 'Cadastro'}</a><a href="#" data-aba="servicos">Serviços padrão${t.servicos_padrao?.length ? ' •' : ''}</a><a href="#" data-aba="descontos">Descontos${t.desconto_valor ? ' •' : ''}</a><a href="#" data-aba="descricao">Descrição da nota${t.descricao_modelo ? ' •' : ''}</a></nav>
       <div data-painel="cadastro">
-      ${t.carteira_empresa_id ? `<div class="banner"><strong>Cliente da Carteira.</strong> Nome, documento, contato e endereço vêm da Carteira de clientes e só mudam por lá, para não haver dois cadastros. Aqui ficam só os dados de faturamento. <button type="button" data-ir-carteira>Editar na Carteira</button></div>` : ''}
-      ${t.conferir ? `<div class="banner teste"><strong>Falta conferir:</strong> ${esc(t.conferir_motivo ?? 'cadastro criado por planilha')}.<br>Complete o que faltar e marque <label class="check" style="display:inline-flex;gap:6px"><input type="checkbox" name="conferido"> Cadastro conferido</label> para tirar a marca.</div>` : ''}
-      <fieldset class="sub"><legend>Identificação</legend><div class="grade">
+      ${t.carteira_empresa_id && !daCarteira ? `<div class="banner"><strong>Cliente da Carteira.</strong> Nome, documento, contato e endereço vêm da Carteira de clientes e só mudam por lá, para não haver dois cadastros. Aqui ficam só os dados de faturamento. <button type="button" data-ir-carteira>Editar na Carteira</button></div>` : ''}
+      ${t.conferir ? `<div class="banner teste"><strong>Falta conferir:</strong> ${esc(t.conferir_motivo ?? 'cadastro criado por planilha')}.<br>${daCarteira ? 'Endereço e e-mail se corrigem em <em>Editar</em>, na Carteira. ' : ''}Complete o que faltar e marque <label class="check" style="display:inline-flex;gap:6px"><input type="checkbox" name="conferido"> Cadastro conferido</label> para tirar a marca.</div>` : ''}
+      <fieldset class="sub" data-dados-cadastro><legend>Identificação</legend><div class="grade">
         <label>Tipo <select name="tipo_doc">${['CNPJ', 'CPF', 'SEM'].map((v) => `<option value="${v}" ${t.tipo_doc === v ? 'selected' : ''}>${v === 'SEM' ? 'Sem documento' : v}</option>`).join('')}</select></label>
         <label>CNPJ / CPF <span class="linha-campo"><input name="documento" value="${esc(t.documento ?? '')}"><button type="button" data-buscar-cnpj>Buscar CNPJ</button></span><span class="dica" data-cnpj-info>Digite o CNPJ e clique em Buscar para preencher os dados.</span></label>
         <label class="largo">Nome / Razão social <input name="nome" required value="${esc(t.nome ?? '')}"></label>
         <label>Inscrição municipal <input name="inscricao_municipal" value="${esc(t.inscricao_municipal ?? '')}"></label>
       </div></fieldset>
-      <fieldset class="sub"><legend>Contato</legend><div class="grade">
+      <fieldset class="sub" data-dados-cadastro><legend>Contato</legend><div class="grade">
         <label>E-mail principal <input name="email" type="email" value="${esc(t.email ?? '')}"></label>
         <label>Telefone / WhatsApp <input name="fone" value="${esc(t.fone ?? '')}"></label>
       </div></fieldset>
-      <fieldset class="sub"><legend>Endereço</legend><div class="grade">
+      <fieldset class="sub" data-dados-cadastro><legend>Endereço</legend><div class="grade">
         <label>CEP <input name="cep" value="${esc(t.cep ?? '')}"><span class="dica" data-municipio></span></label>
         <label>Município (IBGE) <input name="cod_municipio" maxlength="7" value="${esc(t.cod_municipio ?? '')}"></label>
         <label>Cidade <input name="cidade" maxlength="60" value="${esc(t.cidade ?? '')}"></label>
@@ -2602,7 +2605,8 @@ async function formTomador(t, aoSalvar) {
     if (t.carteira_empresa_id) {
       ['documento', 'nome', 'inscricao_municipal', 'email', 'fone', 'cep', 'cod_municipio', 'cidade', 'uf', 'logradouro', 'numero', 'complemento', 'bairro'].forEach((n) => { f[n].readOnly = true; f[n].classList.add('travado'); });
       f.tipo_doc.disabled = true; f.querySelector('[data-buscar-cnpj]').hidden = true; f.querySelector('[data-cnpj-info]').hidden = true;
-      f.querySelector('[data-ir-carteira]').onclick = () => { d.close(); telaCarteira.filtro = { q: t.documento ?? t.nome, situacao: '', regime: '', resp: '' }; location.hash = '#/carteira'; };
+      if (daCarteira) f.querySelectorAll('[data-dados-cadastro]').forEach((x) => (x.hidden = true));
+      else f.querySelector('[data-ir-carteira]').onclick = () => { d.close(); telaCarteira.filtro = { q: t.documento ?? t.nome, situacao: '', regime: '', resp: '' }; location.hash = '#/carteira'; };
     }
     f.querySelectorAll('#abas-cliente a').forEach((a) => (a.onclick = (ev) => {
       ev.preventDefault();
@@ -2675,7 +2679,7 @@ async function formTomador(t, aoSalvar) {
         ['dm_ativo', 'dm_texto', 'dm_periodo', 'dm_oc', 'dm_cp'].forEach((k) => delete corpo[k]);
         corpo.desconto_valor = numero(f.desconto_valor.value) || null; corpo.desconto_motivo = f.desconto_motivo.value.trim() || null;
         corpo.multa_pct = numero(f.multa_pct.value); corpo.juros_pct_mes = numero(f.juros_pct_mes.value); corpo.desc_pontual_pct = numero(f.desc_pontual_pct.value) || null; corpo.desc_pontual_dias = f.desc_pontual_dias.value === '' ? null : Number(f.desc_pontual_dias.value);
-        const r = t.id ? await api('PUT', `/api/tomadores/${t.id}`, corpo) : await api('POST', `/api/empresas/${estado.empresaId}/tomadores`, corpo);
+        const r = t.id ? await api('PUT', `/api/tomadores/${t.id}`, corpo) : await api('POST', `/api/empresas/${empresaId}/tomadores`, corpo);
         d.close(); aviso('Cliente salvo.');
         aoSalvar?.(t.id ?? r.id);
       } catch (e) { $('#erro-tomador').textContent = mensagemErro(e); }
@@ -3467,9 +3471,10 @@ async function telaCarteira() {
   const podeEditar = estado.usuario.papel !== 'cliente' && pode('carteira');
   const [lista, tab, equipe, fora] = await Promise.all([api('GET', '/api/escritorio/carteira'), tabelasEscritorio(), equipeEscritorio(), podeEditar ? api('GET', '/api/escritorio/carteira/fora').catch(() => []) : []]);
   const f = telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' };
+  const escCart = lista.find((c) => c.eh_escritorio);
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Carteira de clientes</h1><p class="sutil">Cadastro único dos clientes: regime, perfil e responsável definem as obrigações, e cada cliente já aparece em Clientes do escritório, pronto para faturar.</p></div>
-      ${podeEditar ? `<div>${fora.length ? `<button id="trazer-cli">Trazer de Clientes (${fora.length})</button> ` : ''}<button class="primario" id="novo-cli">Novo cliente</button></div>` : ''}</div>
+    <div class="topo"><div><h1>Carteira de clientes</h1><p class="sutil">Cadastro único dos clientes: regime, perfil e responsável definem as obrigações; a cobrança dos honorários (nota, boleto, serviços padrão) fica em <em>Faturamento</em>, no botão ⋯ ou dentro de Editar.</p></div>
+      ${podeEditar ? `<div>${fora.length ? `<button id="trazer-cli" title="Clientes cadastrados só como avulsos na empresa do escritório">Trazer avulsos (${fora.length})</button> ` : ''}${escCart && pode('tomadores') ? '<button id="avulsos-cli" title="Quem o escritório fatura mas não é cliente da contabilidade">Clientes avulsos</button> ' : ''}<button class="primario" id="novo-cli">Novo cliente</button></div>` : ''}</div>
     <div class="filtros">
       <label style="flex:1 1 240px">Buscar <input type="search" id="f-q" placeholder="Nome ou CNPJ/CPF" value="${esc(f.q)}"></label>
       <label>Situação <select id="f-sit"><option value="">Todas</option>${Object.entries(SITUACAO_CLI).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label>
@@ -3505,9 +3510,18 @@ async function telaCarteira() {
   $('#f-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
   $('#novo-cli') && ($('#novo-cli').onclick = () => formCliente(null, tab, equipe, lista.some((c) => c.eh_escritorio)));
   $('#trazer-cli') && ($('#trazer-cli').onclick = () => trazerDeClientes(fora, tab));
+  $('#avulsos-cli') && ($('#avulsos-cli').onclick = () => irParaEmpresa(escCart.id, '#/tomadores'));
   pintar();
   if (telaCarteira.abrirNovo && $('#novo-cli')) { telaCarteira.abrirNovo = false; $('#novo-cli').click(); }
   if (telaCarteira.abrirTrazer) { telaCarteira.abrirTrazer = false; if ($('#trazer-cli')) $('#trazer-cli').click(); }
+}
+
+/** Faturamento do cliente da carteira (o cliente da empresa do escritório que recebe a nota e o boleto dos honorários). */
+async function faturamentoDoCliente(id) {
+  try {
+    const r = await api('GET', `/api/escritorio/carteira/${id}/faturamento`);
+    formTomador(r.tomador, () => telaCarteira(), { empresaId: r.empresa_id, daCarteira: true });
+  } catch (e) { aviso(mensagemErro(e)); }
 }
 
 /** Traz para a carteira os clientes cadastrados só em "Clientes" da empresa do escritório (cadastro único). */
@@ -3541,11 +3555,13 @@ function trazerDeClientes(fora, tab) {
 
 function maisAcoesCliente(c) {
   const itens = [
+    pode('carteira') && !c.eh_escritorio && ['fat:', 'Faturamento (nota, boleto e serviços padrão)'],
     pode('honorarios') && !c.eh_escritorio && ['#/honorarios', 'Contrato e honorários'],
     pode('certificados') && ['#/certificados', 'Certificados'],
     pode('captura') && ['#/captura', 'Captura de documentos'],
     pode('empresas') && ['emp:#/empresas', 'Dados de emissão, certificado A1 e logo'],
     pode('emitir') && ['emp:#/emitir', 'Emitir NFS-e por este cliente'],
+    pode('tomadores') && [`emp:#/tomadores`, c.eh_escritorio ? 'Clientes avulsos do escritório' : 'Tomadores das NFS-e deste cliente'],
     pode('compras') && ['emp:#/nfe-sefaz', 'NF-e recebidas (SEFAZ)'],
   ].filter(Boolean);
   abrirDialogo(`<h2>${esc(c.nome_fantasia || c.razao_social)}</h2>
@@ -3557,7 +3573,8 @@ function maisAcoesCliente(c) {
     d.querySelectorAll('[data-ir]').forEach((b) => (b.onclick = () => {
       d.close();
       const h = b.dataset.ir;
-      if (h.startsWith('emp:')) irParaEmpresa(c.id, h.slice(4)); else location.hash = h;
+      if (h === 'fat:') faturamentoDoCliente(c.id);
+      else if (h.startsWith('emp:')) irParaEmpresa(c.id, h.slice(4)); else location.hash = h;
     }));
   });
 }
@@ -3614,9 +3631,10 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
         <label class="largo">Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
       </div></fieldset>
       <p class="erro" id="erro-cli"></p>
-      <div class="acoes"><button class="primario" type="submit">Salvar</button><button type="button" data-fechar>Fechar</button></div>
+      <div class="acoes"><button class="primario" type="submit">Salvar</button>${!novo && !c.eh_escritorio ? '<button type="button" id="cli-fat" title="Nota, boleto, vencimento e serviços padrão dos honorários">Faturamento</button>' : ''}<button type="button" data-fechar>Fechar</button></div>
     </form>`, (d) => {
     const f = $('#form-cli');
+    if ($('#cli-fat')) $('#cli-fat').onclick = () => { d.close(); faturamentoDoCliente(c.id); };
     f.regime.value = c.regime ?? 'SIMPLES'; f.situacao.value = c.situacao;
     const enc = () => ($('#lbl-enc').hidden = f.situacao.value !== 'ENCERRADO');
     f.situacao.onchange = enc; enc();
