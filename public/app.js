@@ -4544,6 +4544,7 @@ async function telaSituacao() {
         <label>Primeiro dia <select name="dia1">${opDia(ag.dias[0] ?? 1)}</select></label>
         <label>Segundo dia (opcional) <select name="dia2">${opDia(ag.dias[1] ?? null, true)}</select></label>
         <label class="largo">Enviar o resultado para (até 5 e-mails, separados por vírgula) <input name="emails" value="${esc((ag.emails ?? []).join(', '))}"></label>
+        <label class="largo"><span><input type="checkbox" name="avisarClientes" ${ag.avisarClientes ? 'checked' : ''}> Depois da consulta, avisar por e-mail os clientes marcados na coluna “Avisar” que tiverem débitos em aberto</span><span class="dica">O aviso lista os débitos, sem guias: o cliente procura o escritório quando quiser pagar. Cada consulta é avisada uma vez só.</span></label>
         <p class="dica largo">${ag.clientes} cliente(s) ativo(s): cerca de <strong id="agsf-chamadas">${ag.chamadasPorMes}</strong> chamada(s) ao Integra Contador por mês, cobradas pelo SERPRO.</p>
         <p class="erro largo" id="erro-agsf"></p>
         <div class="acoes largo"><button class="primario" type="submit">Salvar</button></div></form>` : '<p class="dica">Só um administrador altera a consulta automática.</p>'}
@@ -4556,7 +4557,8 @@ async function telaSituacao() {
     </div>
     <p class="dica">Cada consulta usa duas chamadas ao Integra Contador (pedido do relatório e emissão), cobradas pelo SERPRO conforme o contrato. A Receita leva alguns segundos para gerar cada relatório.</p>
     <div id="sf-res"></div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>`;
+    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th title="Recebe por e-mail o aviso de débitos em aberto">Avisar</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>
+    <p class="dica">Marque em “Avisar” só os clientes que devem receber o aviso de débitos em aberto (quem já sabe e não paga normalmente pode ficar desmarcado).</p>`;
   $('#sf-sit').value = f.sit;
   const fa = $('#form-agsf');
   if (fa) {
@@ -4566,7 +4568,7 @@ async function telaSituacao() {
       ev.preventDefault(); $('#erro-agsf').textContent = '';
       const dias = [Number(fa.dia1.value), fa.dia2.value ? Number(fa.dia2.value) : null].filter(Boolean);
       try {
-        await api('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: fa.ativo.checked, dias, emails: fa.emails.value.split(/[,;\s]+/).filter(Boolean) });
+        await api('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: fa.ativo.checked, dias, emails: fa.emails.value.split(/[,;\s]+/).filter(Boolean), avisarClientes: fa.avisarClientes.checked });
         aviso('Consulta automática salva.'); telaSituacao();
       } catch (er) { $('#erro-agsf').textContent = mensagemErro(er); }
     };
@@ -4582,8 +4584,14 @@ async function telaSituacao() {
       <td class="num">${c.status === 'PRONTA' ? c.qtd_pendencias ?? 0 : '—'}</td>
       <td class="num ${c.situacao === 'PENDENCIAS' ? 'cor-vermelho' : ''}">${c.status === 'PRONTA' && c.situacao === 'PENDENCIAS' ? brl(c.total_aberto) : '—'}</td>
       <td>${c.concluida_em ? dhBr(c.concluida_em) : c.solicitada_em ? `<span class="dica">pedido em ${dhBr(c.solicitada_em)}</span>` : '—'}</td>
+      <td><input type="checkbox" data-avisar="${c.empresa_id}" ${c.avisar_debitos ? 'checked' : ''} aria-label="Avisar este cliente" title="${c.email ? `Avisar ${esc(c.email)}` : 'Sem e-mail no cadastro'}">${c.ultimo_aviso ? `<br><span class="dica">avisado ${dataBr(c.ultimo_aviso)}</span>` : ''}</td>
       <td class="acoes-linha">${c.status === 'PRONTA' ? `<button data-det="${c.id}">Detalhes</button> ${c.tem_pdf ? `<button data-pdf="${c.id}">PDF</button>` : ''}` : ''}${c.status === 'SOLICITADA' ? `<button data-at="${c.empresa_id}">Atualizar</button>` : ''}</td></tr>`).join('')
-      : '<tr><td colspan="8"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>';
+      : '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>';
+    conteudo.querySelectorAll('[data-avisar]').forEach((cb) => (cb.onchange = async () => {
+      const c = d.clientes.find((x) => x.empresa_id === Number(cb.dataset.avisar));
+      try { await api('PUT', '/api/escritorio/situacao-fiscal/marcar-aviso', { ids: [c.empresa_id], avisar: cb.checked }); c.avisar_debitos = cb.checked; aviso(cb.checked ? `${c.cliente} será avisado dos débitos em aberto.${c.email ? '' : ' Atenção: sem e-mail no cadastro.'}` : `${c.cliente} não será mais avisado.`); }
+      catch (e) { cb.checked = !cb.checked; aviso(mensagemErro(e)); }
+    }));
     const sel = () => { const n = conteudo.querySelectorAll('[data-sel]:checked').length; const b = $('#sf-consultar'); b.disabled = !n || !d.configurado; b.textContent = n ? `Consultar ${n} cliente(s)` : 'Consultar selecionados'; };
     conteudo.querySelectorAll('[data-sel]').forEach((c) => (c.onchange = sel)); sel();
     conteudo.querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheSituacaoFiscal(Number(b.dataset.det))));
@@ -4612,6 +4620,68 @@ async function consultarSituacoes(ids, botao) {
   } catch (e) { aviso(mensagemErro(e)); botao.disabled = false; botao.textContent = texto; }
 }
 
+/** Recalcular uma guia (DARF pelo Sicalc, DAS de cobrança ou guia da DCTFWeb): um PDF por guia. */
+function formGuia(d, sug, voltarPara) {
+  const g = { tipo: 'DARF', ...sug };
+  abrirDialogo(`<form id="form-guia"><h2>Recalcular guia — ${esc(d.cliente)}</h2>
+    <div class="grade">
+      <label class="largo">Guia <select name="tipo">
+        <option value="DARF">DARF (Sicalc) — débitos da Receita e multas por atraso</option>
+        <option value="DAS">DAS de cobrança — Simples Nacional</option>
+        <option value="DCTFWEB">Guia da DCTFWeb — contribuições previdenciárias</option></select></label>
+      <label data-t="DARF">Código da receita <input name="receita" value="${esc(g.receita ?? '')}" placeholder="1138-01"></label>
+      <label data-t="DARF">Período de apuração <input name="periodo_darf" value="${esc(g.tipo === 'DARF' ? g.periodo ?? '' : '')}" placeholder="MM/AAAA, AAAA ou DD/MM/AAAA"></label>
+      <label data-t="DARF">Vencimento original <input type="date" name="vencimento" value="${esc(g.vencimento ?? '')}"></label>
+      <label data-t="DARF">Valor do principal (R$) <input name="valor" data-num inputmode="decimal" value="${g.valor != null ? String(g.valor).replace('.', ',') : ''}"></label>
+      <label data-t="DARF" class="largo">Número de referência (notificação, se houver) <input name="referencia" value="${esc(g.referencia ?? '')}"></label>
+      <label data-t="DAS DCTFWEB">Período de apuração (MM/AAAA) <input name="periodo_mes" value="${esc(g.tipo !== 'DARF' ? g.periodo ?? '' : '')}" placeholder="07/2026"></label>
+      <label data-t="DARF DCTFWEB">Data de pagamento <input type="date" name="data" value="${hoje()}"></label>
+    </div>
+    <p class="dica" data-t="DAS">O DAS de cobrança sai com o valor em cobrança na Receita (já descontando pagamentos parciais e parcelas) e com a data de validade que a própria Receita define.</p>
+    <p class="dica" data-t="DCTFWEB">A guia da DCTFWeb reúne todos os débitos daquele período de apuração, com multa e juros até a data de pagamento.</p>
+    <p class="dica" data-t="DARF">O Sicalc calcula multa e juros até a data de pagamento sobre o valor do principal (o saldo devedor do relatório).</p>
+    <p class="dica">Cada guia gerada é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
+    <p class="erro" id="erro-guia"></p>
+    <div class="acoes"><button class="primario" type="submit">Gerar guia (PDF)</button><button type="button" id="guia-voltar">Voltar</button></div></form>`, (dlg) => {
+    const f = dlg.querySelector('#form-guia');
+    f.tipo.value = g.tipo;
+    const ajustar = () => f.querySelectorAll('[data-t]').forEach((x) => (x.hidden = !x.dataset.t.split(' ').includes(f.tipo.value)));
+    f.tipo.onchange = ajustar; ajustar();
+    dlg.querySelector('#guia-voltar').onclick = () => detalheSituacaoFiscal(voltarPara);
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const t = f.tipo.value;
+      const corpo = t === 'DARF' ? { tipo: t, receita: f.receita.value.trim(), descricao: g.descricao ?? null, periodo: f.periodo_darf.value.trim(), vencimento: f.vencimento.value, valor: numero(f.valor.value), data: f.data.value, referencia: f.referencia.value.trim() || null }
+        : t === 'DAS' ? { tipo: t, periodo: f.periodo_mes.value.trim(), descricao: g.descricao ?? null } : { tipo: t, periodo: f.periodo_mes.value.trim(), data: f.data.value, descricao: g.descricao ?? null };
+      const bt = f.querySelector('button[type=submit]'); bt.disabled = true; bt.textContent = 'Gerando na Receita…';
+      try {
+        const r = await api('POST', `/api/escritorio/situacao-fiscal/guias/${d.empresa_id}`, corpo);
+        baixar(`/api/escritorio/guias/${r.id}/pdf`, r.nome, true);
+        aviso(`${r.titulo}${r.valor != null ? `: ${brl(r.valor)}` : ''}${r.validade ? `, pagar até ${dataBr(r.validade)}` : ''}.`);
+        detalheSituacaoFiscal(voltarPara);
+      } catch (e) { bt.disabled = false; bt.textContent = 'Gerar guia (PDF)'; $('#erro-guia').textContent = mensagemErro(e); }
+    };
+  });
+}
+
+/** Prévia e envio manual do aviso de débitos em aberto ao cliente. */
+async function previaAvisoCliente(d, voltarPara) {
+  let t;
+  try { t = await api('GET', `/api/escritorio/situacao-fiscal/aviso/${d.empresa_id}`); } catch (e) { return aviso(mensagemErro(e)); }
+  abrirDialogo(`<div class="dlg-largo"><h2>Avisar o cliente — ${esc(d.cliente)}</h2>
+    <p class="sutil">Para: <strong>${t.para ? esc(t.para) : 'sem e-mail no cadastro da Carteira'}</strong> · Assunto: ${esc(t.assunto)}</p>
+    <div class="cartao" style="white-space:pre-wrap">${t.linhas.map(esc).join('\n')}</div>
+    <p class="erro" id="erro-aviso"></p>
+    <div class="acoes"><button class="primario" id="av-enviar" ${t.para ? '' : 'disabled'}>Enviar e-mail</button><button id="av-voltar">Voltar</button></div></div>`, (dlg) => {
+    dlg.querySelector('#av-voltar').onclick = () => detalheSituacaoFiscal(voltarPara);
+    dlg.querySelector('#av-enviar').onclick = async (ev) => {
+      ev.target.disabled = true;
+      try { const r = await api('POST', `/api/escritorio/situacao-fiscal/avisar/${d.empresa_id}`); aviso(`Aviso enviado para ${r.enviadoPara.join(', ')}.`); detalheSituacaoFiscal(voltarPara); }
+      catch (e) { ev.target.disabled = false; $('#erro-aviso').textContent = mensagemErro(e); }
+    };
+  });
+}
+
 async function detalheSituacaoFiscal(id) {
   const d = await api('GET', `/api/escritorio/situacao-fiscal/${id}`);
   const r = d.resumo;
@@ -4627,9 +4697,10 @@ async function detalheSituacaoFiscal(id) {
   }
   const hojeIso = hoje();
   const certVencida = r?.certidaoValidade && r.certidaoValidade < hojeIso;
-  const linhaDeb = (i) => i.tipo === 'DEBITO' ? `<tr><td><strong>${esc(i.receita)}</strong> ${esc(i.descricao ?? '')}${i.notificacao ? `<br><span class="dica">Notificação ${esc(i.notificacao)}</span>` : ''}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td>
-      <td class="num">${i.valorOriginal != null ? brl(i.valorOriginal) : ''}</td><td class="num">${i.saldo != null ? `<strong>${brl(i.saldo)}</strong>` : ''}</td><td>${esc(i.situacao ?? '')}</td></tr>`
-    : `<tr><td colspan="6">${esc(i.texto)}</td></tr>`;
+  const recalc = (i, k) => (i.guia && d.status === 'PRONTA' ? `<button data-guia="${k}" title="Gerar a guia com multa e juros até a data de pagamento">Recalcular</button>` : '');
+  const linhaDeb = (i, k) => i.tipo === 'DEBITO' ? `<tr><td><strong>${esc(i.receita)}</strong> ${esc(i.descricao ?? '')}${i.notificacao ? `<br><span class="dica">Notificação ${esc(i.notificacao)}</span>` : ''}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td>
+      <td class="num">${i.valorOriginal != null ? brl(i.valorOriginal) : ''}</td><td class="num">${i.saldo != null ? `<strong>${brl(i.saldo)}</strong>` : ''}</td><td>${esc(i.situacao ?? '')}</td><td class="acoes-linha">${recalc(i, k)}</td></tr>`
+    : `<tr><td colspan="6">${esc(i.texto)}</td><td class="acoes-linha">${recalc(i, k)}</td></tr>`;
   abrirDialogo(`<div class="dlg-largo"><h2>Situação fiscal — ${esc(d.cliente)}</h2>
     <p class="sutil">${fmtDoc(d.documento)} · consultado em ${dhBr(d.concluida_em)}${d.usuario ? ` por ${esc(d.usuario)}` : ''}</p>
     ${r?.certidao ? `<p>Última certidão: <strong>${esc(r.certidao)}</strong>${r.certidaoValidade ? ` — ${certVencida ? `<span class="cor-vermelho">vencida em ${dataBr(r.certidaoValidade)}</span>` : `válida até ${dataBr(r.certidaoValidade)}`}` : ''}</p>` : ''}
@@ -4641,15 +4712,28 @@ async function detalheSituacaoFiscal(id) {
     </div>` : ''}
     ${porTributo.size ? `<h3>Impostos em aberto na Receita Federal</h3><table class="tabela"><thead><tr><th>Tributo</th><th class="num">Débitos</th><th>Vencimento mais antigo</th><th class="num">Saldo</th></tr></thead><tbody>
       ${[...porTributo.values()].sort((x, y) => y.total - x.total).map((g) => `<tr><td><strong>${esc(g.receita)}</strong> ${esc(g.nome)}</td><td class="num">${g.qtd}</td><td>${dataBr(g.maisAntigo)}</td><td class="num"><strong>${brl(g.total)}</strong></td></tr>`).join('')}</tbody></table>` : ''}
-    ${debitos.length ? `<details><summary><strong>Todos os débitos (${debitos.length})</strong></summary><table class="tabela" style="margin-top:8px"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo (c/ multa e juros)</th><th>Situação</th></tr></thead><tbody>${debitos.map(linhaDeb).join('')}</tbody></table></details>` : ''}
+    ${debitos.length ? `<details open><summary><strong>Todos os débitos (${debitos.length})</strong> <span class="dica">— “Recalcular” gera a guia atualizada (um PDF por guia, cobrado pelo SERPRO)</span></summary><table class="tabela" style="margin-top:8px"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo (c/ multa e juros)</th><th>Situação</th><th></th></tr></thead><tbody>${debitos.map(linhaDeb).join('')}</tbody></table></details>` : ''}
     ${inscricoes.length ? `<h3>Inscrições em dívida ativa (PGFN)</h3><table class="tabela"><thead><tr><th>Inscrição</th><th>Tributo</th><th>Inscrito em</th><th>Situação</th><th>Processo</th></tr></thead><tbody>
       ${inscricoes.map((i) => i.tipo === 'INSCRICAO' ? `<tr><td>${esc(i.inscricao)}</td><td>${esc(i.receita ?? '')} ${esc(i.descricao ?? '')}</td><td>${dataBr(i.inscritoEm)}</td><td>${esc(i.situacao ?? '')}</td><td><span class="dica">${esc(i.processo ?? '')}</span></td></tr>` : `<tr><td colspan="5">${esc(i.texto)}</td></tr>`).join('')}</tbody></table>
-      <p class="dica">O relatório não traz o valor das inscrições em dívida ativa: consulte os valores no Regularize (PGFN).</p>` : ''}
+      <p class="dica">O relatório não traz o valor das inscrições em dívida ativa, e a guia delas não sai pelo Integra Contador: valores e guias no <a href="https://www.regularize.pgfn.gov.br/" target="_blank" rel="noopener">Regularize (PGFN)</a>.</p>` : ''}
     ${suspensos.length ? `<h3>Com exigibilidade suspensa (não impedem a certidão)</h3><ul class="dicas">${suspensos.flatMap((s) => s.itens.map((i) => `<li>${i.tipo === 'PARCELAMENTO' ? `Parcelamento ${esc(i.inscricao)}${i.descricao ? ` (${esc(i.descricao)})` : ''}: ${brl(i.saldo)} suspenso` : i.tipo === 'DEBITO' ? `${esc(i.receita)} ${esc(i.descricao ?? '')} — ${esc(i.periodo ?? '')}, vence ${dataBr(i.vencimento)}: ${brl(i.saldo)} (${esc(i.situacao ?? '')})` : esc(i.texto)}</li>`)).join('')}</ul>` : ''}
     <p class="dica">Os valores são lidos do relatório da Receita; em caso de dúvida, vale o PDF.</p>
+    ${d.guias.length ? `<h3>Guias recalculadas</h3><table class="tabela"><thead><tr><th>Guia</th><th class="num">Valor</th><th>Pagar até</th><th>Gerada em</th><th></th></tr></thead><tbody>
+      ${d.guias.map((g) => `<tr><td>${esc(g.titulo)}</td><td class="num">${g.valor != null ? brl(g.valor) : '—'}</td><td>${g.validade ? dataBr(g.validade) : '—'}</td><td>${dhBr(g.criado_em)}${g.usuario ? `<br><span class="dica">${esc(g.usuario)}</span>` : ''}</td><td class="acoes-linha"><button data-gpdf="${g.id}">PDF</button></td></tr>`).join('')}</tbody></table>` : ''}
+    <h3>Aviso ao cliente</h3>
+    <p><label class="check" style="display:inline-flex;gap:8px"><input type="checkbox" id="sf-avisar" ${d.avisar_debitos ? 'checked' : ''}> Avisar este cliente de débitos em aberto</label> <span class="dica">${d.email ? `e-mail: ${esc(d.email)}` : 'sem e-mail no cadastro da Carteira'}</span></p>
+    ${d.avisos.length ? `<p class="dica">Últimos avisos: ${d.avisos.map((a) => `${dhBr(a.enviado_em)} (${a.automatico ? 'automático' : esc(a.usuario ?? 'manual')})`).join(' · ')}</p>` : ''}
     ${d.historico.length > 1 ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.historico.slice(1).map((h) => `<li>${dhBr(h.concluida_em ?? h.solicitada_em)} — ${h.status === 'PRONTA' ? (SIT_FISCAL[h.situacao]?.[0] ?? h.situacao) + (h.situacao === 'PENDENCIAS' ? ` (${brl(h.total_aberto)})` : '') : h.status === 'ERRO' ? 'erro' : 'aguardando'} ${h.tem_pdf ? `<button data-pdfh="${h.id}">PDF</button>` : ''}</li>`).join('')}</ul>` : ''}
-    <div class="acoes">${d.tem_pdf ? '<button class="primario" id="sf-pdf">Abrir o relatório (PDF)</button>' : ''}<button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    <div class="acoes">${d.tem_pdf ? '<button class="primario" id="sf-pdf">Abrir o relatório (PDF)</button>' : ''}${d.situacao === 'PENDENCIAS' ? '<button id="sf-aviso">Avisar o cliente agora</button>' : ''}<button id="sf-guia" title="Recalcular uma guia informando os dados à mão">Outra guia</button><button data-fechar>Fechar</button></div></div>`, (dlg) => {
     $('#sf-pdf') && ($('#sf-pdf').onclick = () => baixar(`/api/escritorio/situacao-fiscal/${id}/pdf`, 'situacao-fiscal.pdf', true));
+    dlg.querySelectorAll('[data-guia]').forEach((b) => (b.onclick = () => formGuia(d, debitos[Number(b.dataset.guia)].guia, id)));
+    $('#sf-guia').onclick = () => formGuia(d, { tipo: 'DARF' }, id);
+    dlg.querySelectorAll('[data-gpdf]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/guias/${b.dataset.gpdf}/pdf`, 'guia.pdf', true)));
+    $('#sf-avisar').onchange = async (ev) => {
+      try { await api('PUT', '/api/escritorio/situacao-fiscal/marcar-aviso', { ids: [d.empresa_id], avisar: ev.target.checked }); aviso(ev.target.checked ? 'O cliente será avisado dos débitos em aberto.' : 'O cliente não será mais avisado.'); }
+      catch (e) { ev.target.checked = !ev.target.checked; aviso(mensagemErro(e)); }
+    };
+    $('#sf-aviso') && ($('#sf-aviso').onclick = () => previaAvisoCliente(d, id));
     dlg.querySelectorAll('[data-pdfh]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/situacao-fiscal/${b.dataset.pdfh}/pdf`, 'situacao-fiscal.pdf', true)));
   });
 }

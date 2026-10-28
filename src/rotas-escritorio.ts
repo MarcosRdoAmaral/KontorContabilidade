@@ -11,6 +11,8 @@ import { REGIMES, AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, de
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
+import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
+import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
 import { xmlNfseCapturada } from './servicos/nfse-capturadas.js';
@@ -276,8 +278,29 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/situacao-fiscal/:id', async (req) => {
       const d = detalheSituacao(u(req).escritorio_id, id(req));
       checar(req, d.empresa_id);
-      return d;
+      // para cada débito da Receita, a guia que o recalcula (sugestão; o usuário confere antes de gerar)
+      if (d.resumo?.secoes) for (const sec of d.resumo.secoes) if (sec.tipo === 'PENDENCIA' && sec.orgao === 'RFB') for (const it of sec.itens) it.guia = sugestaoGuia(it, sec.titulo);
+      const e = db.prepare('SELECT email, avisar_debitos FROM empresas WHERE id = ?').get(d.empresa_id) as any;
+      return { ...d, guias: listarGuias(u(req).escritorio_id, d.empresa_id), avisos: ultimosAvisos(d.empresa_id), email: e?.email ?? null, avisar_debitos: !!e?.avisar_debitos };
     });
+    // recálculo manual de guias (uma por vez, um PDF por guia)
+    api.post('/api/escritorio/situacao-fiscal/guias/:id', async (req) => {
+      checar(req, id(req));
+      return gerarGuia(u(req).escritorio_id, u(req).id, id(req), PedidoGuia.parse(req.body));
+    });
+    api.get('/api/escritorio/guias/:id/pdf', async (req, reply) => {
+      const g = pdfGuia(u(req).escritorio_id, id(req));
+      return reply.type('application/pdf').header('Content-Disposition', `inline; filename="${g.nome}"`).send(g.pdf);
+    });
+    // aviso de débitos em aberto ao cliente (só os marcados)
+    api.put('/api/escritorio/situacao-fiscal/marcar-aviso', async (req) => {
+      const b = z.object({ ids: z.array(z.number().int().positive()).min(1).max(1000), avisar: z.boolean() }).parse(req.body);
+      for (const i of b.ids) checar(req, i);
+      marcarAviso(u(req).escritorio_id, b.ids, b.avisar);
+      return { ok: true };
+    });
+    api.get('/api/escritorio/situacao-fiscal/aviso/:id', async (req) => { checar(req, id(req)); return textoDoAviso(u(req).escritorio_id, id(req)); });
+    api.post('/api/escritorio/situacao-fiscal/avisar/:id', async (req) => { checar(req, id(req)); return avisarCliente(u(req).escritorio_id, id(req), u(req).id); });
     api.get('/api/escritorio/situacao-fiscal/:id/pdf', async (req, reply) => {
       const d = detalheSituacao(u(req).escritorio_id, id(req));
       checar(req, d.empresa_id);

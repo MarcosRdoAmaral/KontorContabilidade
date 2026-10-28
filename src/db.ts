@@ -920,6 +920,31 @@ const migracoes: string[] = [
     AND id NOT IN (SELECT empresa_id FROM tarefas) AND id NOT IN (SELECT empresa_id FROM contratos);
   -- quem já emitiu notas pelo sistema continua como empresa (e cliente, se for o caso)
   UPDATE empresas SET gerencia = 1 WHERE id IN (SELECT empresa_id FROM notas);`,
+  // 34: guias recalculadas pelo Integra Contador e aviso de débitos em aberto aos clientes escolhidos
+  `CREATE TABLE guias_recalculadas (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('DARF','DAS','DCTFWEB')),
+    titulo TEXT NOT NULL,
+    periodo TEXT,
+    valor REAL,
+    validade TEXT,
+    pdf BLOB NOT NULL,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_guias_empresa ON guias_recalculadas(empresa_id);
+  ALTER TABLE empresas ADD COLUMN avisar_debitos INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE avisos_debitos (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    situacao_fiscal_id INTEGER REFERENCES situacao_fiscal(id) ON DELETE SET NULL,
+    emails TEXT NOT NULL,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    automatico INTEGER NOT NULL DEFAULT 0,
+    enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_avisos_debitos ON avisos_debitos(empresa_id);`,
 ];
 
 export function migrar(): void {

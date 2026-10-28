@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { db } from '../db.js';
 import { enviarEmailSimples } from './email.js';
+import { avisarMarcadosAutomaticamente } from './avisos-debitos.js';
 import { ErroNegocio } from './emissao.js';
 import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from './integra-contador.js';
 
@@ -231,12 +232,13 @@ export async function consultarVarios(escritorioId: number, usuarioId: number | 
 export function painelSituacao(escritorioId: number, empresas: number[] | null = null) {
   const filtro = empresas ? `AND e.id IN (${empresas.map(() => '?').join(',') || 'NULL'})` : '';
   return (db.prepare(`SELECT e.id AS empresa_id, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento, e.regime, e.op_simp_nac, u.nome AS responsavel,
-      s.id, s.status, s.situacao, s.total_aberto, s.qtd_pendencias, s.erro, s.liberar_em, s.solicitada_em, s.concluida_em, (s.pdf IS NOT NULL) AS tem_pdf
+      s.id, s.status, s.situacao, s.total_aberto, s.qtd_pendencias, s.erro, s.liberar_em, s.solicitada_em, s.concluida_em, (s.pdf IS NOT NULL) AS tem_pdf,
+      e.avisar_debitos, e.email, (SELECT MAX(a.enviado_em) FROM avisos_debitos a WHERE a.empresa_id = e.id) AS ultimo_aviso
     FROM empresas e LEFT JOIN usuarios u ON u.id = e.responsavel_id
     LEFT JOIN situacao_fiscal s ON s.id = (SELECT MAX(id) FROM situacao_fiscal x WHERE x.empresa_id = e.id)
     WHERE e.escritorio_id = ? AND e.situacao = 'ATIVO' AND e.na_carteira = 1 ${filtro}
     ORDER BY CASE s.situacao WHEN 'PENDENCIAS' THEN 0 WHEN 'VERIFICAR' THEN 1 ELSE 2 END, cliente`).all(escritorioId, ...(empresas ?? [])) as any[])
-    .map((l) => ({ ...l, tem_pdf: !!l.tem_pdf }));
+    .map((l) => ({ ...l, tem_pdf: !!l.tem_pdf, avisar_debitos: !!l.avisar_debitos }));
 }
 
 export function detalheSituacao(escritorioId: number, id: number) {
@@ -271,12 +273,22 @@ export const AgendaSitfis = z.object({
   ativo: z.boolean(),
   dias: z.array(z.number().int().min(1).max(28)).min(1, 'Escolha ao menos um dia').max(2, 'No máximo dois dias por mês'),
   emails: z.array(z.string().trim().email('E-mail inválido')).max(5),
+  /** Depois da consulta automática, avisar por e-mail os clientes marcados que tiverem débitos em aberto. */
+  avisarClientes: z.boolean().default(false),
 });
-interface AgendaSalva extends z.infer<typeof AgendaSitfis> { ultimaOcorrencia?: string | null; ultimaExecucao?: string | null; ultimoResultado?: string | null }
+interface AgendaSalva extends z.infer<typeof AgendaSitfis> { ultimaOcorrencia?: string | null; ultimaExecucao?: string | null; ultimoResultado?: string | null; inicioRodada?: string | null }
+
+/** Avisa os clientes marcados com pendências na rodada automática atual (só se a opção estiver ligada). */
+async function avisarClientesDaRodada(escritorioId: number): Promise<string> {
+  const a = lerAgenda(escritorioId);
+  if (!a.avisarClientes || !a.inicioRodada) return '';
+  const r = await avisarMarcadosAutomaticamente(escritorioId, a.inicioRodada);
+  return r.enviados || r.falhas.length ? ` Clientes avisados: ${r.enviados}${r.falhas.length ? `; sem aviso: ${r.falhas.join('; ')}` : ''}.` : '';
+}
 
 export function lerAgenda(escritorioId: number): AgendaSalva {
   const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(P_AGENDA(escritorioId)) as any)?.valor;
-  return v ? JSON.parse(v) : { ativo: false, dias: [1], emails: [] };
+  return { avisarClientes: false, ...(v ? JSON.parse(v) : { ativo: false, dias: [1], emails: [] }) };
 }
 function gravarAgenda(escritorioId: number, a: AgendaSalva) {
   db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(P_AGENDA(escritorioId), JSON.stringify(a));
@@ -362,7 +374,7 @@ export async function sitfisAutomatico(agora = new Date(), opcoes: { transporte?
       const usuario = (db.prepare("SELECT id FROM usuarios WHERE escritorio_id = ? AND tipo = 'adm' AND mestre = 0 ORDER BY id LIMIT 1").get(id) as any)?.id ?? null;
       if (vez) {
         // grava antes de começar: se o programa fechar no meio, a próxima abertura só busca os pendentes
-        gravarAgenda(id, { ...a, ultimaOcorrencia: devida, ultimaExecucao: new Date().toISOString(), ultimoResultado: 'Em andamento…' });
+        gravarAgenda(id, { ...a, ultimaOcorrencia: devida, ultimaExecucao: new Date().toISOString(), inicioRodada: new Date().toISOString().replace('T', ' ').slice(0, 19), ultimoResultado: 'Em andamento…' });
         const ids = (db.prepare("SELECT id FROM empresas WHERE escritorio_id = ? AND situacao = 'ATIVO' AND na_carteira = 1 ORDER BY id").all(id) as { id: number }[]).map((x) => x.id);
         const r = await consultarVarios(id, usuario, ids, opcoes);
         const l = linhasDoResumo(id, ids);
@@ -376,10 +388,13 @@ export async function sitfisAutomatico(agora = new Date(), opcoes: { transporte?
           try { envio = (await enviarEmailSimples(id, a.emails, `Situação fiscal dos clientes — ${hoje.split('-').reverse().join('/')}`, corpo)) ? ' E-mail enviado.' : ' E-mail não enviado: configure o SMTP.'; }
           catch (e: any) { envio = ` Falha no e-mail: ${e?.message ?? e}`; }
         }
-        gravarAgenda(id, { ...lerAgenda(id), ultimoResultado: resumo + envio });
+        const av = await avisarClientesDaRodada(id);
+        gravarAgenda(id, { ...lerAgenda(id), ultimoResultado: resumo + envio + av });
         feitos.push({ escritorio: id, consultados: r.consultados });
       } else {
         await consultarVarios(id, usuario, pendentes, opcoes);
+        const av = await avisarClientesDaRodada(id);
+        if (av) gravarAgenda(id, { ...lerAgenda(id), ultimoResultado: `${lerAgenda(id).ultimoResultado ?? ''}${av}` });
         feitos.push({ escritorio: id, consultados: pendentes.length });
       }
     } catch (e: any) {

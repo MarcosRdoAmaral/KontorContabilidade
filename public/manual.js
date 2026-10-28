@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.9.1';
+export const MANUAL_VERSAO = '1.10.0';
 
 export const MANUAL = [
   {
@@ -151,6 +151,16 @@ export const MANUAL = [
         <li><strong>Conferir o PDF:</strong> o relatório veio num formato que o sistema não conseguiu ler; abra o PDF.</li>
       </ul>
       <p>Clientes com pendência aparecem primeiro na lista e na Visão geral. Os valores são lidos do relatório: em caso de dúvida, vale o PDF.</p>
+      <h3>Recalcular guias</h3>
+      <p>Em <em>Detalhes</em>, cada débito da Receita tem o botão <strong>Recalcular</strong>: confira os dados, informe a data de pagamento e clique em <em>Gerar guia (PDF)</em>. Sai um PDF por guia, que também fica guardado em <em>Guias recalculadas</em>. O sistema escolhe o tipo de guia, e dá para trocar:</p>
+      <ul>
+        <li><strong>DARF (Sicalc):</strong> débitos da Receita e multas por atraso de declaração (MAED, com o número da notificação). Multa e juros até a data de pagamento.</li>
+        <li><strong>DAS de cobrança:</strong> Simples Nacional, com o valor em cobrança na Receita (já descontando pagamentos parciais e parcelas) e a validade definida pela Receita.</li>
+        <li><strong>Guia da DCTFWeb:</strong> contribuições previdenciárias (CP-patronal, terceiros), com todos os débitos do período de apuração.</li>
+      </ul>
+      <p><em>Outra guia</em> recalcula informando os dados à mão. Nada é gerado sozinho: cada guia é uma chamada ao Integra Contador, cobrada pelo SERPRO. As inscrições em dívida ativa (PGFN) não saem pelo Integra Contador: use o Regularize.</p>
+      <h3>Aviso de débitos ao cliente</h3>
+      <p>Marque na coluna <strong>Avisar</strong> os clientes que devem receber por e-mail o aviso de débitos em aberto (quem já sabe e não paga normalmente pode ficar desmarcado). O aviso lista os débitos por tributo e as inscrições em dívida ativa, sem guias: o cliente procura o escritório quando quiser pagar. Ele sai depois da consulta automática, se a opção <em>avisar os clientes marcados</em> estiver ligada (uma vez por consulta), ou na hora, pelo botão <em>Avisar o cliente agora</em> em Detalhes, que mostra o texto antes de enviar.</p>
       <h3>Consulta automática</h3>
       <p>No quadro <em>Consulta automática</em> (administrador), escolha um ou dois dias do mês e os e-mails que recebem o resultado. Nesses dias, a partir das 7h e com o programa aberto, o sistema consulta todos os clientes ativos e manda um e-mail com quem tem pendência, separando as <strong>pendências novas</strong> das que continuam e listando os clientes que não puderam ser consultados (sem procuração, por exemplo). Se o computador estiver desligado no dia, a consulta roda na próxima abertura do programa. Relatórios que a Receita ainda estava gerando são buscados sozinhos nas rodadas seguintes.</p>
       <p class="dica">O quadro mostra quantas chamadas ao Integra Contador a consulta automática faz por mês (duas por cliente em cada rodada).</p>

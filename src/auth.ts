@@ -63,7 +63,7 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/escritorio\/avisos(\/enviar)?$/, mod: 'adm' },
   { r: /^\/api\/escritorio\/integra\/(config|testar)$/, mod: 'adm' },
   { m: 'PUT', r: /^\/api\/escritorio\/situacao-fiscal\/agenda$/, mod: 'adm' },
-  { r: /^\/api\/escritorio\/situacao-fiscal(\/consultar|\/agenda|\/\d+(\/pdf)?)?$/, mod: ['situacao'] },
+  { r: /^\/api\/escritorio\/situacao-fiscal(\/consultar|\/agenda|\/\d+(\/pdf)?|\/guias\/\d+|\/avisar\/\d+|\/aviso\/\d+|\/marcar-aviso)?$|^\/api\/escritorio\/guias\/\d+\/pdf$/, mod: ['situacao'] },
   { r: /^\/api\/escritorio\/integra\/(previa|conferir)$/, mod: ['obrigacoes'] },
   { r: /^\/api\/me(\/empresa|\/senha)?$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/licenca$/, mod: 'livre' },
