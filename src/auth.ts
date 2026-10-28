@@ -8,9 +8,10 @@ export type Tipo = 'adm' | 'normal';
 
 /** Módulos que podem ser liberados por usuário. Configurações (usuários, e-mail, backup, licença) é sempre só do adm. */
 export const MODULOS = {
+  painel: 'Painel do mês',
   visao: 'Visão geral do escritório', carteira: 'Carteira de clientes', obrigacoes: 'Obrigações e prazos', certificados: 'Certificados',
   honorarios: 'Contratos e honorários', captura: 'Captura de documentos', situacao: 'Situação fiscal',
-  painel: 'Painel do mês', emitir: 'Emitir nota', notas: 'Notas emitidas', cobrancas: 'Cobranças',
+  emitir: 'Emitir nota', notas: 'Notas emitidas', cobrancas: 'Cobranças',
   banco: 'Dados bancários', despesas: 'Despesas e balanço', tomadores: 'Clientes', servicos: 'Serviços', empresas: 'Empresas', relatorios: 'Relatórios', compras: 'Compras', tributacao: 'Tributação e apuração',
   excluir: 'Excluir registros',
 } as const;

@@ -400,7 +400,7 @@ async function iniciar() {
   if (estado.usuario.trocar_senha) { $('#app').hidden = true; return trocarSenha({ obrigatoria: true }); }
   await carregarEmpresas();
   atualizarLicenca();
-  // ao abrir, começa pela Visão geral do escritório (ou pela primeira tela liberada para o usuário)
+  // ao abrir, começa pela primeira tela do menu liberada para o usuário
   const nomeInicial = location.hash.split('/')[1];
   if (!nomeInicial || !telaPermitida(nomeInicial)) location.hash = '#/' + telaInicial();
   rotear();
@@ -408,7 +408,7 @@ async function iniciar() {
 
 function telaInicial() {
   const m = estado.usuario.modulos;
-  return ['visao', 'obrigacoes', 'carteira'].find((x) => m.includes(x)) ?? m.find((x) => x !== 'excluir') ?? 'config';
+  return m.find((x) => x !== 'excluir') ?? 'config'; // a primeira tela do menu liberada (Painel do mês)
 }
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
