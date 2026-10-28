@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.7.0';
+export const MANUAL_VERSAO = '1.8.0';
 
 export const MANUAL = [
   {
@@ -79,7 +79,8 @@ export const MANUAL = [
   {
     id: 'certificados', titulo: 'Certificados e procurações', resumo: 'Validade dos A1, A3, e-CPF e procurações eletrônicas.',
     corpo: `
-      <p>Os certificados A1 enviados em Empresas &gt; Certificado aparecem sozinhos. Cadastre aqui os A3 (token/cartão), e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura), com a validade e onde ficam guardados.</p>
+      <p><strong>Enviar o A1 do cliente:</strong> em <em>Cadastrar</em>, escolha o tipo <em>Certificado A1</em> e o cliente, selecione o arquivo .pfx/.p12 e digite a senha. Titular, CNPJ e validade são lidos do arquivo; o certificado fica guardado criptografado na empresa do cliente e passa a ser usado para emitir NFS-e, buscar NF-e e capturar documentos. Para trocar um A1 que venceu, use <em>Trocar A1</em> na linha dele.</p>
+      <p>Os certificados A1 enviados em Empresas &gt; Certificado também aparecem sozinhos. Cadastre aqui os A3 (token/cartão), e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura), com a validade e onde ficam guardados.</p>
       <p>A situação mostra os vencidos e os que vencem em 7 e 30 dias. Ao renovar, use <em>Renovado</em> e informe a nova validade: o registro antigo fica no histórico e sai dos avisos.</p>`,
   },
   {

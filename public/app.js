@@ -3007,7 +3007,7 @@ async function telaEmpresas() {
     ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Empresa</th><th>Documento</th><th>Regime</th><th>Ambiente</th><th>Certificado</th><th></th></tr></thead><tbody>
       ${lista.map((e, i) => `<tr><td>${esc(e.razao_social)}</td><td>${fmtDoc(e.documento)}</td><td>${['', 'Não optante', 'MEI', 'Simples ME/EPP'][e.op_simp_nac]}</td>
         <td>${e.ambiente === 1 ? 'Produção' : 'Testes'}</td><td>${e.modo_emissao === 'PORTAL' ? 'Portal (CNPJ e senha)' : e.tem_certificado ? `até ${dataBr(e.cert_validade)}` : '<span class="pendente-txt">Falta enviar</span>'}</td>
-        <td><button data-editar="${i}">Editar</button> ${e.modo_emissao === 'PORTAL' ? '' : `<button data-cert="${i}">Certificado</button>`} <button data-logo="${i}">${e.tem_logo ? 'Logo ✓' : 'Logo'}</button> <button data-banco="${i}">Dados bancários</button></td></tr>`).join('')}
+        <td><button data-editar="${i}">Editar</button> ${e.modo_emissao === 'PORTAL' ? '' : `<button data-cert="${i}">Certificado</button>`} <button data-logo="${i}">${e.tem_logo ? 'Logo ✓' : 'Logo'}</button> <button data-banco="${i}">Dados bancários</button>${estado.usuario.mestre ? ` <button class="perigo" data-excluir="${i}">Excluir</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="vazio">Cadastre a primeira empresa cliente do escritório.</div>'}`;
   $('#novo').onclick = () => formEmpresa();
   conteudo.querySelectorAll('[data-editar]').forEach((b) => (b.onclick = () => formEmpresa(lista[b.dataset.editar])));
@@ -3018,6 +3018,36 @@ async function telaEmpresas() {
     api('PUT', '/api/me/empresa', { id: estado.empresaId }).catch(() => {});
     $('#empresa-atual').value = estado.empresaId; infoEmpresa(); location.hash = '#/banco';
   }));
+  conteudo.querySelectorAll('[data-excluir]').forEach((b) => (b.onclick = () => excluirEmpresa(lista[b.dataset.excluir])));
+}
+
+/** Exclusão definitiva de uma empresa: só o usuário master, confirmando com a senha master. */
+async function excluirEmpresa(e) {
+  let r;
+  try { r = await api('GET', `/api/empresas/${e.id}/exclusao`); } catch (err) { return aviso(mensagemErro(err)); }
+  const itens = [[r.notas, 'nota(s) emitida(s)'], [r.cobrancas, 'cobrança(s)/boleto(s)'], [r.clientes, 'cliente(s)/tomador(es)'], [r.compras, 'compra(s) e NF-e recebida(s)'], [r.despesas, 'despesa(s)'], [r.tarefas, 'obrigação(ões) na agenda'], [r.contratos, 'contrato(s)']].filter(([n]) => n);
+  abrirDialogo(`<form id="form-excluir-emp"><h2>Excluir empresa</h2>
+    <p><strong>${esc(r.empresa.razao_social)}</strong> · ${fmtDoc(r.empresa.documento)}</p>
+    <div class="banner teste"><strong>Esta exclusão é definitiva.</strong> Some a empresa e tudo o que é dela${itens.length ? ':' : ' (não há movimento registrado).'}
+      ${itens.length ? `<ul>${itens.map(([n, t]) => `<li>${n} ${t}</li>`).join('')}</ul>` : ''}
+      ${r.empresa.eh_escritorio ? '<p><strong>Atenção:</strong> esta é a empresa do escritório, que emite as notas e os boletos de honorários.</p>' : ''}
+      Antes de apagar, o sistema guarda uma cópia de segurança do banco na pasta <em>antes-de-excluir</em>.</div>
+    <label>Senha master <input type="password" name="senha" required autocomplete="current-password"></label>
+    <p class="erro" id="erro-excluir-emp"></p>
+    <div class="acoes"><button class="perigo" type="submit">Excluir definitivamente</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
+    const f = d.querySelector('#form-excluir-emp');
+    f.senha.focus();
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const bt = f.querySelector('button[type=submit]'); bt.disabled = true;
+      try {
+        await api('POST', `/api/empresas/${e.id}/excluir`, { senha: f.senha.value });
+        d.close(); aviso(`${r.empresa.razao_social} foi excluída.`);
+        if (estado.empresaId === e.id) { estado.empresaId = null; try { localStorage.removeItem('empresaId'); } catch { /* ok */ } }
+        await carregarEmpresas(); telaEmpresas();
+      } catch (err) { bt.disabled = false; $('#erro-excluir-emp').textContent = mensagemErro(err); }
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -3860,7 +3890,7 @@ async function telaCertificados() {
   const f = telaCertificados.filtro ??= { q: '', sit: 'ATIVOS' };
   const r = d.resumo;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Certificados e procurações</h1><p class="sutil">Os A1 guardados no sistema aparecem sozinhos. Cadastre aqui os A3, e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura).</p></div>
+    <div class="topo"><div><h1>Certificados e procurações</h1><p class="sutil">Envie aqui o certificado A1 do cliente com a senha (em Cadastrar, tipo Certificado A1): titular e validade vêm do arquivo. Cadastre também os A3, e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura).</p></div>
       <button class="primario" id="novo-cert">Cadastrar</button></div>
     <div class="resumo">
       <div class="cartao"><div class="sutil">Vencidos</div><div class="valor" style="color:${r.vencidos ? COR.vermelho : COR.verde}">${r.vencidos}</div></div>
@@ -3882,11 +3912,11 @@ async function telaCertificados() {
       <td>${esc(tab.tiposCertificado[c.tipo] ?? c.tipo)}${c.emissor ? `<br><span class="dica">${esc(c.emissor)}</span>` : ''}</td>
       <td>${esc(c.cliente ?? '—')}</td><td>${dataBr(c.validade)}</td>
       <td>${esc(c.guarda ?? '')}${c.observacoes ? `<br><span class="dica">${esc(c.observacoes)}</span>` : ''}</td>
-      <td class="acoes-linha">${c.origem === 'SISTEMA' ? (pode('empresas') ? `<button data-emp="${c.empresa_id}">Trocar A1</button>` : '') : `<button data-ed="${c.id}">Editar</button> ${c.situacao !== 'RENOVADO' ? `<button data-ren="${c.id}">Renovado</button>` : ''}`}</td></tr>`).join('')
+      <td class="acoes-linha">${c.origem === 'SISTEMA' ? `<button data-emp="${c.empresa_id}">Trocar A1</button>` : `<button data-ed="${c.id}">Editar</button> ${c.situacao !== 'RENOVADO' ? `<button data-ren="${c.id}">Renovado</button>` : ''}`}</td></tr>`).join('')
       : '<tr><td colspan="7"><div class="vazio" style="border:0">Nenhum certificado nesta lista.</div></td></tr>';
     conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formCert(d.certificados.find((c) => c.id === Number(b.dataset.ed)), tab, carteira)));
     conteudo.querySelectorAll('[data-ren]').forEach((b) => (b.onclick = () => renovarCert(d.certificados.find((c) => c.id === Number(b.dataset.ren)))));
-    conteudo.querySelectorAll('[data-emp]').forEach((b) => (b.onclick = () => irParaEmpresa(Number(b.dataset.emp), '#/empresas')));
+    conteudo.querySelectorAll('[data-emp]').forEach((b) => (b.onclick = () => formCert(null, tab, carteira, { tipo: 'A1', empresa_id: Number(b.dataset.emp) })));
   };
   $('#ce-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
   $('#ce-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
@@ -3894,26 +3924,48 @@ async function telaCertificados() {
   pintar();
 }
 
-function formCert(c, tab, carteira) {
+function formCert(c, tab, carteira, inicial = null) {
   const novo = !c;
-  c ??= { tipo: 'A3' };
+  c ??= { tipo: 'A3', ...(inicial ?? {}) };
   abrirDialogo(`<form id="form-cert"><h2>${novo ? 'Cadastrar certificado ou procuração' : 'Editar'}</h2><div class="grade">
       <label>Tipo <select name="tipo">${Object.entries(tab.tiposCertificado).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
       <label class="largo">Cliente <select name="empresa_id" data-num><option value="">— nenhum (do escritório ou de um sócio)</option>${carteira.map((e) => `<option value="${e.id}">${esc(e.nome_fantasia || e.razao_social)}</option>`).join('')}</select></label>
-      <label class="largo">Titular <input name="titular" required value="${esc(c.titular ?? '')}" placeholder="Ex.: João da Silva (sócio) ou Padaria Boa Ltda"></label>
-      <label>CPF / CNPJ do titular <input name="documento" value="${esc(c.documento ?? '')}"></label>
-      <label>Validade <input type="date" name="validade" required value="${esc(c.validade ?? '')}"></label>
-      <label>Certificadora / órgão <input name="emissor" value="${esc(c.emissor ?? '')}" placeholder="Ex.: Certisign, e-CAC, SEFAZ/SC"></label>
-      <label class="largo">Onde fica <input name="guarda" value="${esc(c.guarda ?? '')}" placeholder="Ex.: token na gaveta 2, com o cliente, nuvem"></label>
-      <label class="largo">Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
-    </div><p class="dica">Certificado A1 usado para emitir NFS-e e buscar NF-e se envia em Empresas &gt; Certificado: aí ele aparece aqui sozinho.</p>
+      <label class="largo" data-a1>Arquivo do certificado (.pfx ou .p12) <input type="file" name="arquivo" accept=".pfx,.p12"></label>
+      <label data-a1>Senha do certificado <input type="password" name="senha" autocomplete="off"></label>
+      <p class="dica largo" data-a1>Titular, CNPJ e validade são lidos do próprio arquivo. O certificado fica guardado criptografado na empresa do cliente e passa a ser usado para emitir NFS-e, buscar NF-e e capturar documentos.</p>
+      <label class="largo" data-manual>Titular <input name="titular" value="${esc(c.titular ?? '')}" placeholder="Ex.: João da Silva (sócio) ou Padaria Boa Ltda"></label>
+      <label data-manual>CPF / CNPJ do titular <input name="documento" value="${esc(c.documento ?? '')}"></label>
+      <label data-manual>Validade <input type="date" name="validade" value="${esc(c.validade ?? '')}"></label>
+      <label data-manual>Certificadora / órgão <input name="emissor" value="${esc(c.emissor ?? '')}" placeholder="Ex.: Certisign, e-CAC, SEFAZ/SC"></label>
+      <label class="largo" data-manual>Onde fica <input name="guarda" value="${esc(c.guarda ?? '')}" placeholder="Ex.: token na gaveta 2, com o cliente, nuvem"></label>
+      <label class="largo" data-manual>Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
+    </div><p class="dica" data-dica-a1-sem-cliente hidden>Para um A1 de cliente, escolha o cliente acima e envie o arquivo com a senha. Sem cliente, o registro é só para controle de validade.</p>
     <p class="erro" id="erro-cert"></p>
     <div class="acoes"><button class="primario" type="submit">Salvar</button>${novo ? '' : '<button type="button" class="perigo" id="exc-cert">Excluir</button>'}<button type="button" data-fechar>Fechar</button></div></form>`, (d) => {
     const f = $('#form-cert');
     f.tipo.value = c.tipo; f.empresa_id.value = c.empresa_id ?? '';
+    // A1 de um cliente: sobe o arquivo com a senha (os dados vêm do certificado); o resto é registro manual
+    const modoA1 = () => novo && f.tipo.value === 'A1' && !!f.empresa_id.value;
+    const ajustar = () => {
+      const a1 = modoA1();
+      f.querySelectorAll('[data-a1]').forEach((x) => (x.hidden = !a1));
+      f.querySelectorAll('[data-manual]').forEach((x) => (x.hidden = a1));
+      f.arquivo.required = f.senha.required = a1; f.titular.required = f.validade.required = !a1;
+      f.querySelector('[data-dica-a1-sem-cliente]').hidden = !(novo && f.tipo.value === 'A1' && !f.empresa_id.value);
+      f.querySelector('button[type=submit]').textContent = a1 ? 'Enviar certificado' : 'Salvar';
+    };
+    f.tipo.onchange = f.empresa_id.onchange = ajustar; ajustar();
     f.onsubmit = async (ev) => {
       ev.preventDefault();
-      const x = lerForm(f); x.renovado = !!c.renovado;
+      if (modoA1()) {
+        const fd = new FormData(); fd.append('senha', f.senha.value); fd.append('arquivo', f.arquivo.files[0]);
+        try {
+          const r = await api('POST', `/api/empresas/${f.empresa_id.value}/certificado`, fd);
+          d.close(); aviso(`Certificado de ${r.titular} válido até ${new Date(r.validade).toLocaleDateString('pt-BR')}.`); telaCertificados();
+        } catch (e) { $('#erro-cert').textContent = mensagemErro(e); }
+        return;
+      }
+      const x = lerForm(f); x.renovado = !!c.renovado; delete x.arquivo; delete x.senha;
       try { if (novo) await api('POST', '/api/escritorio/certificados', x); else await api('PUT', `/api/escritorio/certificados/${c.id}`, x); d.close(); aviso('Salvo.'); telaCertificados(); }
       catch (e) { $('#erro-cert').textContent = mensagemErro(e); }
     };

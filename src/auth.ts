@@ -46,6 +46,8 @@ type Regra = { m?: string; r: RegExp; mod: Modulo[] | 'adm' | 'livre' };
 const LER_NOTA: Modulo[] = ['notas', 'painel', 'cobrancas', 'emitir'];
 /** Qual módulo cada rota exige. Rota que não está aqui é negada (lista fechada). */
 const REGRAS: Regra[] = [
+  // exclusão de empresa: a rota confere que é o usuário master e a senha dele
+  { r: /^\/api\/empresas\/\d+\/(exclusao|excluir)$/, mod: 'livre' },
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
@@ -69,6 +71,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/empresas$/, mod: 'livre' },
   { r: /^\/api\/empresas\/\d+\/contabilidade(\/|$)/, mod: 'adm' },
   { r: /^\/api\/(usuarios|email\/config|email\/testar|backup|tabelas|licenca|contabilidade)(\/|$)/, mod: 'adm' },
+  { m: 'POST', r: /^\/api\/empresas\/\d+\/certificado$/, mod: ['empresas', 'certificados'] }, // A1 do cliente, também por Escritório > Certificados
   { r: /^\/api\/empresas(\/\d+)?$|^\/api\/empresas\/\d+\/(certificado|logo)$/, mod: ['empresas'] },
   { m: 'POST', r: /^\/api\/tomadores\/\d+\/descricao$/, mod: ['emitir', 'tomadores'] },
   { m: 'GET', r: /^\/api\/empresas\/\d+\/tomadores$/, mod: ['tomadores', 'emitir', 'cobrancas'] },

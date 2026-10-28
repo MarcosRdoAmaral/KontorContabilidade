@@ -1,3 +1,4 @@
+import { excluirEmpresa, resumoExclusao } from './servicos/excluir-empresa.js';
 import { CAMPOS_BLOQUEADOS } from './servicos/cadastro-unico.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -195,6 +196,19 @@ export async function rotas(app: FastifyInstance) {
       const { senha_hash, permissoes, sessao_v, ...resto } = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u(req).id) as any;
       const email = /@(sem-email|kontor)\.local$/.test(resto.email) ? '' : resto.email;
       return { ...resto, email, modulos: modulosDoUsuario(u(req)), todosModulos: MODULOS };
+    });
+    // ---------- Exclusão de empresa: só o usuário master, confirmando com a senha dele ----------
+    const soMaster = (req: any) => { if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode excluir empresas.', 403); };
+    api.get('/api/empresas/:id/exclusao', async (req) => { soMaster(req); return resumoExclusao(u(req).escritorio_id, Number((req.params as any).id)); });
+    api.post('/api/empresas/:id/excluir', async (req, reply) => {
+      soMaster(req);
+      const { senha } = z.object({ senha: z.string().min(1, 'Informe a senha master') }).parse(req.body);
+      const chave = `EXCLUIR:${u(req).id}`;
+      if (loginBloqueado(chave)) return reply.code(429).send({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
+      const hash = (db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(u(req).id) as any).senha_hash;
+      if (!conferirSenha(senha, hash)) { registrarFalha(chave); throw new ErroNegocio('Senha master incorreta.', 400); }
+      limparFalhas(chave);
+      return excluirEmpresa(u(req).escritorio_id, Number((req.params as any).id));
     });
     api.put('/api/me/senha', async (req) => {
       const d = z.object({ atual: z.string(), nova: z.string() }).parse(req.body);
