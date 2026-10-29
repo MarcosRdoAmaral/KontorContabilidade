@@ -3,6 +3,7 @@
 import { app, BrowserWindow, Menu, dialog, shell, safeStorage, net, ipcMain } from 'electron';
 import { spawn, execFileSync } from 'node:child_process';
 import { buscarNovaVersao, urlPermitida } from './atualizador.mjs';
+import { consultarFgts } from './fgts.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -172,6 +173,15 @@ ipcMain.handle('atualizacao:verificar', async () => {
   await verificarAtualizacao({ silenciosa: true });
   if (emAndamento) await emAndamento; // já havia uma consulta em curso: espera o resultado dela
   return { ...ultimoResultado, atual: app.getVersion(), em: ultimaVerificacao };
+});
+// FGTS Digital: login do usuário numa janela do portal e leitura das competências em aberto de cada cliente
+let fgtsEmAndamento = false;
+ipcMain.handle('fgts:consultar', async (e, clientes) => {
+  if (fgtsEmAndamento) return { ok: false, erro: 'Já há uma consulta ao FGTS Digital em andamento.' };
+  fgtsEmAndamento = true;
+  try { return { ok: true, resultados: await consultarFgts(janela, Array.isArray(clientes) ? clientes.slice(0, 500) : [], (p) => { if (!e.sender.isDestroyed()) e.sender.send('fgts:andamento', p); }) }; }
+  catch (err) { return { ok: false, erro: String(err?.message ?? err) }; }
+  finally { fgtsEmAndamento = false; }
 });
 ipcMain.handle('atualizacao:estado', () => ({ ...ultimoResultado, atual: app.getVersion(), em: ultimaVerificacao }));
 

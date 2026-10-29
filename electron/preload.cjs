@@ -6,4 +6,7 @@ contextBridge.exposeInMainWorld('nfseDesktop', {
   verificarAtualizacao: () => ipcRenderer.invoke('atualizacao:verificar'),
   estadoAtualizacao: () => ipcRenderer.invoke('atualizacao:estado'),
   aoHaverAtualizacao: (cb) => ipcRenderer.on('atualizacao:nova', (_e, info) => cb(info)),
+  // FGTS Digital (login no portal pelo usuário; o Kontor só lê as competências em aberto)
+  fgtsConsultar: (clientes) => ipcRenderer.invoke('fgts:consultar', clientes),
+  aoAndamentoFgts: (cb) => { ipcRenderer.removeAllListeners('fgts:andamento'); ipcRenderer.on('fgts:andamento', (_e, p) => cb(p)); },
 });

@@ -11,6 +11,7 @@ import { REGIMES, AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, de
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
+import { ResultadoFgts, detalheFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
 import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
@@ -30,6 +31,13 @@ function empresasDoUsuario(usr: Usuario): number[] | null {
   if (!restritoAEmpresas(usr)) return null;
   return (db.prepare('SELECT empresa_id FROM usuario_empresas WHERE usuario_id = ?').all(usr.id) as { empresa_id: number }[]).map((r) => r.empresa_id);
 }
+/** Junta a última consulta ao FGTS Digital (e se o cliente tem empregados) ao painel da situação fiscal. */
+function comFgts(escritorioId: number, clientes: any[]) {
+  const f = ultimasFgts(escritorioId);
+  const func = new Map((db.prepare('SELECT id, tem_funcionarios FROM empresas WHERE escritorio_id = ?').all(escritorioId) as any[]).map((x) => [x.id, !!x.tem_funcionarios]));
+  return clientes.map((c) => ({ ...c, fgts: f.get(c.empresa_id) ?? null, tem_funcionarios: func.get(c.empresa_id) ?? false }));
+}
+
 function checar(req: FastifyRequest, empresaId: number) {
   const e = db.prepare('SELECT escritorio_id FROM empresas WHERE id = ?').get(empresaId) as any;
   const lista = empresasDoUsuario(u(req));
@@ -267,7 +275,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.post('/api/escritorio/integra/conferir', async (req) => conferirNaReceita(u(req).escritorio_id, u(req).id, MES.parse((req.body as any)?.mes), empresasDoUsuario(u(req)), undefined, idsTarefas.parse((req.body as any)?.tarefas)));
 
     // ---------- Situação fiscal (Integra Contador) ----------
-    api.get('/api/escritorio/situacao-fiscal', async (req) => ({ clientes: painelSituacao(u(req).escritorio_id, empresasDoUsuario(u(req))), resumo: resumoSituacoes(u(req).escritorio_id, empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
+    api.get('/api/escritorio/situacao-fiscal', async (req) => ({ clientes: comFgts(u(req).escritorio_id, painelSituacao(u(req).escritorio_id, empresasDoUsuario(u(req)))), resumo: resumoSituacoes(u(req).escritorio_id, empresasDoUsuario(u(req))), configurado: configIntegra(u(req).escritorio_id).configurado }));
     api.get('/api/escritorio/situacao-fiscal/agenda', async (req) => statusAgenda(u(req).escritorio_id));
     api.put('/api/escritorio/situacao-fiscal/agenda', async (req) => { salvarAgenda(u(req).escritorio_id, AgendaSitfis.parse(req.body)); return statusAgenda(u(req).escritorio_id); });
     api.post('/api/escritorio/situacao-fiscal/consultar', async (req) => {
@@ -283,6 +291,13 @@ export async function rotasEscritorio(app: FastifyInstance) {
       const e = db.prepare('SELECT email, avisar_debitos FROM empresas WHERE id = ?').get(d.empresa_id) as any;
       return { ...d, guias: listarGuias(u(req).escritorio_id, d.empresa_id), avisos: ultimosAvisos(d.empresa_id), email: e?.email ?? null, avisar_debitos: !!e?.avisar_debitos };
     });
+    // FGTS Digital: o aplicativo instalado lê o portal e grava aqui o resultado de cada cliente
+    api.post('/api/escritorio/fgts/resultados', async (req) => {
+      const b = z.object({ resultados: z.array(ResultadoFgts).min(1).max(500) }).parse(req.body);
+      for (const r of b.resultados) checar(req, r.empresa_id);
+      return salvarResultadosFgts(u(req).escritorio_id, u(req).id, b.resultados);
+    });
+    api.get('/api/escritorio/fgts/:id', async (req) => { checar(req, id(req)); return detalheFgts(u(req).escritorio_id, id(req)); });
     // recálculo manual de guias (uma por vez, um PDF por guia)
     api.post('/api/escritorio/situacao-fiscal/guias/:id', async (req) => {
       checar(req, id(req));

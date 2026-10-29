@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.10.1';
+export const MANUAL_VERSAO = '1.11.0';
 
 export const MANUAL = [
   {
@@ -161,6 +161,9 @@ export const MANUAL = [
       <p><em>Outra guia</em> recalcula informando os dados à mão. Nada é gerado sozinho: cada guia é uma chamada ao Integra Contador, cobrada pelo SERPRO. As inscrições em dívida ativa (PGFN) não saem pelo Integra Contador: use o Regularize.</p>
       <h3>Aviso de débitos ao cliente</h3>
       <p>Marque na coluna <strong>Avisar</strong> os clientes que devem receber por e-mail o aviso de débitos em aberto (quem já sabe e não paga normalmente pode ficar desmarcado). O aviso lista os débitos por tributo e as inscrições em dívida ativa, sem guias: o cliente procura o escritório quando quiser pagar. Ele sai depois da consulta automática, se a opção <em>avisar os clientes marcados</em> estiver ligada (uma vez por consulta), ou na hora, pelo botão <em>Avisar o cliente agora</em> em Detalhes, que mostra o texto antes de enviar.</p>
+      <h3>FGTS Digital</h3>
+      <p>O botão <strong>Consultar FGTS Digital</strong> (no aplicativo instalado) abre o portal do FGTS Digital numa janela do Kontor. Clique em <em>Entrar com GOV.BR</em> e escolha o <strong>certificado do escritório</strong> (o Kontor pergunta qual usar). Depois do login, o Kontor troca o perfil para <em>Procurador</em> de cada cliente selecionado (sem seleção, os que têm funcionários) e lê as competências em aberto da Emissão de Guia Rápida, com vencimento, trabalhadores e valores. Nada é emitido nem alterado no portal.</p>
+      <p>O resultado aparece na coluna <em>FGTS Digital</em> (em dia, valor em aberto, sem procuração) e o detalhe fica guardado com a data. A guia é emitida no próprio portal. O cliente precisa ter dado procuração ao escritório no FGTS Digital, e o certificado A1 do escritório precisa estar instalado no Windows (dois cliques no arquivo .pfx). A sessão do portal dura cerca de 30 minutos.</p>
       <h3>Consulta automática</h3>
       <p>No quadro <em>Consulta automática</em> (administrador), escolha um ou dois dias do mês e os e-mails que recebem o resultado. Nesses dias, a partir das 7h e com o programa aberto, o sistema consulta todos os clientes ativos e manda um e-mail com quem tem pendência, separando as <strong>pendências novas</strong> das que continuam e listando os clientes que não puderam ser consultados (sem procuração, por exemplo). Se o computador estiver desligado no dia, a consulta roda na próxima abertura do programa. Relatórios que a Receita ainda estava gerando são buscados sozinhos nas rodadas seguintes.</p>
       <p class="dica">O quadro mostra quantas chamadas ao Integra Contador a consulta automática faz por mês (duas por cliente em cada rodada).</p>

@@ -945,6 +945,20 @@ const migracoes: string[] = [
     enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX ix_avisos_debitos ON avisos_debitos(empresa_id);`,
+  // 35: consultas ao FGTS Digital (competências em aberto de cada cliente, lidas no portal pelo aplicativo)
+  `CREATE TABLE fgts_consultas (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    situacao TEXT NOT NULL CHECK (situacao IN ('EM_DIA','EM_ABERTO','SEM_PROCURACAO','ERRO')),
+    total REAL,
+    qtd_competencias INTEGER NOT NULL DEFAULT 0,
+    competencias_json TEXT,
+    notificacao INTEGER,
+    mensagem TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    consultado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_fgts_consultas ON fgts_consultas(empresa_id, id);`,
 ];
 
 export function migrar(): void {

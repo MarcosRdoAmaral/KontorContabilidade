@@ -4523,6 +4523,68 @@ async function telaIntegra() {
 
 const SIT_FISCAL = { REGULAR: ['Regular', 'PZ-ENTREGUE'], PENDENCIAS: ['Com pendências', 'PZ-ATRASADA'], VERIFICAR: ['Conferir o PDF', 'PZ-BREVE'] };
 
+// ---------- FGTS Digital ----------
+const SIT_FGTS = { EM_DIA: ['Em dia', 'cor-verde'], EM_ABERTO: ['Em aberto', 'cor-vermelho'], SEM_PROCURACAO: ['Sem procuração', 'cor-ambar'], ERRO: ['Erro', 'cor-vermelho'] };
+function celulaFgts(c) {
+  const f = c.fgts;
+  if (!f) return c.tem_funcionarios ? '<span class="dica">não consultado</span>' : '<span class="dica">—</span>';
+  const [rot, cor] = SIT_FGTS[f.situacao] ?? [f.situacao, ''];
+  return `<a href="#" data-fgts="${c.empresa_id}" class="${cor}">${f.situacao === 'EM_ABERTO' ? `<strong>${brl(f.total ?? 0)}</strong><br><span class="dica">${f.qtd_competencias} competência(s)</span>` : rot}</a>${f.notificacao ? '<br><span class="cor-vermelho dica">notificação de débito</span>' : ''}<br><span class="dica">${dataBr(f.consultado_em)}</span>`;
+}
+
+/** Consulta pelo aplicativo instalado: o usuário entra no portal com o certificado do escritório e o Kontor lê cada cliente. */
+async function consultarFgtsDigital(clientes, selecionados) {
+  const ponte = window.nfseDesktop;
+  if (!ponte?.fgtsConsultar) return aviso('A consulta ao FGTS Digital funciona no aplicativo instalado (Windows): é nele que você entra no portal com o certificado.');
+  const alvo = (selecionados.length ? clientes.filter((c) => selecionados.includes(c.empresa_id)) : clientes.filter((c) => c.tem_funcionarios))
+    .map((c) => ({ id: c.empresa_id, documento: c.documento, nome: c.cliente }));
+  if (!alvo.length) return aviso('Marque os clientes a consultar (ou cadastre na Carteira quem tem funcionários).');
+  abrirDialogo(`<div><h2>Consultar FGTS Digital</h2>
+    <p>${alvo.length} cliente(s) ${selecionados.length ? 'selecionado(s)' : 'com funcionários'}.</p>
+    <ol class="dicas"><li>Abre uma janela do FGTS Digital: clique em <strong>Entrar com GOV.BR</strong> e escolha o <strong>certificado do escritório</strong>.</li>
+      <li>Depois do login, o Kontor troca o perfil para <em>Procurador</em> de cada cliente e lê as competências em aberto (Emissão de Guia Rápida). Nada é emitido nem alterado no portal.</li>
+      <li>A sessão do portal dura cerca de 30 minutos; deixe a janela aberta até terminar.</li></ol>
+    <p class="dica">O cliente precisa ter dado procuração ao escritório no FGTS Digital; quem não deu aparece como “Sem procuração”.</p>
+    <div id="fgts-prog"></div>
+    <div class="acoes"><button class="primario" id="fgts-ir">Abrir o FGTS Digital e consultar</button><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    const prog = dlg.querySelector('#fgts-prog');
+    dlg.querySelector('#fgts-ir').onclick = async (ev) => {
+      ev.target.disabled = true;
+      ponte.aoAndamentoFgts((p) => { prog.innerHTML = `<p class="sutil">${p.etapa === 'login' ? esc(p.mensagem) : `Consultando ${p.atual} de ${p.total}: ${esc(p.cliente)}…`}</p>`; });
+      prog.innerHTML = '<p class="sutil">Abrindo o FGTS Digital…</p>';
+      const r = await ponte.fgtsConsultar(alvo);
+      if (!r.ok) { ev.target.disabled = false; prog.innerHTML = `<p class="erro">${esc(r.erro)}</p>`; return; }
+      try {
+        if (r.resultados.length) await api('POST', '/api/escritorio/fgts/resultados', { resultados: r.resultados });
+        const n = (s) => r.resultados.filter((x) => x.situacao === s).length;
+        prog.innerHTML = `<div class="banner"><strong>${r.resultados.length} cliente(s) consultado(s):</strong> ${n('EM_ABERTO')} com competência em aberto, ${n('EM_DIA')} em dia, ${n('SEM_PROCURACAO')} sem procuração${n('ERRO') ? `, ${n('ERRO')} com erro` : ''}.</div>
+          ${r.resultados.filter((x) => x.situacao === 'ERRO').map((x) => `<p class="dica cor-vermelho">${esc(alvo.find((a) => a.id === x.empresa_id)?.nome ?? '')}: ${esc(x.mensagem ?? '')}</p>`).join('')}`;
+        telaSituacao();
+      } catch (e) { prog.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; }
+    };
+  });
+}
+
+async function detalheFgtsCliente(empresaId) {
+  let d;
+  try { d = await api('GET', `/api/escritorio/fgts/${empresaId}`); } catch (e) { return aviso(mensagemErro(e)); }
+  const u = d.ultima;
+  const v = (x) => (x ? brl(x) : '—');
+  abrirDialogo(`<div class="dlg-largo"><h2>FGTS Digital — ${esc(d.cliente)}</h2>
+    <p class="sutil">${fmtDoc(d.documento)}${u ? ` · consultado em ${dhBr(u.consultado_em)}${u.usuario ? ` por ${esc(u.usuario)}` : ''}` : ''}</p>
+    ${!u ? '<p>Ainda não consultado.</p>' : u.situacao === 'EM_DIA' ? '<div class="cartao"><strong class="cor-verde">Nenhuma competência em aberto</strong> na Emissão de Guia Rápida.</div>'
+      : u.situacao !== 'EM_ABERTO' ? `<div class="banner teste">${esc(SIT_FGTS[u.situacao]?.[0] ?? u.situacao)}: ${esc(u.mensagem ?? '')}</div>` : `
+      <div class="resumo"><div class="cartao alerta-cartao"><div class="sutil">Em aberto (valor para pagamento no dia da consulta)</div><div class="valor cor-vermelho">${brl(u.total ?? 0)}</div><div class="dica">${u.qtd_competencias} competência(s)</div></div></div>
+      ${u.notificacao ? '<div class="banner teste">O empregador tem <strong>notificação de débito</strong> de FGTS no portal.</div>' : ''}
+      <table class="tabela"><thead><tr><th>Competência</th><th>Tipo</th><th>Vencimento</th><th class="num">Trab.</th><th class="num">FGTS</th><th class="num">Encargos</th><th class="num">Total</th></tr></thead><tbody>
+      ${u.competencias.flatMap((c) => (c.detalhes?.length ? c.detalhes : [{ competencia: c.competencia, vlTotal: c.total, tipo: c.erro ? 'não lido' : '' }]).map((x) => `<tr><td>${esc(x.competencia ?? c.competencia)}</td><td>${esc(x.tipo ?? '')}</td><td>${esc(x.vencimento ?? '')}</td>
+        <td class="num">${x.qtdTrabalhadores ?? ''}</td><td class="num">${v((x.vlMensal ?? 0) + (x.vlRescisorio ?? 0) + (x.vlCompensatorio ?? 0) + (x.vlProcessoTrabalhista ?? 0))}</td>
+        <td class="num">${v((x.vlEncargos ?? 0) + (x.vlAtualizacaoMonetaria ?? 0) + (x.vlJuros ?? 0) + (x.vlMulta ?? 0))}</td><td class="num"><strong>${v(x.vlTotal)}</strong></td></tr>`)).join('')}</tbody></table>
+      <p class="dica">A guia é emitida no próprio FGTS Digital (Gestão de Guias &gt; Emissão de Guia Rápida), com a data de pagamento que o cliente escolher.</p>`}
+    ${d.anteriores.length ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.anteriores.map((a) => `<li>${dhBr(a.consultado_em)} — ${esc(SIT_FGTS[a.situacao]?.[0] ?? a.situacao)}${a.situacao === 'EM_ABERTO' ? ` (${brl(a.total ?? 0)})` : ''}</li>`).join('')}</ul>` : ''}
+    <div class="acoes"><button data-fechar class="primario">Fechar</button></div></div>`);
+}
+
 async function telaSituacao() {
   const [d, ag] = await Promise.all([api('GET', '/api/escritorio/situacao-fiscal'), api('GET', '/api/escritorio/situacao-fiscal/agenda')]);
   const adm = estado.usuario.tipo === 'adm';
@@ -4553,11 +4615,11 @@ async function telaSituacao() {
     <div class="filtros" style="margin:16px 0 10px">
       <label style="flex:1 1 240px">Buscar <input type="search" id="sf-q" value="${esc(f.q)}" placeholder="Nome ou CNPJ/CPF"></label>
       <label>Situação <select id="sf-sit"><option value="">Todas</option><option value="PENDENCIAS">Com pendências</option><option value="REGULAR">Regulares</option><option value="NUNCA">Não consultados</option></select></label>
-      <div class="acoes" style="margin:0"><button class="primario" id="sf-consultar" disabled>Consultar selecionados</button></div>
+      <div class="acoes" style="margin:0"><button class="primario" id="sf-consultar" disabled>Consultar selecionados</button><button id="sf-fgts" title="Entra no FGTS Digital com o certificado do escritório e lê as competências em aberto de cada cliente">Consultar FGTS Digital</button></div>
     </div>
     <p class="dica">Cada consulta usa duas chamadas ao Integra Contador (pedido do relatório e emissão), cobradas pelo SERPRO conforme o contrato. A Receita leva alguns segundos para gerar cada relatório.</p>
     <div id="sf-res"></div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th title="Recebe por e-mail o aviso de débitos em aberto">Avisar</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>
+    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th>FGTS Digital</th><th title="Recebe por e-mail o aviso de débitos em aberto">Avisar</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>
     <p class="dica">Marque em “Avisar” só os clientes que devem receber o aviso de débitos em aberto (quem já sabe e não paga normalmente pode ficar desmarcado).</p>`;
   $('#sf-sit').value = f.sit;
   const fa = $('#form-agsf');
@@ -4584,9 +4646,11 @@ async function telaSituacao() {
       <td class="num">${c.status === 'PRONTA' ? c.qtd_pendencias ?? 0 : '—'}</td>
       <td class="num ${c.situacao === 'PENDENCIAS' ? 'cor-vermelho' : ''}">${c.status === 'PRONTA' && c.situacao === 'PENDENCIAS' ? brl(c.total_aberto) : '—'}</td>
       <td>${c.concluida_em ? dhBr(c.concluida_em) : c.solicitada_em ? `<span class="dica">pedido em ${dhBr(c.solicitada_em)}</span>` : '—'}</td>
+      <td>${celulaFgts(c)}</td>
       <td><input type="checkbox" data-avisar="${c.empresa_id}" ${c.avisar_debitos ? 'checked' : ''} aria-label="Avisar este cliente" title="${c.email ? `Avisar ${esc(c.email)}` : 'Sem e-mail no cadastro'}">${c.ultimo_aviso ? `<br><span class="dica">avisado ${dataBr(c.ultimo_aviso)}</span>` : ''}</td>
       <td class="acoes-linha">${c.status === 'PRONTA' ? `<button data-det="${c.id}">Detalhes</button> ${c.tem_pdf ? `<button data-pdf="${c.id}">PDF</button>` : ''}` : ''}${c.status === 'SOLICITADA' ? `<button data-at="${c.empresa_id}">Atualizar</button>` : ''}</td></tr>`).join('')
-      : '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>';
+      : '<tr><td colspan="10"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>';
+    conteudo.querySelectorAll('[data-fgts]').forEach((b) => (b.onclick = (ev) => { ev.preventDefault(); detalheFgtsCliente(Number(b.dataset.fgts)); }));
     conteudo.querySelectorAll('[data-avisar]').forEach((cb) => (cb.onchange = async () => {
       const c = d.clientes.find((x) => x.empresa_id === Number(cb.dataset.avisar));
       try { await api('PUT', '/api/escritorio/situacao-fiscal/marcar-aviso', { ids: [c.empresa_id], avisar: cb.checked }); c.avisar_debitos = cb.checked; aviso(cb.checked ? `${c.cliente} será avisado dos débitos em aberto.${c.email ? '' : ' Atenção: sem e-mail no cadastro.'}` : `${c.cliente} não será mais avisado.`); }
@@ -4598,6 +4662,7 @@ async function telaSituacao() {
     conteudo.querySelectorAll('[data-pdf]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/situacao-fiscal/${b.dataset.pdf}/pdf`, 'situacao-fiscal.pdf', true)));
     conteudo.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => consultarSituacoes([Number(b.dataset.at)], b)));
   };
+  $('#sf-fgts').onclick = () => consultarFgtsDigital(d.clientes, [...conteudo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel)));
   $('#sf-todos').onchange = (ev) => { conteudo.querySelectorAll('[data-sel]').forEach((c) => (c.checked = ev.target.checked)); conteudo.querySelector('[data-sel]')?.onchange(); };
   $('#sf-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
   $('#sf-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
