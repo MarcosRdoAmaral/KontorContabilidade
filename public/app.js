@@ -414,12 +414,12 @@ function telaInicial() {
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
 function telaPermitida(nome) {
-  const modulo = { situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
+  const modulo = { controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
   return nome === 'config' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
 const rotas = {
-  situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
+  controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
   painel: telaPainel, emitir: telaEmitir, notas: telaNotas, nota: telaNota,
   cobrancas: telaCobrancas, banco: telaBanco, despesas: telaDespesas, compras: telaCompras, entradas: telaCompras, 'compra-nova': telaCompraManual, 'nfe-sefaz': telaNfeSefaz, tributacao: telaTributacao, extrato: telaExtrato, cartao: telaCartao, agenda: telaAgenda, relatorios: telaRelatorios, tomadores: telaTomadores, servicos: telaServicos, empresas: telaEmpresas, config: telaConfig,
 };
@@ -433,7 +433,7 @@ function rotear() {
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
-  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao'].includes(nome);
+  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
   if (precisaEmpresa && !empresa()) {
     conteudo.innerHTML = `<div class="vazio"><p>Cadastre o primeiro cliente na carteira para começar.</p>
       ${estado.usuario.papel !== 'cliente' ? '<a href="#/carteira">Ir para a Carteira de clientes</a>' : ''}</div>`;
@@ -4583,6 +4583,192 @@ async function detalheFgtsCliente(empresaId) {
       <p class="dica">A guia é emitida no próprio FGTS Digital (Gestão de Guias &gt; Emissão de Guia Rápida), com a data de pagamento que o cliente escolher.</p>`}
     ${d.anteriores.length ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.anteriores.map((a) => `<li>${dhBr(a.consultado_em)} — ${esc(SIT_FGTS[a.situacao]?.[0] ?? a.situacao)}${a.situacao === 'EM_ABERTO' ? ` (${brl(a.total ?? 0)})` : ''}</li>`).join('')}</ul>` : ''}
     <div class="acoes"><button data-fechar class="primario">Fechar</button></div></div>`);
+}
+
+// ---------------------------------------------------------------------------
+// Controle mensal de entregas (fiscal, departamento pessoal, contábil)
+// ---------------------------------------------------------------------------
+const fmtValor = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'E-mail', OUTRO: 'Outro' };
+
+async function telaControle() {
+  const f = telaControle.filtro ??= { mes: (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(), area: 'FISCAL', q: '', pendentes: false, todosDp: false };
+  const lista = await api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`);
+  const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal', CONTABIL: 'Contábil' };
+  conteudo.innerHTML = `
+    <div class="topo"><div><h1>Controle mensal</h1><p class="sutil">Entregas de cada cliente na competência: impostos e guias do fiscal, folha e encargos do departamento pessoal e a contabilização. Tudo é salvo ao sair de cada campo.</p></div>
+      <div><button id="ct-imp">Importar planilha</button></div></div>
+    <div class="filtros">
+      <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
+      <label style="flex:1 1 220px">Buscar <input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Cliente"></label>
+      <label class="check" style="align-self:end"><input type="checkbox" id="ct-pend" ${f.pendentes ? 'checked' : ''}> Só não enviados</label>
+      ${f.area === 'DP' ? `<label class="check" style="align-self:end"><input type="checkbox" id="ct-todos" ${f.todosDp ? 'checked' : ''}> Incluir clientes sem funcionários</label>` : ''}
+    </div>
+    <nav class="abas" id="ct-abas">${Object.entries(AREA).map(([k, v]) => `<a href="#" data-a="${k}" class="${f.area === k ? 'ativo' : ''}">${v}</a>`).join('')}</nav>
+    <p class="dica" id="ct-cont"></p>
+    <div class="rolagem"><table class="tabela tabela-controle"><thead id="ct-cab"></thead><tbody id="ct-lista"></tbody><tfoot id="ct-tot"></tfoot></table></div>`;
+  const num = (k, v) => `<input class="ct-num" data-k="${k}" inputmode="decimal" value="${fmtValor(v)}">`;
+  const dt = (k, v) => `<input type="date" data-k="${k}" value="${esc(v ?? '')}">`;
+  const chk = (k, v, t) => `<input type="checkbox" data-k="${k}" ${v ? 'checked' : ''} title="${t}">`;
+  const obs = (v) => `<input data-k="observacoes" value="${esc(v ?? '')}" maxlength="500" placeholder="—">`;
+  const enviado = (v) => `${dt('enviado', v)} ${v ? '' : '<button type="button" data-hoje title="Marcar como enviado hoje">Hoje</button>'}`;
+  const COLS = {
+    FISCAL: ['Cliente', 'Sem mov.', 'Ent.', 'S/S', 'Faturamento', 'Imposto', 'Alíquota', 'Emissão da guia', 'Envio', 'Enviado em', 'Observações'],
+    DP: ['Registro', 'Cliente', 'Sem folha', 'DARF Prev.', 'FGTS', 'Sindicato', 'Total', 'Enviado em', 'Observações'],
+    CONTABIL: ['Cliente', 'Enviado em', 'Observações'],
+  };
+  $('#ct-cab').innerHTML = `<tr>${COLS[f.area].map((c) => `<th class="${/Faturamento|Imposto|Alíquota|DARF|FGTS|Sindicato|Total/.test(c) ? 'num' : ''}">${c}</th>`).join('')}</tr>`;
+  const cliente = (c) => `<td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span>${c.usuario ? `<br><span class="dica" title="${esc(dhBr(c.atualizado_em))}">por ${esc(c.usuario)}</span>` : ''}</td>`;
+  const aliq = (d) => (d.faturamento > 0 && d.imposto != null ? `${(d.imposto / d.faturamento * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%` : '—');
+  const linha = (c) => {
+    const d = c.dados;
+    if (f.area === 'FISCAL') return `<tr data-id="${c.empresa_id}" class="${d.sem_movimento ? 'inativo' : ''}">${cliente(c)}<td>${chk('sem_movimento', d.sem_movimento, 'Sem movimento fiscal')}</td><td>${chk('entradas', d.entradas, 'Notas de entrada conferidas')}</td><td>${chk('saidas', d.saidas, 'Notas de saída/serviço conferidas')}</td>
+      <td class="num">${num('faturamento', d.faturamento)}</td><td class="num">${num('imposto', d.imposto)}</td><td class="num" data-aliq>${aliq(d)}</td><td>${dt('emissao', d.emissao)}</td>
+      <td><select data-canal><option value="">—</option>${Object.entries(CANAL).map(([k, v]) => `<option value="${k}" ${c.canal_envio === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
+    if (f.area === 'DP') return `<tr data-id="${c.empresa_id}" class="${d.sem_folha ? 'inativo' : ''}"><td><input data-registro value="${esc(c.registro_dp ?? '')}" size="5" maxlength="20"></td>${cliente(c)}<td>${chk('sem_folha', d.sem_folha, 'Sem folha calculada')}</td>
+      <td class="num">${num('darf_prev', d.darf_prev)}</td><td class="num">${num('fgts', d.fgts)}</td><td class="num">${num('sindicato', d.sindicato)}</td><td class="num" data-total>${fmtValor((d.darf_prev ?? 0) + (d.fgts ?? 0) + (d.sindicato ?? 0)) || '—'}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
+    return `<tr data-id="${c.empresa_id}">${cliente(c)}<td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
+  };
+  const totais = () => {
+    const vis = visiveis();
+    const soma = (k) => fmtValor(vis.reduce((t, c) => t + (c.dados[k] ?? 0), 0));
+    const env = vis.filter((c) => c.dados.enviado).length;
+    $('#ct-cont').textContent = `${vis.length} cliente(s) · ${env} enviado(s) · ${vis.length - env} pendente(s).`;
+    $('#ct-tot').innerHTML = f.area === 'FISCAL' ? `<tr><td><strong>Total</strong></td><td colspan="3"></td><td class="num"><strong>${soma('faturamento')}</strong></td><td class="num"><strong>${soma('imposto')}</strong></td><td colspan="5"></td></tr>`
+      : f.area === 'DP' ? `<tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>${soma('darf_prev')}</strong></td><td class="num"><strong>${soma('fgts')}</strong></td><td class="num"><strong>${soma('sindicato')}</strong></td><td class="num"><strong>${fmtValor(vis.reduce((t, c) => t + (c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0), 0))}</strong></td><td colspan="2"></td></tr>` : '';
+  };
+  const visiveis = () => { const q = norm(f.q); return lista.filter((c) => (!q || norm(c.cliente).includes(q) || c.documento.includes(f.q.replace(/\D/g, '') || '#')) && (!f.pendentes || !c.dados.enviado) && (f.area !== 'DP' || f.todosDp || c.tem_funcionarios || Object.keys(c.dados).length)); };
+  const salvar = async (c, extra = {}) => {
+    try { const r = await api('PUT', '/api/escritorio/controle/linha', { empresa_id: c.empresa_id, competencia: f.mes, area: f.area, dados: c.dados, ...extra }); c.dados = r.dados; c.usuario = estado.usuario.nome; }
+    catch (e) { aviso(mensagemErro(e)); }
+  };
+  const pintar = () => {
+    const vis = visiveis();
+    $('#ct-lista').innerHTML = vis.length ? vis.map(linha).join('') : `<tr><td colspan="${COLS[f.area].length}"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>`;
+    totais();
+    $('#ct-lista').querySelectorAll('tr[data-id]').forEach((tr) => {
+      const c = lista.find((x) => x.empresa_id === Number(tr.dataset.id));
+      tr.querySelectorAll('[data-k]').forEach((el) => (el.onchange = async () => {
+        const k = el.dataset.k;
+        c.dados[k] = el.type === 'checkbox' ? el.checked : el.classList.contains('ct-num') ? numero(el.value) : el.value || null;
+        if (el.classList.contains('ct-num')) el.value = fmtValor(c.dados[k]);
+        await salvar(c);
+        if (k === 'sem_movimento' || k === 'sem_folha') tr.classList.toggle('inativo', el.checked);
+        if (k === 'enviado') { const b = tr.querySelector('[data-hoje]'); if (b) b.hidden = !!el.value; }
+        const a = tr.querySelector('[data-aliq]'); if (a) a.textContent = aliq(c.dados);
+        const tt = tr.querySelector('[data-total]'); if (tt) tt.textContent = fmtValor((c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0)) || '—';
+        totais();
+      }));
+      const h = tr.querySelector('[data-hoje]'); if (h) h.onclick = () => { const i = tr.querySelector('[data-k="enviado"]'); i.value = hoje(); i.onchange(); };
+      const cn = tr.querySelector('[data-canal]'); if (cn) cn.onchange = () => { c.canal_envio = cn.value || null; salvar(c, { canal_envio: c.canal_envio }); };
+      const rg = tr.querySelector('[data-registro]'); if (rg) rg.onchange = () => { c.registro_dp = rg.value.trim() || null; salvar(c, { registro_dp: c.registro_dp ?? '' }); };
+    });
+  };
+  $('#ct-mes').onchange = (ev) => { if (ev.target.value) { f.mes = ev.target.value; telaControle(); } };
+  $('#ct-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
+  $('#ct-pend').onchange = (ev) => { f.pendentes = ev.target.checked; pintar(); };
+  $('#ct-todos') && ($('#ct-todos').onchange = (ev) => { f.todosDp = ev.target.checked; pintar(); });
+  conteudo.querySelectorAll('#ct-abas a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); f.area = a.dataset.a; telaControle(); }));
+  $('#ct-imp').onclick = () => importarPlanilhaControle(telaControle);
+  pintar();
+}
+
+/** Importa da planilha antiga de controle: senhas do Simples e previdenciária (pelo CNPJ), canal de envio e registro do DP (pelo nome). */
+function importarPlanilhaControle(aoFim) {
+  abrirDialogo(`<div class="dlg-largo"><h2>Importar a planilha de controle</h2>
+    <p class="sutil">Envie a planilha <em>Controle de Entregas</em> (.xlsx). O Kontor traz o que é fixo de cada cliente: o <strong>código de acesso do Simples Nacional</strong> e a <strong>senha previdenciária</strong> (ligados pelo CNPJ), o <strong>canal de envio</strong> (aba Fiscal) e o <strong>registro do departamento pessoal</strong> (aba RH), ligados pelo nome. Confira a ligação antes de importar.</p>
+    <input type="file" id="cp-arq" accept=".xlsx"><div id="cp-corpo"></div>
+    <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    const corpo = dlg.querySelector('#cp-corpo');
+    dlg.querySelector('#cp-arq').onchange = async (ev) => {
+      const arq = ev.target.files[0]; if (!arq) return;
+      corpo.innerHTML = '<p class="sutil">Lendo a planilha…</p>';
+      try {
+        const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(arq); });
+        const a = await api('POST', '/api/escritorio/controle/planilha/analisar', { nome: arq.name, base64: b64 });
+        const ROT = { SIMPLES: 'Código do Simples Nacional', PREVIDENCIA: 'Senha previdenciária', CANAL: 'Canal de envio', REGISTRO: 'Registro do DP' };
+        const podeSenhas = estado.usuario.modulos.includes('senhas');
+        corpo.innerHTML = `<p>${Object.entries(a.resumo).map(([k, v]) => `${ROT[k]}: <strong>${v.ligados}</strong> de ${v.total} ligado(s)`).join(' · ')}</p>
+          ${podeSenhas ? '' : '<p class="dica">Seu usuário não tem a permissão “Senhas e acessos”: as senhas não serão importadas.</p>'}
+          <div class="rolagem" style="max-height:340px"><table class="tabela"><thead><tr><th><input type="checkbox" id="cp-todos" checked></th><th>O quê</th><th>Na planilha</th><th>Cliente no Kontor</th><th>Valor</th></tr></thead><tbody>
+          ${a.itens.map((i) => `<tr class="${i.empresa_id ? '' : 'inativo'}"><td><input type="checkbox" data-it="${i.tipo}:${i.linha}" ${i.empresa_id && (podeSenhas || !['SIMPLES', 'PREVIDENCIA'].includes(i.tipo)) ? 'checked' : 'disabled'}></td><td>${ROT[i.tipo]}</td><td>${esc(i.nome)}${i.documento ? `<br><span class="dica">${fmtDoc(i.documento)}</span>` : ''}</td>
+            <td>${i.cliente ? esc(i.cliente) : '<span class="cor-ambar">não encontrado</span>'}</td><td>${['SIMPLES', 'PREVIDENCIA'].includes(i.tipo) ? '<span class="dica">••••••</span>' : esc(i.tipo === 'CANAL' ? CANAL[i.valor] : i.valor ?? '')}</td></tr>`).join('')}</tbody></table></div>
+          <div class="acoes"><button class="primario" id="cp-ir">Importar marcados</button></div>`;
+        corpo.querySelector('#cp-todos').onchange = (e2) => corpo.querySelectorAll('[data-it]:not(:disabled)').forEach((x) => (x.checked = e2.target.checked));
+        corpo.querySelector('#cp-ir').onclick = async (e2) => {
+          e2.target.disabled = true;
+          try {
+            const r = await api('POST', '/api/escritorio/controle/planilha/importar', { nome: arq.name, base64: b64, itens: [...corpo.querySelectorAll('[data-it]:checked')].map((x) => x.dataset.it) });
+            dlg.close(); aviso(`${r.importados} informação(ões) importada(s).`); aoFim?.();
+          } catch (er) { e2.target.disabled = false; aviso(mensagemErro(er)); }
+        };
+      } catch (e) { corpo.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; }
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Senhas e acessos dos clientes (Simples Nacional, previdenciária)
+// ---------------------------------------------------------------------------
+async function telaSenhas() {
+  const lista = await api('GET', '/api/escritorio/acessos');
+  const f = telaSenhas.filtro ??= { q: '' };
+  conteudo.innerHTML = `
+    <div class="topo"><div><h1>Senhas e acessos</h1><p class="sutil">Código de acesso do Simples Nacional e senha previdenciária de cada cliente. Ficam criptografados e só aparecem ao clicar em “Mostrar”.</p></div>
+      <div><button id="sn-imp">Importar planilha</button></div></div>
+    <div class="filtros"><label style="flex:1 1 260px">Buscar <input type="search" id="sn-q" value="${esc(f.q)}" placeholder="Cliente ou CNPJ"></label></div>
+    <div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>CPF do responsável</th><th>Código do Simples</th><th>Atividade</th><th>Senha previdenciária</th><th></th></tr></thead><tbody id="sn-lista"></tbody></table></div>`;
+  const segredo = (c, campo, tem) => (tem ? `<span data-seg="${campo}">••••••</span> <button type="button" data-ver="${c.empresa_id}">Mostrar</button>` : '<span class="dica">—</span>');
+  const pintar = () => {
+    const q = norm(f.q), qd = f.q.replace(/\D/g, '');
+    const vis = lista.filter((c) => !q || norm(c.cliente).includes(q) || norm(c.razao_social).includes(q) || (qd && c.documento.includes(qd)));
+    $('#sn-lista').innerHTML = vis.map((c) => `<tr data-id="${c.empresa_id}" class="${c.situacao !== 'ATIVO' ? 'inativo' : ''}"><td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span></td>
+      <td>${c.sn_cpf_responsavel ? fmtDoc(c.sn_cpf_responsavel) : '<span class="dica">—</span>'}</td><td>${segredo(c, 'sn_codigo', c.tem_codigo)}</td><td>${esc(c.sn_atividade ?? '')}</td><td>${segredo(c, 'prev_senha', c.tem_prev)}</td>
+      <td class="acoes-linha"><button data-ed="${c.empresa_id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="6"><div class="vazio" style="border:0">Nenhum cliente.</div></td></tr>';
+    conteudo.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = async () => {
+      const tr = b.closest('tr');
+      try {
+        const s = await api('POST', `/api/escritorio/acessos/${b.dataset.ver}/revelar`);
+        tr.querySelectorAll('[data-seg]').forEach((el) => {
+          const v = s[el.dataset.seg]; if (!v) return;
+          el.innerHTML = `<code>${esc(v)}</code> <button type="button" data-copiar="${esc(v)}" title="Copiar">Copiar</button>`;
+          el.nextElementSibling?.remove();
+          el.querySelector('[data-copiar]').onclick = (e2) => { navigator.clipboard?.writeText(e2.target.dataset.copiar).then(() => aviso('Copiado.')); };
+        });
+        setTimeout(() => { if (document.body.contains(tr)) pintar(); }, 60e3); // volta a esconder depois de 1 minuto
+      } catch (e) { aviso(mensagemErro(e)); }
+    }));
+    conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formAcesso(lista.find((c) => c.empresa_id === Number(b.dataset.ed)))));
+  };
+  $('#sn-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
+  $('#sn-imp').onclick = () => importarPlanilhaControle(telaSenhas);
+  pintar();
+}
+
+function formAcesso(c) {
+  abrirDialogo(`<form id="form-acesso"><h2>Acessos — ${esc(c.cliente)}</h2>
+    <fieldset class="sub"><legend>Simples Nacional</legend><div class="grade">
+      <label>CPF do responsável <input name="sn_cpf_responsavel" value="${esc(c.sn_cpf_responsavel ? fmtDoc(c.sn_cpf_responsavel) : '')}"></label>
+      <label>Código de acesso <input name="sn_codigo" autocomplete="off" placeholder="${c.tem_codigo ? 'Guardado — digite só para trocar' : ''}"></label>
+      <label class="largo">Atividade <input name="sn_atividade" value="${esc(c.sn_atividade ?? '')}" placeholder="Ex.: Revenda, Serviços Anexo III, Fator R"></label>
+    </div></fieldset>
+    <fieldset class="sub"><legend>Previdência</legend><div class="grade">
+      <label>Senha previdenciária <input name="prev_senha" autocomplete="off" placeholder="${c.tem_prev ? 'Guardada — digite só para trocar' : ''}"></label>
+    </div></fieldset>
+    <label>Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
+    ${c.tem_codigo || c.tem_prev ? '<p class="dica">Para apagar uma senha guardada, marque abaixo.</p><label class="check"><input type="checkbox" name="apagar_codigo"> Apagar o código do Simples</label> <label class="check"><input type="checkbox" name="apagar_prev"> Apagar a senha previdenciária</label>' : ''}
+    <p class="erro" id="erro-acesso"></p>
+    <div class="acoes"><button class="primario" type="submit">Salvar</button><button type="button" data-fechar>Fechar</button></div></form>`, (dlg) => {
+    const f = dlg.querySelector('#form-acesso');
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const corpo = { sn_cpf_responsavel: f.sn_cpf_responsavel.value || null, sn_atividade: f.sn_atividade.value, observacoes: f.observacoes.value };
+      if (f.sn_codigo.value.trim()) corpo.sn_codigo = f.sn_codigo.value.trim(); else if (f.apagar_codigo?.checked) corpo.sn_codigo = '';
+      if (f.prev_senha.value.trim()) corpo.prev_senha = f.prev_senha.value.trim(); else if (f.apagar_prev?.checked) corpo.prev_senha = '';
+      try { await api('PUT', `/api/escritorio/acessos/${c.empresa_id}`, corpo); dlg.close(); aviso('Acessos salvos.'); telaSenhas(); }
+      catch (e) { $('#erro-acesso').textContent = mensagemErro(e); }
+    };
+  });
 }
 
 async function telaSituacao() {

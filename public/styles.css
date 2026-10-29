@@ -351,3 +351,13 @@ a.link-cartao:hover { border-color: var(--laranja); transform: translateY(-1px);
 
 .selo-carteira { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--laranja); background: var(--laranja-fundo); }
 input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); cursor: not-allowed; }
+
+.tabela-controle input:not([type=checkbox]) { min-width: 0; padding: 4px 6px; font-size: 13px; }
+.tabela-controle input.ct-num { width: 104px; text-align: right; }
+.tabela-controle input[type=date] { width: 138px; }
+.tabela-controle input[data-k=observacoes] { width: 160px; }
+.tabela-controle tfoot td { border-top: 2px solid var(--linha); }
+.tabela-controle select { min-width: 110px; padding: 4px 6px; font-size: 13px; }
+.tabela-controle td { white-space: nowrap; }
+.tabela-controle td:first-child, .tabela-controle td:nth-child(2) { white-space: normal; }
+.tabela-controle [data-hoje] { padding: 4px 8px; font-size: 12px; margin-left: 4px; }

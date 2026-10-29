@@ -11,6 +11,7 @@ export const MODULOS = {
   painel: 'Painel do mês',
   visao: 'Visão geral do escritório', carteira: 'Carteira de clientes', obrigacoes: 'Obrigações e prazos', certificados: 'Certificados',
   honorarios: 'Contratos e honorários', captura: 'Captura de documentos', situacao: 'Situação fiscal',
+  controle: 'Controle mensal de entregas', senhas: 'Senhas e acessos dos clientes',
   emitir: 'Emitir nota', notas: 'Notas emitidas', cobrancas: 'Cobranças',
   banco: 'Dados bancários', despesas: 'Despesas e balanço', tomadores: 'Clientes', servicos: 'Serviços', empresas: 'Empresas', relatorios: 'Relatórios', compras: 'Compras', tributacao: 'Tributação e apuração',
   excluir: 'Excluir registros',
@@ -37,7 +38,7 @@ export interface Usuario {
 /** Módulos que o usuário pode usar (adm: todos). */
 export function modulosDoUsuario(u: Pick<Usuario, 'tipo' | 'permissoes'>): Modulo[] {
   if (u.tipo === 'adm') return TODOS_MODULOS;
-  if (u.permissoes == null) return TODOS_MODULOS.filter((m) => m !== 'excluir'); // exclusão nunca é liberada por padrão
+  if (u.permissoes == null) return TODOS_MODULOS.filter((m) => m !== 'excluir' && m !== 'senhas'); // exclusão e senhas nunca são liberadas por padrão
   // na ordem do menu (o escritório primeiro), qualquer que seja a ordem em que as permissões foram gravadas
   try { const l = JSON.parse(u.permissoes) as string[]; return TODOS_MODULOS.filter((m) => l.includes(m)); } catch { return []; }
 }
@@ -51,6 +52,8 @@ const REGRAS: Regra[] = [
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
+  { r: /^\/api\/escritorio\/controle(\/linha|\/planilha\/(analisar|importar))?$/, mod: ['controle'] },
+  { r: /^\/api\/escritorio\/acessos(\/\d+(\/revelar)?)?$/, mod: ['senhas'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira$/, mod: ['carteira', 'visao', 'obrigacoes', 'certificados', 'honorarios', 'captura'] },
   { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer|\/planilha\/(analisar|importar))?$/, mod: ['carteira'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira\/\d+\/faturamento$/, mod: ['carteira'] },

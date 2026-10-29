@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db.js';
-import { exigirLogin, exigirPapel, restritoAEmpresas, type Usuario } from './auth.js';
+import { exigirLogin, exigirPapel, modulosDoUsuario, restritoAEmpresas, type Usuario } from './auth.js';
 import { ErroNegocio } from './servicos/emissao.js';
 import { analisarPlanilhaCarteira, importarParaCarteira } from './servicos/importar-clientes.js';
 import { clientesForaDaCarteira, empresaDoEscritorio, sincronizarClienteNoCadastro } from './servicos/cadastro-unico.js';
@@ -11,6 +11,9 @@ import { REGIMES, AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, de
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
+import { AREAS, LinhaControle, listarControle, salvarLinha } from './servicos/controle-mensal.js';
+import { Acesso, listarAcessos, revelarAcesso, salvarAcesso } from './servicos/acessos.js';
+import { analisarControle, importarControle } from './servicos/importar-controle.js';
 import { ResultadoFgts, detalheFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
 import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
@@ -291,6 +294,27 @@ export async function rotasEscritorio(app: FastifyInstance) {
       const e = db.prepare('SELECT email, avisar_debitos FROM empresas WHERE id = ?').get(d.empresa_id) as any;
       return { ...d, guias: listarGuias(u(req).escritorio_id, d.empresa_id), avisos: ultimosAvisos(d.empresa_id), email: e?.email ?? null, avisar_debitos: !!e?.avisar_debitos };
     });
+    // ---------- Controle mensal de entregas ----------
+    api.get('/api/escritorio/controle', async (req) => {
+      const q = z.object({ mes: z.string().regex(/^\d{4}-\d{2}$/), area: z.enum(AREAS) }).parse(req.query);
+      return listarControle(u(req).escritorio_id, q.mes, q.area, empresasDoUsuario(u(req)));
+    });
+    api.put('/api/escritorio/controle/linha', async (req) => {
+      const d = LinhaControle.parse(req.body);
+      checar(req, d.empresa_id);
+      return salvarLinha(u(req).escritorio_id, u(req).id, d);
+    });
+    const Planilha = z.object({ nome: z.string().max(200).default('controle.xlsx'), base64: z.string().min(20), itens: z.array(z.string().max(30)).max(3000).optional() });
+    api.post('/api/escritorio/controle/planilha/analisar', { bodyLimit: 12 * 1024 * 1024 }, async (req) => analisarControle(u(req).escritorio_id, Buffer.from(Planilha.parse(req.body).base64, 'base64')));
+    api.post('/api/escritorio/controle/planilha/importar', { bodyLimit: 12 * 1024 * 1024, preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const b = Planilha.parse(req.body);
+      return importarControle(u(req).escritorio_id, u(req).id, Buffer.from(b.base64, 'base64'), b.itens ?? [], modulosDoUsuario(u(req)).includes('senhas'));
+    });
+    // ---------- Senhas e acessos dos clientes ----------
+    api.get('/api/escritorio/acessos', async (req) => listarAcessos(u(req).escritorio_id, empresasDoUsuario(u(req))));
+    api.put('/api/escritorio/acessos/:id', async (req) => { checar(req, id(req)); return salvarAcesso(u(req).escritorio_id, u(req).id, id(req), Acesso.parse(req.body)); });
+    api.post('/api/escritorio/acessos/:id/revelar', async (req) => { checar(req, id(req)); return revelarAcesso(u(req).escritorio_id, id(req)); });
+
     // FGTS Digital: o aplicativo instalado lê o portal e grava aqui o resultado de cada cliente
     api.post('/api/escritorio/fgts/resultados', async (req) => {
       const b = z.object({ resultados: z.array(ResultadoFgts).min(1).max(500) }).parse(req.body);

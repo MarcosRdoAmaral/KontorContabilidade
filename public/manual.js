@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.11.1';
+export const MANUAL_VERSAO = '1.12.0';
 
 export const MANUAL = [
   {
@@ -61,6 +61,22 @@ export const MANUAL = [
       <h3>Obrigações do cliente</h3>
       <p>O botão <em>Obrigações</em> mostra quais entram pela regra e permite exceções: incluir sempre (ex.: EFD-Reinf para quem tem retenções), dispensar, ou definir outro responsável só para aquela obrigação.</p>
       <p class="dica">O botão ⋯ leva aos dados de emissão (certificado A1, logo, dados bancários), à emissão de NFS-e e às NF-e recebidas do cliente.</p>`,
+  },
+  {
+    id: 'controle', titulo: 'Controle mensal e senhas', resumo: 'Impostos, folha e envios de cada competência; senhas do Simples e previdenciária.',
+    corpo: `
+      <h3>Controle mensal</h3>
+      <p>Em Escritório &gt; Controle mensal, escolha a competência e a aba. Tudo é salvo ao sair de cada campo, com quem preencheu.</p>
+      <ul>
+        <li><strong>Fiscal:</strong> sem movimento, notas de entrada (Ent.) e de saída/serviço (S/S) conferidas, faturamento, imposto (a alíquota é calculada), data de emissão da guia, canal de envio (WhatsApp ou e-mail, guardado no cliente) e data de envio (botão <em>Hoje</em>).</li>
+        <li><strong>Departamento pessoal:</strong> registro do cliente, sem folha, DARF previdenciário, FGTS, sindicato, total e data de envio. Mostra os clientes com funcionários (há opção para incluir os demais).</li>
+        <li><strong>Contábil:</strong> data de envio da contabilização e observações.</li>
+      </ul>
+      <p>“Só não enviados” mostra o que falta mandar; o rodapé soma faturamento, impostos e encargos.</p>
+      <h3>Senhas e acessos</h3>
+      <p>Em Escritório &gt; Senhas e acessos ficam o CPF do responsável, o código de acesso e a atividade do Simples Nacional, e a senha previdenciária de cada cliente. As senhas são guardadas criptografadas e só aparecem ao clicar em <em>Mostrar</em> (voltam a ficar escondidas depois de um minuto), com o botão <em>Copiar</em>. Só quem tem a permissão “Senhas e acessos dos clientes” vê essa tela; ela não vem liberada por padrão para usuários novos.</p>
+      <h3>Importar a planilha antiga</h3>
+      <p>O botão <em>Importar planilha</em> lê a planilha de controle (.xlsx): as senhas do Simples e previdenciária são ligadas pelo CNPJ; o canal de envio (aba Fiscal) e o registro do DP (aba RH), pelo nome do cliente. A prévia mostra a quem cada linha foi ligada antes de importar.</p>`,
   },
   {
     id: 'obrigacoes', titulo: 'Obrigações e prazos', resumo: 'Agenda mensal, entregas, protocolo, dispensa e catálogo de obrigações.',

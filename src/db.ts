@@ -959,6 +959,29 @@ const migracoes: string[] = [
     consultado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX ix_fgts_consultas ON fgts_consultas(empresa_id, id);`,
+  // 36: controle mensal de entregas (fiscal, departamento pessoal, contábil) e senhas/acessos dos clientes
+  `CREATE TABLE controle_mensal (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    competencia TEXT NOT NULL,              -- AAAA-MM
+    area TEXT NOT NULL CHECK (area IN ('FISCAL','DP','CONTABIL')),
+    dados_json TEXT NOT NULL DEFAULT '{}',
+    usuario_id INTEGER REFERENCES usuarios(id),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (empresa_id, competencia, area)
+  );
+  ALTER TABLE empresas ADD COLUMN canal_envio TEXT;
+  ALTER TABLE empresas ADD COLUMN registro_dp TEXT;
+  CREATE TABLE acessos_cliente (
+    empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
+    sn_cpf_responsavel TEXT,
+    sn_codigo_enc TEXT,
+    sn_atividade TEXT,
+    prev_senha_enc TEXT,
+    observacoes TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
 ];
 
 export function migrar(): void {
