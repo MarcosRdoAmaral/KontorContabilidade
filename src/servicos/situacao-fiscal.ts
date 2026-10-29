@@ -36,7 +36,7 @@ export interface RelatorioLido {
   versao?: number;
 }
 
-export const VERSAO_LEITURA = 2;
+export const VERSAO_LEITURA = 3; // 3: débitos do Simples Nacional (sem código de receita)
 
 const MOEDA = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
 const num = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'));
@@ -50,6 +50,8 @@ const LIXO = [
 const CABECALHO = [/^receita\s+pa\/?\s*exerc/i, /sdo\.?\s*dev/i, /^inscri[çc][ãa]o\s+receita/i, /^(cnpj|cpf):\s*[\d./-]+$/i, /^(cnpj|cpf)\s*[\d./-]+$/i];
 const PERIODO = String.raw`(?:\d{1,2}[ºo°]?\s*TRIM\/\d{4}|\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{4}|\d{4})`;
 const RE_DEBITO = new RegExp(String.raw`^(\d{4}-\d{2})\s*-\s*(.+?)\s+(${PERIODO})\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$`, 'i');
+/** Débito do Simples Nacional: "SIMPLES NAC. 01/2026 20/02/2026 2.096,20 2.096,20 419,24 186,14 2.701,58 DEVEDOR" (sem código de receita). */
+const RE_SIMPLES = /^(SIMPLES\s*NAC(?:\.|IONAL)?)\s+(\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$/i;
 const RE_INSCRICAO = /^(\d{2}\.\d\.\d{2}\.\d{6}-\d{2})\s+(\d{4})-*\s*(.*?)\s+(\d{2}\/\d{2}\/\d{4})\s+(?:(\d{2}\/\d{2}\/\d{4})\s+)?([\d.]+\/\d{4}-\d{2})\s*(.*)$/;
 
 /** Interpreta o texto do relatório (uma linha por linha do PDF). */
@@ -80,6 +82,16 @@ export function lerRelatorio(texto: string): RelatorioLido {
         tipo: 'DEBITO', texto: l, receita: deb[1], descricao: deb[2].trim(), periodo: deb[3], vencimento: isoBr(deb[4]),
         valorOriginal: v[0] ? num(v[0]) : null, saldoDevedor: v[1] ? num(v[1]) : null, saldo: v.length ? num(v[v.length - 1]) : null,
         situacao: deb[5].replace(MOEDA, '').trim() || null,
+      };
+      atual.itens.push(ultimo); continue;
+    }
+    const sn = RE_SIMPLES.exec(l);
+    if (sn) {
+      const v = sn[4].match(MOEDA) ?? [];
+      ultimo = {
+        tipo: 'DEBITO', texto: l, receita: 'SN', descricao: 'Simples Nacional', periodo: sn[2], vencimento: isoBr(sn[3]),
+        valorOriginal: v[0] ? num(v[0]) : null, saldoDevedor: v[1] ? num(v[1]) : null, saldo: v.length ? num(v[v.length - 1]) : null,
+        situacao: sn[4].replace(MOEDA, '').trim() || null,
       };
       atual.itens.push(ultimo); continue;
     }

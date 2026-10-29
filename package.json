@@ -1,6 +1,6 @@
 {
   "name": "kontor-contabilidade",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Kontor Gestão Contabilidade — gestão de escritórios de contabilidade para Windows",
   "main": "electron/main.mjs",
   "kontor": {

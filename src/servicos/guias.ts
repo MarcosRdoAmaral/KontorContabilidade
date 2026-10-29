@@ -46,7 +46,7 @@ export function periodoSicalc(p: string): { tipoPA: string; dataPA: string } {
 /** Qual guia recalcula um débito do relatório (sugestão: o usuário pode trocar antes de gerar). */
 export function sugestaoGuia(i: ItemPendencia, secao = ''): Partial<PedidoGuia> | null {
   const mesAno = /\b(\d{2}\/\d{4})\b/.exec(i.periodo ?? i.texto ?? '')?.[1] ?? null;
-  if (/simples/i.test(secao) || /SIMPLES|\bDAS\b/i.test(i.descricao ?? '')) return mesAno ? { tipo: 'DAS', periodo: mesAno, descricao: i.descricao ?? 'Simples Nacional' } : null;
+  if (i.receita === 'SN' || /simples/i.test(secao) || /SIMPLES|\bDAS\b/i.test(i.descricao ?? '') || /^SIMPLES\s*NAC/i.test(i.texto ?? '')) return mesAno ? { tipo: 'DAS', periodo: mesAno, descricao: i.descricao ?? 'Simples Nacional' } : null;
   if (i.tipo !== 'DEBITO' || !i.receita) return null;
   const cod = i.receita.slice(0, 4);
   if ((RECEITAS_DCTFWEB.has(cod) || /^CP[\s-]/i.test(i.descricao ?? '')) && mesAno && !/MAED/i.test(i.descricao ?? '')) return { tipo: 'DCTFWEB', periodo: mesAno, descricao: i.descricao ?? null };

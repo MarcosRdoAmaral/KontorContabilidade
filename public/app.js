@@ -4698,7 +4698,8 @@ async function detalheSituacaoFiscal(id) {
   const hojeIso = hoje();
   const certVencida = r?.certidaoValidade && r.certidaoValidade < hojeIso;
   const recalc = (i, k) => (i.guia && d.status === 'PRONTA' ? `<button data-guia="${k}" title="Gerar a guia com multa e juros até a data de pagamento">Recalcular</button>` : '');
-  const linhaDeb = (i, k) => i.tipo === 'DEBITO' ? `<tr><td><strong>${esc(i.receita)}</strong> ${esc(i.descricao ?? '')}${i.notificacao ? `<br><span class="dica">Notificação ${esc(i.notificacao)}</span>` : ''}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td>
+  const rec = (r) => (r && r !== 'SN' ? `<strong>${esc(r)}</strong> ` : '');
+  const linhaDeb = (i, k) => i.tipo === 'DEBITO' ? `<tr><td>${rec(i.receita)}${esc(i.descricao ?? '')}${i.notificacao ? `<br><span class="dica">Notificação ${esc(i.notificacao)}</span>` : ''}</td><td>${esc(i.periodo ?? '')}</td><td>${dataBr(i.vencimento)}</td>
       <td class="num">${i.valorOriginal != null ? brl(i.valorOriginal) : ''}</td><td class="num">${i.saldo != null ? `<strong>${brl(i.saldo)}</strong>` : ''}</td><td>${esc(i.situacao ?? '')}</td><td class="acoes-linha">${recalc(i, k)}</td></tr>`
     : `<tr><td colspan="6">${esc(i.texto)}</td><td class="acoes-linha">${recalc(i, k)}</td></tr>`;
   abrirDialogo(`<div class="dlg-largo"><h2>Situação fiscal — ${esc(d.cliente)}</h2>
@@ -4711,7 +4712,7 @@ async function detalheSituacaoFiscal(id) {
       <div class="cartao ${inscricoes.length ? 'alerta-cartao' : ''}"><div class="sutil">Inscrições em dívida ativa (PGFN)</div><div class="valor">${inscricoes.length}</div><div class="dica">${inscricoes.filter((i) => /ajuizad/i.test(i.situacao ?? '')).length} ajuizada(s)</div></div>
     </div>` : ''}
     ${porTributo.size ? `<h3>Impostos em aberto na Receita Federal</h3><table class="tabela"><thead><tr><th>Tributo</th><th class="num">Débitos</th><th>Vencimento mais antigo</th><th class="num">Saldo</th></tr></thead><tbody>
-      ${[...porTributo.values()].sort((x, y) => y.total - x.total).map((g) => `<tr><td><strong>${esc(g.receita)}</strong> ${esc(g.nome)}</td><td class="num">${g.qtd}</td><td>${dataBr(g.maisAntigo)}</td><td class="num"><strong>${brl(g.total)}</strong></td></tr>`).join('')}</tbody></table>` : ''}
+      ${[...porTributo.values()].sort((x, y) => y.total - x.total).map((g) => `<tr><td>${rec(g.receita)}${esc(g.nome)}</td><td class="num">${g.qtd}</td><td>${dataBr(g.maisAntigo)}</td><td class="num"><strong>${brl(g.total)}</strong></td></tr>`).join('')}</tbody></table>` : ''}
     ${debitos.length ? `<details open><summary><strong>Todos os débitos (${debitos.length})</strong> <span class="dica">— “Recalcular” gera a guia atualizada (um PDF por guia, cobrado pelo SERPRO)</span></summary><table class="tabela" style="margin-top:8px"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo (c/ multa e juros)</th><th>Situação</th><th></th></tr></thead><tbody>${debitos.map(linhaDeb).join('')}</tbody></table></details>` : ''}
     ${inscricoes.length ? `<h3>Inscrições em dívida ativa (PGFN)</h3><table class="tabela"><thead><tr><th>Inscrição</th><th>Tributo</th><th>Inscrito em</th><th>Situação</th><th>Processo</th></tr></thead><tbody>
       ${inscricoes.map((i) => i.tipo === 'INSCRICAO' ? `<tr><td>${esc(i.inscricao)}</td><td>${esc(i.receita ?? '')} ${esc(i.descricao ?? '')}</td><td>${dataBr(i.inscritoEm)}</td><td>${esc(i.situacao ?? '')}</td><td><span class="dica">${esc(i.processo ?? '')}</span></td></tr>` : `<tr><td colspan="5">${esc(i.texto)}</td></tr>`).join('')}</tbody></table>

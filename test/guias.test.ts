@@ -22,6 +22,17 @@ test('sugestão de guia e períodos do Sicalc', async () => {
   assert.deepEqual([maed.tipo, maed.receita, maed.valor, maed.referencia], ['DARF', '1345-01', 200, '14174877105630']);
   assert.equal(sugestaoGuia({ tipo: 'OUTRO', texto: 'PA 03/2026 vencimento 20/04/2026 valor 1.234,00' }, 'Pendência - Débito (Simples Nacional)')?.tipo, 'DAS');
   assert.equal(sugestaoGuia({ tipo: 'INSCRICAO', texto: '', inscricao: '91.4.21.019567-04' }), null);
+  // débitos do Simples Nacional vêm sem código de receita no relatório
+  const { lerRelatorio, textoDoPdf } = await import('../src/servicos/situacao-fiscal.js');
+  const S = '_'.repeat(40);
+  const rel = lerRelatorio(await textoDoPdf(await relatorioPdf([`${S} Diagnóstico Fiscal na Receita Federal ${S}`, `Pendência - Débito (SIEF) ${S}`, 'CNPJ: 11.222.333/0001-81',
+    ['Receita', 'PA/Exerc.', 'Dt. Vcto', 'Vl. Original', 'Sdo. Devedor', 'Multa', 'Juros', 'Sdo. Dev. Cons.', 'Situação'],
+    ['SIMPLES NAC.', '01/2026', '20/02/2026', '2.096,20', '2.096,20', '419,24', '186,14', '2.701,58', 'DEVEDOR'],
+    ['SIMPLES NAC.', '09/2026', '20/10/2026', '3.327,76', '3.327,76', '87,85', '0,00', '3.415,61', 'DEVEDOR'], 'Final do Relatório'], { girado: true })));
+  const sn = rel.secoes[0].itens;
+  assert.deepEqual(sn.map((i) => [i.tipo, i.periodo, i.vencimento, i.saldoDevedor, i.saldo]), [['DEBITO', '01/2026', '2026-02-20', 2096.2, 2701.58], ['DEBITO', '09/2026', '2026-10-20', 3327.76, 3415.61]]);
+  assert.equal(rel.totalAberto, 6117.19);
+  assert.deepEqual(sugestaoGuia(sn[0], rel.secoes[0].titulo), { tipo: 'DAS', periodo: '01/2026', descricao: 'Simples Nacional' });
 });
 
 test('recalcular guias pelo Integra Contador e avisar só os clientes marcados', async () => {
