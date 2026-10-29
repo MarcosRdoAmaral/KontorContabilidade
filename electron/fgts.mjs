@@ -97,10 +97,33 @@ async function definirProcurador(w, ni) {
     for (let i = 0; i < 20 && ni.disabled; i++) await new Promise((r) => setTimeout(r, 150));
     ni.focus(); ni.select?.();
     return true;`);
-  // digita como teclado (a máscara do campo só aceita digitação)
-  await js(w, `const ni = document.querySelector('input[placeholder="Informe CNPJ ou CPF"]'); ni.value = ''; ni.dispatchEvent(new Event('input', { bubbles: true })); ni.focus(); return true;`);
-  await w.webContents.insertText(ni);
-  await dormir(400);
+  // preenche o CNPJ/CPF: digitação real na janela (a máscara do campo reage a teclas); se não pegar, grava o valor
+  // direto no campo e avisa o formulário do portal
+  w.focus(); w.webContents.focus();
+  await js(w, `const ni = document.querySelector('input[placeholder="Informe CNPJ ou CPF"]');
+    for (let i = 0; i < 40 && ni.disabled; i++) await new Promise((r) => setTimeout(r, 150));
+    ni.focus(); ni.click(); return true;`);
+  for (const ch of ni) {
+    w.webContents.sendInputEvent({ type: 'keyDown', keyCode: ch });
+    w.webContents.sendInputEvent({ type: 'char', keyCode: ch });
+    w.webContents.sendInputEvent({ type: 'keyUp', keyCode: ch });
+  }
+  await dormir(300);
+  const preenchido = await js(w, `
+    const ni = document.querySelector('input[placeholder="Informe CNPJ ou CPF"]');
+    const alvo = ${JSON.stringify(ni)};
+    if (ni.value.replace(/\D/g, '') !== alvo) {
+      const fmt = alvo.length === 14 ? alvo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : alvo.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      ni.focus(); set.call(ni, fmt);
+      ni.dispatchEvent(new Event('input', { bubbles: true })); ni.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 200));
+      if (ni.value.replace(/\D/g, '') !== alvo) { set.call(ni, alvo); ni.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    ni.dispatchEvent(new Event('blur', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return ni.value.replace(/\D/g, '') === alvo;`);
+  if (!preenchido) return { ok: false, erro: 'Não foi possível preencher o CNPJ do cliente na tela do portal.' };
   const r = await js(w, `
     const dlg = document.querySelector('[role=dialog]') ?? document;
     [...dlg.querySelectorAll('button')].find((b) => /^\\s*(definir|selecionar)\\s*$/i.test(b.textContent))?.click();
