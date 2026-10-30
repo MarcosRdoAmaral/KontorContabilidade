@@ -32,7 +32,7 @@ function referencias(alvo: string): Ref[] {
 }
 
 /** Apaga as linhas de `tabela` que atendem `onde`, e antes tudo o que depende delas. */
-function apagar(tabela: string, onde: string, params: unknown[]) {
+export function apagar(tabela: string, onde: string, params: unknown[]) {
   const ids = `SELECT id FROM ${tabela} WHERE ${onde}`;
   for (const r of referencias(tabela)) {
     const dona = tabela === 'empresas' ? !SO_DESLIGAR.has(`${r.tabela}.${r.coluna}`) : r.obrigatoria || r.cascata;

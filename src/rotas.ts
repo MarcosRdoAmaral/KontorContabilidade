@@ -1,4 +1,5 @@
 import { excluirEmpresa, resumoExclusao } from './servicos/excluir-empresa.js';
+import { EscopoZerar, resumoZerar, zerarDados } from './servicos/zerar-dados.js';
 import { CAMPOS_BLOQUEADOS, sincronizarCarteiraInteira, sincronizarClienteNoCadastro } from './servicos/cadastro-unico.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -219,6 +220,19 @@ export async function rotas(app: FastifyInstance) {
       if (!conferirSenha(senha, hash)) { registrarFalha(chave); throw new ErroNegocio('Senha master incorreta.', 400); }
       limparFalhas(chave);
       return excluirEmpresa(u(req).escritorio_id, Number((req.params as any).id));
+    });
+    // ---------- Zerar dados (Configurações > Backup): só o usuário master, com a senha dele ----------
+    api.get('/api/zerar', async (req) => { if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode zerar os dados.', 403); return resumoZerar(u(req).escritorio_id); });
+    api.post('/api/zerar', async (req, reply) => {
+      if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode zerar os dados.', 403);
+      const { senha, confirmacao, ...escopo } = z.object({ senha: z.string().min(1, 'Informe a senha master'), confirmacao: z.string(), clientes: z.boolean(), movimento: z.boolean() }).parse(req.body);
+      if (confirmacao.trim().toUpperCase() !== 'ZERAR') throw new ErroNegocio('Digite ZERAR para confirmar.', 400);
+      const chave = `ZERAR:${u(req).id}`;
+      if (loginBloqueado(chave)) return reply.code(429).send({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
+      const hash = (db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(u(req).id) as any).senha_hash;
+      if (!conferirSenha(senha, hash)) { registrarFalha(chave); throw new ErroNegocio('Senha master incorreta.', 400); }
+      limparFalhas(chave);
+      return zerarDados(u(req).escritorio_id, EscopoZerar.parse(escopo));
     });
     api.put('/api/me/senha', async (req) => {
       const d = z.object({ atual: z.string(), nova: z.string() }).parse(req.body);

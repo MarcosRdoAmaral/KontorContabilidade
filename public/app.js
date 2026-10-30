@@ -3392,6 +3392,44 @@ async function telaBackup() {
     </tbody></table></div>` : ''}
     ${window.nfseDesktop ? `<h2>Restaurar</h2><p class="sutil">Para voltar a uma cópia, use o menu <strong>Arquivo > Restaurar backup…</strong>. O sistema guarda os dados atuais antes de substituí-los.</p>` : ''}`;
   $('#baixar').onclick = () => baixar('/api/backup/baixar', `nfse-backup-${hoje()}.db`);
+  if (estado.usuario.mestre) {
+    corpoConfig().insertAdjacentHTML('beforeend', `<h2>Zerar dados</h2>
+      <p class="sutil">Limpa a base para recomeçar, sem reinstalar. Ficam os usuários, a licença, as configurações, a empresa do escritório com o certificado, a numeração das notas, os serviços e as contas bancárias. Só o usuário master vê esta opção.</p>
+      <button class="perigo" id="zerar">Zerar dados…</button>`);
+    $('#zerar').onclick = zerarDadosDialogo;
+  }
+}
+
+async function zerarDadosDialogo() {
+  let r;
+  try { r = await api('GET', '/api/zerar'); } catch (e) { return aviso(mensagemErro(e)); }
+  const m = r.movimento;
+  const itens = [[m.notas, 'nota(s) emitida(s)'], [m.cobrancas, 'cobrança(s)/boleto(s)'], [m.tomadores, 'tomador(es) avulso(s)'], [m.compras, 'compra(s) e NF-e recebida(s)'], [m.despesas, 'despesa(s)']].filter(([n]) => n);
+  abrirDialogo(`<form id="form-zerar"><h2>Zerar dados</h2>
+    <p class="sutil">Escolha o que apagar. Antes, o sistema baixa um backup para você e guarda outra cópia do banco na pasta <em>antes-de-zerar</em>.</p>
+    <label class="check"><input type="checkbox" name="clientes" checked> <span><strong>Clientes e empresas</strong>: ${r.clientes.carteira} cliente(s) da carteira e ${r.clientes.empresas} outra(s) empresa(s), com tudo o que é deles (obrigações, controle mensal, fechamentos, situação fiscal, senhas, certificados, contratos, notas, compras).</span></label>
+    <label class="check"><input type="checkbox" name="movimento" checked> <span><strong>Movimento do escritório</strong>${r.escritorio ? ` (${esc(r.escritorio.razao_social)})` : ''}: ${itens.length ? itens.map(([n, t]) => `${n} ${t}`).join(', ') : 'nada registrado'}, além de extratos, cartões e estoque.</span></label>
+    <div class="banner teste"><strong>Não dá para desfazer pelo sistema.</strong> Para voltar, só restaurando o backup (Arquivo &gt; Restaurar backup…).</div>
+    <label>Senha master <input type="password" name="senha" required autocomplete="current-password"></label>
+    <label>Digite ZERAR para confirmar <input name="confirmacao" required autocomplete="off"></label>
+    <p class="erro" id="erro-zerar"></p>
+    <div class="acoes"><button class="perigo" type="submit">Baixar backup e zerar</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
+    const f = d.querySelector('#form-zerar');
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const erro = $('#erro-zerar');
+      if (!f.clientes.checked && !f.movimento.checked) return (erro.textContent = 'Escolha o que zerar.');
+      if (f.confirmacao.value.trim().toUpperCase() !== 'ZERAR') return (erro.textContent = 'Digite ZERAR para confirmar.');
+      const bt = f.querySelector('button[type=submit]'); bt.disabled = true; bt.textContent = 'Zerando…';
+      try {
+        await baixar('/api/backup/baixar', `kontor-antes-de-zerar-${hoje()}.db`);
+        const x = await api('POST', '/api/zerar', { senha: f.senha.value, confirmacao: f.confirmacao.value, clientes: f.clientes.checked, movimento: f.movimento.checked });
+        d.close();
+        aviso('Dados zerados. Uma cópia do banco de antes ficou em: ' + x.copia);
+        await carregarEmpresas(); location.hash = '#/painel';
+      } catch (e) { bt.disabled = false; bt.textContent = 'Baixar backup e zerar'; erro.textContent = mensagemErro(e); }
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

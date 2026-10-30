@@ -49,6 +49,7 @@ const LER_NOTA: Modulo[] = ['notas', 'painel', 'cobrancas', 'emitir'];
 const REGRAS: Regra[] = [
   // exclusão de empresa: a rota confere que é o usuário master e a senha dele
   { r: /^\/api\/empresas\/\d+\/(exclusao|excluir)$/, mod: 'livre' },
+  { r: /^\/api\/zerar$/, mod: 'livre' }, // a rota confere que é o master e a senha dele
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },

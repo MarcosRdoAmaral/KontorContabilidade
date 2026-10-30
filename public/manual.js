@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.13.0';
+export const MANUAL_VERSAO = '1.14.0';
 
 export const MANUAL = [
   {
@@ -418,6 +418,7 @@ export const MANUAL = [
         <li><strong>E-mail:</strong> servidor SMTP usado para enviar notas e boletos aos clientes e para a recuperação de senha.</li>
         <li><strong>Aparência:</strong> escolha entre <em>Preto e laranja</em>, <em>Branco e laranja</em> e <em>Azul e dourado</em>. Vale para o computador.</li>
         <li><strong>Backup:</strong> o sistema faz cópia automática diária; também dá para baixar um backup quando quiser. Guarde uma cópia fora do computador.</li>
+        <li><strong>Zerar dados</strong> (só o usuário master, em Backup): apaga os clientes e empresas (menos a do escritório) e/ou o movimento do escritório (notas, boletos, tomadores avulsos, compras, despesas, extratos, cartões, estoque), para recomeçar sem reinstalar. Ficam usuários, licença, configurações, a empresa do escritório com o certificado, a numeração das notas, serviços e contas bancárias. Pede a senha master e a palavra ZERAR, baixa um backup e guarda outra cópia na pasta <em>antes-de-zerar</em>; para voltar, use Arquivo &gt; Restaurar backup….</li>
         <li><strong>Licença:</strong> mostra a situação e permite informar um novo código. Nos <strong>15 dias</strong> antes do vencimento (da licença ou do período de teste) o menu mostra "Licença vence em N dia(s)" em destaque e o sistema abre um aviso uma vez por dia, com o código do computador para pedir a renovação. Vencida a licença, só a emissão é bloqueada.</li>
         <li><strong>Atualizações:</strong> o sistema baixa novas versões e pede para reiniciar; os dados são preservados.</li>
       </ul>`,
