@@ -76,7 +76,7 @@ export function salvarConfig(escritorioId: number, d: z.infer<typeof ConfigInteg
 // Transporte (trocável nos testes)
 // ---------------------------------------------------------------------------------------------
 
-export type Endpoint = 'Consultar' | 'Apoiar' | 'Emitir';
+export type Endpoint = 'Consultar' | 'Apoiar' | 'Emitir' | 'Declarar';
 export interface Token { accessToken: string; jwtToken: string; expiraEm: number }
 export interface Transporte {
   autenticar(): Promise<Token>;

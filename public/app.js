@@ -4593,11 +4593,12 @@ const CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'E-mail', OUTRO: 'Outro' };
 
 async function telaControle() {
   const f = telaControle.filtro ??= { mes: (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(), area: 'FISCAL', q: '', pendentes: false, todosDp: false };
-  const lista = await api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`);
+  const [lista, fech] = await Promise.all([api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`), f.area === 'CONTABIL' ? { resumo: {} } : api('GET', `/api/escritorio/fechamento?mes=${f.mes}`).catch(() => ({ resumo: {} }))]);
+  telaControle.tabelas = fech;
   const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal', CONTABIL: 'Contábil' };
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Controle mensal</h1><p class="sutil">Entregas de cada cliente na competência: impostos e guias do fiscal, folha e encargos do departamento pessoal e a contabilização. Tudo é salvo ao sair de cada campo.</p></div>
-      <div><button id="ct-imp">Importar planilha</button></div></div>
+      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes com folha que ainda não foi transmitida">Transmitir DCTFWeb (lote)</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail o fechamento (guias) aos clientes com guia gerada e ainda não enviados">Enviar fechamentos por e-mail</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
     <div class="filtros">
       <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
       <label style="flex:1 1 220px">Buscar <input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Cliente"></label>
@@ -4613,19 +4614,22 @@ async function telaControle() {
   const obs = (v) => `<input data-k="observacoes" value="${esc(v ?? '')}" maxlength="500" placeholder="—">`;
   const enviado = (v) => `${dt('enviado', v)} ${v ? '' : '<button type="button" data-hoje title="Marcar como enviado hoje">Hoje</button>'}`;
   const COLS = {
-    FISCAL: ['Cliente', 'Sem mov.', 'Ent.', 'S/S', 'Faturamento', 'Imposto', 'Alíquota', 'Emissão da guia', 'Envio', 'Enviado em', 'Observações'],
-    DP: ['Registro', 'Cliente', 'Sem folha', 'DARF Prev.', 'FGTS', 'Sindicato', 'Total', 'Enviado em', 'Observações'],
+    FISCAL: ['Cliente', 'PGDAS-D', 'Sem mov.', 'Ent.', 'S/S', 'Faturamento', 'Imposto', 'Alíquota', 'Emissão da guia', 'Envio', 'Enviado em', 'Observações'],
+    DP: ['Registro', 'Cliente', 'DCTFWeb', 'Sem folha', 'DARF Prev.', 'FGTS', 'Sindicato', 'Total', 'Enviado em', 'Observações'],
     CONTABIL: ['Cliente', 'Enviado em', 'Observações'],
   };
   $('#ct-cab').innerHTML = `<tr>${COLS[f.area].map((c) => `<th class="${/Faturamento|Imposto|Alíquota|DARF|FGTS|Sindicato|Total/.test(c) ? 'num' : ''}">${c}</th>`).join('')}</tr>`;
   const cliente = (c) => `<td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span>${c.usuario ? `<br><span class="dica" title="${esc(dhBr(c.atualizado_em))}">por ${esc(c.usuario)}</span>` : ''}</td>`;
+  const SIT_FECH = { TRANSMITIDA: ['Transmitida', 'cor-verde'], CALCULADO: ['Calculada', 'cor-ambar'], ERRO: ['Erro', 'cor-vermelho'] };
+  const celFech = (c, tipo) => { const x = fech.resumo[c.empresa_id]?.[tipo]; const [r, cor] = x ? SIT_FECH[x.situacao] : ['Abrir', 'dica'];
+    return `<td><button type="button" class="link-fech ${cor}" data-fech="${c.empresa_id}" title="${esc(x?.erro ?? 'Abrir o fechamento deste cliente')}">${r}${x?.valor != null && x.situacao !== 'ERRO' ? `<br><span class="dica">${brl(x.valor)}</span>` : ''}</button></td>`; };
   const aliq = (d) => (d.faturamento > 0 && d.imposto != null ? `${(d.imposto / d.faturamento * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%` : '—');
   const linha = (c) => {
     const d = c.dados;
-    if (f.area === 'FISCAL') return `<tr data-id="${c.empresa_id}" class="${d.sem_movimento ? 'inativo' : ''}">${cliente(c)}<td>${chk('sem_movimento', d.sem_movimento, 'Sem movimento fiscal')}</td><td>${chk('entradas', d.entradas, 'Notas de entrada conferidas')}</td><td>${chk('saidas', d.saidas, 'Notas de saída/serviço conferidas')}</td>
+    if (f.area === 'FISCAL') return `<tr data-id="${c.empresa_id}" class="${d.sem_movimento ? 'inativo' : ''}">${cliente(c)}${c.regime === 'SIMPLES' ? celFech(c, 'PGDASD') : '<td><span class="dica">—</span></td>'}<td>${chk('sem_movimento', d.sem_movimento, 'Sem movimento fiscal')}</td><td>${chk('entradas', d.entradas, 'Notas de entrada conferidas')}</td><td>${chk('saidas', d.saidas, 'Notas de saída/serviço conferidas')}</td>
       <td class="num">${num('faturamento', d.faturamento)}</td><td class="num">${num('imposto', d.imposto)}</td><td class="num" data-aliq>${aliq(d)}</td><td>${dt('emissao', d.emissao)}</td>
       <td><select data-canal><option value="">—</option>${Object.entries(CANAL).map(([k, v]) => `<option value="${k}" ${c.canal_envio === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
-    if (f.area === 'DP') return `<tr data-id="${c.empresa_id}" class="${d.sem_folha ? 'inativo' : ''}"><td><input data-registro value="${esc(c.registro_dp ?? '')}" size="5" maxlength="20"></td>${cliente(c)}<td>${chk('sem_folha', d.sem_folha, 'Sem folha calculada')}</td>
+    if (f.area === 'DP') return `<tr data-id="${c.empresa_id}" class="${d.sem_folha ? 'inativo' : ''}"><td><input data-registro value="${esc(c.registro_dp ?? '')}" size="5" maxlength="20"></td>${cliente(c)}${celFech(c, 'DCTFWEB')}<td>${chk('sem_folha', d.sem_folha, 'Sem folha calculada')}</td>
       <td class="num">${num('darf_prev', d.darf_prev)}</td><td class="num">${num('fgts', d.fgts)}</td><td class="num">${num('sindicato', d.sindicato)}</td><td class="num" data-total>${fmtValor((d.darf_prev ?? 0) + (d.fgts ?? 0) + (d.sindicato ?? 0)) || '—'}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
     return `<tr data-id="${c.empresa_id}">${cliente(c)}<td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
   };
@@ -4634,8 +4638,8 @@ async function telaControle() {
     const soma = (k) => fmtValor(vis.reduce((t, c) => t + (c.dados[k] ?? 0), 0));
     const env = vis.filter((c) => c.dados.enviado).length;
     $('#ct-cont').textContent = `${vis.length} cliente(s) · ${env} enviado(s) · ${vis.length - env} pendente(s).`;
-    $('#ct-tot').innerHTML = f.area === 'FISCAL' ? `<tr><td><strong>Total</strong></td><td colspan="3"></td><td class="num"><strong>${soma('faturamento')}</strong></td><td class="num"><strong>${soma('imposto')}</strong></td><td colspan="5"></td></tr>`
-      : f.area === 'DP' ? `<tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>${soma('darf_prev')}</strong></td><td class="num"><strong>${soma('fgts')}</strong></td><td class="num"><strong>${soma('sindicato')}</strong></td><td class="num"><strong>${fmtValor(vis.reduce((t, c) => t + (c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0), 0))}</strong></td><td colspan="2"></td></tr>` : '';
+    $('#ct-tot').innerHTML = f.area === 'FISCAL' ? `<tr><td><strong>Total</strong></td><td colspan="4"></td><td class="num"><strong>${soma('faturamento')}</strong></td><td class="num"><strong>${soma('imposto')}</strong></td><td colspan="5"></td></tr>`
+      : f.area === 'DP' ? `<tr><td colspan="4"><strong>Total</strong></td><td class="num"><strong>${soma('darf_prev')}</strong></td><td class="num"><strong>${soma('fgts')}</strong></td><td class="num"><strong>${soma('sindicato')}</strong></td><td class="num"><strong>${fmtValor(vis.reduce((t, c) => t + (c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0), 0))}</strong></td><td colspan="2"></td></tr>` : '';
   };
   const visiveis = () => { const q = norm(f.q); return lista.filter((c) => (!q || norm(c.cliente).includes(q) || c.documento.includes(f.q.replace(/\D/g, '') || '#')) && (!f.pendentes || !c.dados.enviado) && (f.area !== 'DP' || f.todosDp || c.tem_funcionarios || Object.keys(c.dados).length)); };
   const salvar = async (c, extra = {}) => {
@@ -4659,6 +4663,7 @@ async function telaControle() {
         const tt = tr.querySelector('[data-total]'); if (tt) tt.textContent = fmtValor((c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0)) || '—';
         totais();
       }));
+      tr.querySelectorAll('[data-fech]').forEach((b) => (b.onclick = () => abrirFechamento(c.empresa_id, f.mes, () => telaControle())));
       const h = tr.querySelector('[data-hoje]'); if (h) h.onclick = () => { const i = tr.querySelector('[data-k="enviado"]'); i.value = hoje(); i.onchange(); };
       const cn = tr.querySelector('[data-canal]'); if (cn) cn.onchange = () => { c.canal_envio = cn.value || null; salvar(c, { canal_envio: c.canal_envio }); };
       const rg = tr.querySelector('[data-registro]'); if (rg) rg.onchange = () => { c.registro_dp = rg.value.trim() || null; salvar(c, { registro_dp: c.registro_dp ?? '' }); };
@@ -4670,7 +4675,129 @@ async function telaControle() {
   $('#ct-todos') && ($('#ct-todos').onchange = (ev) => { f.todosDp = ev.target.checked; pintar(); });
   conteudo.querySelectorAll('#ct-abas a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); f.area = a.dataset.a; telaControle(); }));
   $('#ct-imp').onclick = () => importarPlanilhaControle(telaControle);
+  $('#ct-dctf-lote') && ($('#ct-dctf-lote').onclick = () => {
+    const alvo = visiveis().filter((c) => c.tem_funcionarios && !c.dados.sem_folha && fech.resumo[c.empresa_id]?.DCTFWEB?.situacao !== 'TRANSMITIDA');
+    loteFechamento(`Transmitir a DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para cada cliente com folha (marcado sem folha fica de fora), o Kontor busca a declaração em andamento, assina com o certificado do escritório, transmite e gera o DARF. A folha precisa estar fechada no eSocial (e a EFD-Reinf, se houver). Cada cliente usa algumas chamadas ao Integra Contador, cobradas pelo SERPRO.',
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb`, { mes: f.mes }).then((r) => (r.jaTransmitida ? 'já estava transmitida' : `transmitida${r.recibo ? `, recibo ${r.recibo}` : ''}`) + (r.valor != null ? ` — DARF ${brl(r.valor)}` : r.aviso ? ` — ${r.aviso}` : '')), telaControle);
+  });
+  $('#ct-env-lote') && ($('#ct-env-lote').onclick = () => {
+    const tipo = f.area === 'FISCAL' ? 'PGDASD' : 'DCTFWEB';
+    const alvo = visiveis().filter((c) => fech.resumo[c.empresa_id]?.[tipo]?.tem_guia && !fech.resumo[c.empresa_id]?.enviado_em && c.canal_envio !== 'WHATSAPP' && c.email);
+    loteFechamento(`Enviar os fechamentos de ${rotuloMes(f.mes)} por e-mail`, alvo, 'Vai um e-mail para cada cliente com as guias geradas no mês (DAS e DARF da DCTFWeb) e o resumo dos valores. Ficam de fora quem já recebeu, quem não tem e-mail e quem é atendido pelo WhatsApp (esses se enviam pelo botão do cliente).',
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/enviar`, { mes: f.mes, canal: 'EMAIL' }).then((r) => `enviado para ${r.enviadoPara}`), telaControle);
+  });
   pintar();
+}
+
+/** Executa uma ação cliente a cliente, com andamento e resultado (lote). */
+function loteFechamento(titulo, alvo, explicacao, acao, aoFim) {
+  if (!alvo.length) return aviso('Nenhum cliente para esta ação na lista atual.');
+  abrirDialogo(`<div class="dlg-largo"><h2>${esc(titulo)}</h2><p class="sutil">${esc(explicacao)}</p>
+    <p><strong>${alvo.length}</strong> cliente(s): ${esc(alvo.slice(0, 8).map((c) => c.cliente).join(', '))}${alvo.length > 8 ? '…' : ''}</p>
+    <div id="lt-res"></div><div class="acoes"><button class="primario" id="lt-ir">Executar</button><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    dlg.querySelector('#lt-ir').onclick = async (ev) => {
+      ev.target.disabled = true;
+      const res = dlg.querySelector('#lt-res'); const linhas = [];
+      for (const [i, c] of alvo.entries()) {
+        res.innerHTML = `<p class="sutil">${i + 1} de ${alvo.length}: ${esc(c.cliente)}…</p><ul class="dicas">${linhas.join('')}</ul>`;
+        try { linhas.push(`<li><strong>${esc(c.cliente)}</strong>: ${esc(await acao(c))}</li>`); }
+        catch (e) { linhas.push(`<li class="cor-vermelho"><strong>${esc(c.cliente)}</strong>: ${esc(mensagemErro(e))}</li>`); }
+      }
+      res.innerHTML = `<div class="banner">Concluído.</div><ul class="dicas">${linhas.join('')}</ul>`;
+      dlg.querySelector('[data-fechar]').onclick = () => { dlg.close(); aoFim?.(); };
+    };
+  });
+}
+
+/** Fechamento do cliente na competência: PGDAS-D (receitas por atividade, cálculo, transmissão e DAS), DCTFWeb e envio. */
+async function abrirFechamento(empresaId, mes, aoFim) {
+  let d;
+  try { d = await api('GET', `/api/escritorio/fechamento/${empresaId}?mes=${mes}`); } catch (e) { return aviso(mensagemErro(e)); }
+  const tab = telaControle.tabelas ?? (await api('GET', `/api/escritorio/fechamento?mes=${mes}`));
+  const ATV = tab.atividades, TRIB = tab.tributos;
+  const pg = d.PGDASD, dc = d.DCTFWEB;
+  const ent = pg?.entrada ?? { receitas: d.atividades.map((id) => ({ idAtividade: id, valor: null })) };
+  const valorDe = (id) => ent.receitas?.find((r) => r.idAtividade === id)?.valor;
+  const arq = (tipo, qual, rot) => `<button type="button" data-arq="${tipo}:${qual}">${rot}</button>`;
+  const fatorR = (ids) => ids.some((id) => [10, 11, 12, 29].includes(Number(id)));
+  const simples = d.regime === 'SIMPLES';
+  abrirDialogo(`<div class="dlg-largo"><h2>Fechamento ${rotuloMes(mes)} — ${esc(d.cliente)}</h2>
+    <p class="sutil">${fmtDoc(d.documento)} · cada transmissão e guia é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
+    ${simples ? `<fieldset class="sub"><legend>Simples Nacional (PGDAS-D)</legend>
+      ${pg ? `<p>Situação: <strong class="${pg.situacao === 'TRANSMITIDA' ? 'cor-verde' : pg.situacao === 'ERRO' ? 'cor-vermelho' : 'cor-ambar'}">${pg.situacao === 'TRANSMITIDA' ? `Transmitida${pg.recibo ? ` (${esc(pg.recibo)})` : ''} em ${dhBr(pg.transmitida_em)}` : pg.situacao === 'CALCULADO' ? 'Calculada, ainda não transmitida' : 'Erro'}</strong>${pg.erro ? `<br><span class="dica cor-vermelho">${esc(pg.erro)}</span>` : ''}</p>` : ''}
+      <label class="largo">Atividades do cliente <span class="dica">(fica guardado para os próximos meses)</span>
+        <div id="fc-ativ" class="lista-checks">${Object.entries(ATV).map(([id, nome]) => `<label class="check"><input type="checkbox" value="${id}" ${d.atividades.includes(Number(id)) ? 'checked' : ''}> ${esc(nome)}</label>`).join('')}</div></label>
+      <div id="fc-rec" class="grade"></div>
+      <label class="check"><input type="checkbox" id="fc-ret" ${ent.retificadora ? 'checked' : ''}> Retificadora (já existe declaração deste mês)</label>
+      <div id="fc-calc">${pg?.valores ? tabelaTributos(pg.valores, TRIB) : ''}</div>
+      <div class="acoes"><button type="button" id="fc-calcular">Calcular</button><button type="button" class="primario" id="fc-transmitir" ${pg?.situacao === 'CALCULADO' ? '' : 'disabled'}>Transmitir e gerar o DAS</button>
+        ${pg?.tem_guia ? arq('PGDASD', 'guia', 'DAS (PDF)') : ''}${pg?.tem_recibo ? arq('PGDASD', 'recibo', 'Recibo') : ''}${pg?.tem_declaracao ? arq('PGDASD', 'declaracao', 'Declaração') : ''}</div>
+    </fieldset>` : '<p class="dica">Cliente fora do Simples Nacional: o PGDAS-D não se aplica.</p>'}
+    ${d.tem_funcionarios || dc ? `<fieldset class="sub"><legend>DCTFWeb</legend>
+      ${dc ? `<p>Situação: <strong class="${dc.situacao === 'TRANSMITIDA' ? 'cor-verde' : 'cor-vermelho'}">${dc.situacao === 'TRANSMITIDA' ? `Transmitida${dc.recibo ? ` (recibo ${esc(dc.recibo)})` : ''}${dc.transmitida_em ? ` em ${dhBr(dc.transmitida_em)}` : ''}` : 'Erro'}</strong>${dc.valor != null ? ` · DARF ${brl(dc.valor)}${dc.vencimento ? `, vence ${dataBr(dc.vencimento)}` : ''}` : ''}${dc.erro ? `<br><span class="dica ${dc.situacao === 'ERRO' ? 'cor-vermelho' : ''}">${esc(dc.erro)}</span>` : ''}</p>` : '<p class="dica">A declaração em andamento vem do fechamento da folha no eSocial (e da EFD-Reinf). O Kontor assina com o certificado do escritório, transmite e gera o DARF.</p>'}
+      <div class="acoes"><button type="button" class="primario" id="fc-dctf">${dc?.situacao === 'TRANSMITIDA' ? 'Gerar o DARF de novo' : 'Transmitir e gerar o DARF'}</button>${dc?.tem_guia ? arq('DCTFWEB', 'guia', 'DARF (PDF)') : ''}${dc?.tem_recibo ? arq('DCTFWEB', 'recibo', 'Recibo') : ''}</div>
+    </fieldset>` : ''}
+    <fieldset class="sub"><legend>Enviar ao cliente</legend>
+      <div class="cartao" style="white-space:pre-wrap">${d.mensagem.map(esc).join('\n')}</div>
+      <p class="dica">${d.email ? `E-mail: ${esc(d.email)}` : 'Sem e-mail no cadastro.'}${d.fone ? ` · WhatsApp: ${esc(d.fone)}` : ''}${d.envios.length ? ` · último envio ${dhBr(d.envios[0].enviado_em)} (${d.envios[0].canal === 'EMAIL' ? 'e-mail' : 'WhatsApp'})` : ''}</p>
+      <div class="acoes"><button type="button" id="fc-email" ${d.email ? '' : 'disabled'}>Enviar por e-mail (com as guias)</button><button type="button" id="fc-whats" ${d.fone ? '' : 'disabled'} title="Abre o WhatsApp com a mensagem e baixa as guias para anexar">WhatsApp</button></div>
+    </fieldset>
+    <p class="erro" id="fc-erro"></p>
+    <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    const erro = (e) => ($('#fc-erro').textContent = mensagemErro(e));
+    const recarregar = () => abrirFechamento(empresaId, mes, aoFim);
+    dlg.querySelector('[data-fechar]').onclick = () => { dlg.close(); aoFim?.(); };
+    dlg.querySelectorAll('[data-arq]').forEach((b) => (b.onclick = () => { const [tipo, qual] = b.dataset.arq.split(':'); baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=${tipo}&qual=${qual}`, `${tipo}-${qual}.pdf`, true); }));
+    if (simples) {
+      const sel = dlg.querySelector('#fc-ativ');
+      const desenhar = () => {
+        const ids = [...sel.querySelectorAll('input:checked')].map((o) => Number(o.value));
+        dlg.querySelector('#fc-rec').innerHTML = ids.map((id) => `<label>Receita — ${esc(ATV[id] ?? id)} <input data-rec="${id}" inputmode="decimal" value="${fmtValor(valorDe(id))}"></label>`).join('')
+          + (fatorR(ids) ? `<label>Folha de salários do mês (Fator R) <input id="fc-folha" inputmode="decimal" value="${fmtValor(ent.folha)}"></label>` : '');
+        dlg.querySelectorAll('[data-rec], #fc-folha').forEach((i) => (i.oninput = () => { dlg.querySelector('#fc-transmitir').disabled = true; }));
+      };
+      sel.onchange = async () => { desenhar(); try { await api('PUT', `/api/escritorio/fechamento/${empresaId}/atividades`, { ids: [...sel.querySelectorAll('input:checked')].map((o) => Number(o.value)) }); } catch (e) { erro(e); } };
+      desenhar();
+      const entrada = () => ({ receitas: [...dlg.querySelectorAll('[data-rec]')].map((i) => ({ idAtividade: Number(i.dataset.rec), valor: numero(i.value) ?? 0 })), folha: dlg.querySelector('#fc-folha') ? numero(dlg.querySelector('#fc-folha').value) : null, retificadora: dlg.querySelector('#fc-ret').checked });
+      dlg.querySelector('#fc-calcular').onclick = async (ev) => {
+        const e1 = entrada(); if (!e1.receitas.length) return erro(new Error('Escolha as atividades do cliente.'));
+        ev.target.disabled = true; ev.target.textContent = 'Calculando…';
+        try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/pgdas/calcular`, { mes, ...e1 }); dlg.querySelector('#fc-calc').innerHTML = tabelaTributos(r.valores, TRIB); dlg.querySelector('#fc-transmitir').disabled = false; }
+        catch (e) { erro(e); } finally { ev.target.disabled = false; ev.target.textContent = 'Calcular'; }
+      };
+      dlg.querySelector('#fc-transmitir').onclick = async (ev) => {
+        if (!confirm(`Transmitir o PGDAS-D de ${rotuloMes(mes)} de ${d.cliente}? A declaração é entregue à Receita.`)) return;
+        ev.target.disabled = true; ev.target.textContent = 'Transmitindo…';
+        try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/pgdas/transmitir`, { mes, ...entrada() }); aviso(`PGDAS-D transmitido${r.recibo ? ` (${r.recibo})` : ''}${r.valor ? `: DAS ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`); recarregar(); }
+        catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DAS'; erro(e); }
+      };
+    }
+    const bd = dlg.querySelector('#fc-dctf');
+    if (bd) bd.onclick = async (ev) => {
+      if (!confirm(`${dc?.situacao === 'TRANSMITIDA' ? 'Gerar de novo o DARF' : 'Transmitir a DCTFWeb'} de ${rotuloMes(mes)} de ${d.cliente}?`)) return;
+      ev.target.disabled = true; ev.target.textContent = 'Falando com a Receita…';
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/dctfweb`, { mes }); aviso(`DCTFWeb ${r.jaTransmitida ? 'já estava transmitida' : 'transmitida'}${r.valor != null ? `: DARF ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`); recarregar(); }
+      catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DARF'; erro(e); }
+    };
+    dlg.querySelector('#fc-email').onclick = async (ev) => {
+      ev.target.disabled = true;
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'EMAIL' }); aviso(`Fechamento enviado para ${r.enviadoPara}.`); recarregar(); }
+      catch (e) { ev.target.disabled = false; erro(e); }
+    };
+    dlg.querySelector('#fc-whats').onclick = async () => {
+      const fone = String(d.fone ?? '').replace(/\D/g, '');
+      window.open(`https://wa.me/${fone.length <= 11 ? '55' + fone : fone}?text=${encodeURIComponent(d.mensagem.join('\n'))}`, '_blank');
+      if (pg?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=PGDASD&qual=guia`, `DAS-${d.documento}-${mes}.pdf`);
+      if (dc?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=DCTFWEB&qual=guia`, `DARF-DCTFWeb-${d.documento}-${mes}.pdf`);
+      try { await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'WHATSAPP' }); aviso('Mensagem aberta no WhatsApp e guias baixadas para anexar. Envio registrado.'); } catch (e) { erro(e); }
+    };
+  });
+}
+
+function tabelaTributos(valores, TRIB) {
+  const total = valores.reduce((t, v) => t + v.valor, 0);
+  return `<table class="tabela"><thead><tr>${valores.map((v) => `<th class="num">${esc(TRIB[v.codigoTributo] ?? v.codigoTributo)}</th>`).join('')}<th class="num">Total</th></tr></thead>
+    <tbody><tr>${valores.map((v) => `<td class="num">${brl(v.valor)}</td>`).join('')}<td class="num"><strong>${brl(total)}</strong></td></tr></tbody></table>`;
 }
 
 /** Importa da planilha antiga de controle: senhas do Simples e previdenciária (pelo CNPJ), canal de envio e registro do DP (pelo nome). */

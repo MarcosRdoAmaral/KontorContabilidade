@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.12.0';
+export const MANUAL_VERSAO = '1.13.0';
 
 export const MANUAL = [
   {
@@ -63,7 +63,7 @@ export const MANUAL = [
       <p class="dica">O botão ⋯ leva aos dados de emissão (certificado A1, logo, dados bancários), à emissão de NFS-e e às NF-e recebidas do cliente.</p>`,
   },
   {
-    id: 'controle', titulo: 'Controle mensal e senhas', resumo: 'Impostos, folha e envios de cada competência; senhas do Simples e previdenciária.',
+    id: 'controle', titulo: 'Controle mensal, fechamento e senhas', resumo: 'Impostos, folha e envios de cada competência; transmissão do PGDAS-D e da DCTFWeb e envio ao cliente; senhas.',
     corpo: `
       <h3>Controle mensal</h3>
       <p>Em Escritório &gt; Controle mensal, escolha a competência e a aba. Tudo é salvo ao sair de cada campo, com quem preencheu.</p>
@@ -73,6 +73,14 @@ export const MANUAL = [
         <li><strong>Contábil:</strong> data de envio da contabilização e observações.</li>
       </ul>
       <p>“Só não enviados” mostra o que falta mandar; o rodapé soma faturamento, impostos e encargos.</p>
+      <h3>Fechamento: PGDAS-D, DCTFWeb e envio ao cliente</h3>
+      <p>A coluna <em>PGDAS-D</em> (aba Fiscal, clientes do Simples) e a coluna <em>DCTFWeb</em> (aba Departamento pessoal) mostram a situação do mês; clique nela para abrir o fechamento do cliente. Tudo passa pelo Integra Contador com o certificado do escritório, então o cliente precisa ter dado procuração eletrônica ao escritório, e cada chamada é cobrada pelo SERPRO.</p>
+      <ul>
+        <li><strong>PGDAS-D:</strong> marque as atividades do cliente (ficam guardadas), informe a receita do mês de cada uma (e a folha, quando há atividade do Fator R) e clique em <em>Calcular</em>: aparecem os tributos e o total, sem transmitir nada. Conferido, <em>Transmitir e gerar o DAS</em> entrega a declaração e gera o DAS. Marque <em>Retificadora</em> se o mês já foi declarado. O faturamento e o imposto vão para o controle.</li>
+        <li><strong>DCTFWeb:</strong> com a folha fechada no eSocial (e a EFD-Reinf, se houver), <em>Transmitir e gerar o DARF</em> busca a declaração em andamento, assina, transmite e gera o DARF, que vai para a coluna DARF Prev. O botão <em>Transmitir DCTFWeb (lote)</em> faz isso para todos os clientes com folha ainda não transmitidos.</li>
+        <li><strong>Enviar ao cliente:</strong> a mensagem traz os valores e vencimentos. <em>Enviar por e-mail</em> manda as guias em anexo; <em>WhatsApp</em> abre a conversa com a mensagem e baixa as guias para você anexar. O envio fica registrado e a data entra no controle. <em>Enviar fechamentos por e-mail</em> manda para todos os clientes com guia que ainda não receberam (os atendidos pelo WhatsApp ficam de fora).</li>
+      </ul>
+      <p>O PGDAS-D cobre as atividades principais, sem isenções e reduções detalhadas por tributo; MEI não entra. Comece por um cliente e confira o resultado no portal.</p>
       <h3>Senhas e acessos</h3>
       <p>Em Escritório &gt; Senhas e acessos ficam o CPF do responsável, o código de acesso e a atividade do Simples Nacional, e a senha previdenciária de cada cliente. As senhas são guardadas criptografadas e só aparecem ao clicar em <em>Mostrar</em> (voltam a ficar escondidas depois de um minuto), com o botão <em>Copiar</em>. Só quem tem a permissão “Senhas e acessos dos clientes” vê essa tela; ela não vem liberada por padrão para usuários novos.</p>
       <h3>Importar a planilha antiga</h3>

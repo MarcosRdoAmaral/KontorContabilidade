@@ -982,6 +982,38 @@ const migracoes: string[] = [
     usuario_id INTEGER REFERENCES usuarios(id),
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
+  // 37: fechamento mensal pelo Integra Contador (PGDAS-D e DCTFWeb transmitidas pelo Kontor, guias e envio ao cliente)
+  `CREATE TABLE fechamentos (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    competencia TEXT NOT NULL,              -- AAAA-MM
+    tipo TEXT NOT NULL CHECK (tipo IN ('PGDASD','DCTFWEB')),
+    situacao TEXT NOT NULL CHECK (situacao IN ('CALCULADO','TRANSMITIDA','ERRO')),
+    entrada_json TEXT,                      -- o que foi informado (receitas por atividade etc.)
+    valores_json TEXT,                      -- valores devidos calculados / detalhes da guia
+    valor REAL,
+    vencimento TEXT,
+    recibo TEXT,
+    transmitida_em TEXT,
+    declaracao_pdf BLOB,
+    recibo_pdf BLOB,
+    guia_pdf BLOB,
+    erro TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (empresa_id, competencia, tipo)
+  );
+  ALTER TABLE empresas ADD COLUMN pgdas_atividades TEXT;   -- atividades do cliente no PGDAS-D (JSON)
+  CREATE TABLE envios_fechamento (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    competencia TEXT NOT NULL,
+    canal TEXT NOT NULL,
+    destino TEXT,
+    itens TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
 ];
 
 export function migrar(): void {
