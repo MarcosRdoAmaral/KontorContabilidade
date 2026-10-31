@@ -1014,6 +1014,32 @@ const migracoes: string[] = [
     usuario_id INTEGER REFERENCES usuarios(id),
     enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
+  // 38: parcelamentos do Simples/MEI e caixa postal do e-CAC (consultas pelo Integra Contador)
+  `CREATE TABLE parcelamentos_consultas (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    situacao TEXT NOT NULL CHECK (situacao IN ('SEM_PARCELAMENTO','EM_DIA','EM_ATRASO','SEM_PROCURACAO','ERRO')),
+    qtd_ativos INTEGER NOT NULL DEFAULT 0,
+    qtd_atrasadas INTEGER NOT NULL DEFAULT 0,
+    valor_atrasado REAL,
+    detalhe_json TEXT,                      -- sistemas consultados, pedidos e parcelas em aberto
+    erro TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    consultado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_parcelamentos_consultas ON parcelamentos_consultas(empresa_id, id);
+  CREATE TABLE caixa_postal_consultas (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    situacao TEXT NOT NULL CHECK (situacao IN ('OK','SEM_PROCURACAO','ERRO')),
+    nao_lidas INTEGER NOT NULL DEFAULT 0,
+    relevantes INTEGER NOT NULL DEFAULT 0,  -- não lidas marcadas pela Receita como relevantes
+    mensagens_json TEXT,                    -- as mensagens mais recentes (até 50), só os dados da lista
+    erro TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    consultado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_caixa_postal_consultas ON caixa_postal_consultas(empresa_id, id);`,
 ];
 
 export function migrar(): void {

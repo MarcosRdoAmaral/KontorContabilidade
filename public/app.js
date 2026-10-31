@@ -5204,7 +5204,8 @@ async function telaMonitor() {
   const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
-      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-atualizar">Atualizar</button></div></div>
+      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-atualizar">Atualizar</button>
+        ${estado.usuario.modulos.includes('situacao') ? '<button id="mon-parc" title="Parcelamentos do Simples e do MEI, pelo Integra Contador">Consultar parcelamentos</button> <button id="mon-caixa" title="Lista de mensagens da caixa postal do e-CAC, pelo Integra Contador">Consultar caixa postal</button>' : ''}</div></div>
     <div class="mon-grade">
       <section class="cartao mon-pend">
         <h2>Pendências fiscais</h2><p class="sutil">Clique numa situação ou num processo para ver os clientes.</p>
@@ -5252,12 +5253,19 @@ async function telaMonitor() {
     $('#mon-tit-clientes').textContent = `Clientes${nomeP ? ` — ${nomeP}` : ''}${f.estado ? ` — ${ROTULO_ESTADO[f.estado]}` : f.processo ? ' — com pendência' : ''} (${l.length})`;
     const chip = (e) => `<span class="selo-estado" style="--c:${COR_ESTADO[e ?? 'SEM_DADOS']}">${e ? ROTULO_ESTADO[e] : '—'}</span>`;
     $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>Geral</th>${d.processos.map((p) => `<th>${esc(p.nome)}</th>`).join('')}</tr></thead><tbody>
-      ${l.map((c) => `<tr><td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => `<td>${chip(c.processos[p.id])}</td>`).join('')}</tr>`).join('')}
+      ${l.map((c) => `<tr><td class="mon-cli-nome"><button type="button" class="link-fech" data-det="${c.empresa_id}" title="Ver parcelamentos e caixa postal"><strong>${esc(c.cliente)}</strong></button><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => `<td>${chip(c.processos[p.id])}</td>`).join('')}</tr>`).join('')}
       </tbody></table></div>` : '<div class="vazio">Nenhum cliente nesta situação.</div>');
     $('#mon-limpar') && ($('#mon-limpar').onclick = () => { f.estado = null; f.processo = null; telaMonitor(); });
+    $('#mon-clientes').querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheMonitor(Number(b.dataset.det))));
   };
   $('#mon-busca').oninput = (e) => { f.q = e.target.value; pintarNotif(); };
   $('#mon-atualizar').onclick = () => telaMonitor();
+  $('#mon-parc') && ($('#mon-parc').onclick = () => loteFechamento('Consultar parcelamentos', d.clientes.filter((c) => c.regime === 'SIMPLES' || c.regime === 'MEI'),
+    'Para cada cliente do Simples ou MEI, o Kontor consulta na Receita os pedidos de parcelamento (normal, especial, Pert e Relp) e, havendo parcelamento ativo, as parcelas em aberto. São de 4 a 8 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO. O cliente precisa ter dado procuração ao escritório.',
+    (c) => api('POST', `/api/escritorio/parcelamentos/${c.empresa_id}/consultar`).then((r) => ({ SEM_PARCELAMENTO: 'sem parcelamento', EM_DIA: `${r.ativos} parcelamento(s) em dia`, EM_ATRASO: `${r.atrasadas} parcela(s) em atraso`, SEM_PROCURACAO: 'sem procuração', ERRO: `erro: ${r.erro}` }[r.situacao] + (r.erro && r.situacao !== 'ERRO' ? ` (${r.erro})` : ''))), telaMonitor));
+  $('#mon-caixa') && ($('#mon-caixa').onclick = () => loteFechamento('Consultar a caixa postal do e-CAC', d.clientes,
+    'Para cada cliente, o Kontor busca a lista das mensagens mais recentes da caixa postal (assunto, data, se foi lida e se a Receita marcou como relevante). O conteúdo das mensagens NÃO é aberto: isso só acontece quando você pede, mensagem a mensagem. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
+    (c) => api('POST', `/api/escritorio/caixa-postal/${c.empresa_id}/consultar`).then((r) => (r.situacao === 'OK' ? `${r.nao_lidas} não lida(s)${r.relevantes ? `, ${r.relevantes} relevante(s)` : ''}` : r.erro)), telaMonitor));
   conteudo.querySelectorAll('[data-estado], [data-processo]').forEach((el) => (el.onclick = () => {
     f.estado = el.dataset.estado ?? null; f.processo = el.dataset.processo ?? null; telaMonitor().then(() => $('#mon-tit-clientes').scrollIntoView({ behavior: 'smooth' }));
   }));
@@ -5327,4 +5335,63 @@ function graficoColunasLado(dados, series, largura = 1080) {
       <text x="${esq + gx * i + gx / 2}" y="${h - 8}" text-anchor="middle" class="eixo">${nomeMes(d.mes)}</text></g>`;
   }).join('');
   return `<svg class="colunas" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Receita e custos por mês">${grade}${cols}</svg>`;
+}
+
+
+/** Parcelamentos e caixa postal de um cliente (último resultado guardado, consulta, DAS da parcela e mensagens). */
+async function detalheMonitor(empresaId) {
+  let d;
+  try { d = await api('GET', `/api/escritorio/monitor/${empresaId}`); } catch (e) { return aviso(mensagemErro(e)); }
+  const pode = estado.usuario.modulos.includes('situacao');
+  const p = d.parcelamentos, cx = d.caixa;
+  const SIT_P = { SEM_PARCELAMENTO: ['Sem parcelamento', 'EM_DIA'], EM_DIA: ['Em dia', 'EM_DIA'], EM_ATRASO: ['Parcelas em atraso', 'ATENCAO'], SEM_PROCURACAO: ['Sem procuração', 'PENDENTE'], ERRO: ['Erro na consulta', 'PENDENTE'] };
+  const mesBr = (aaaamm) => `${aaaamm.slice(4)}/${aaaamm.slice(0, 4)}`;
+  const parcHtml = !p ? '<p class="dica">Ainda não consultado.</p>' : `<p><span class="selo-estado" style="--c:${COR_ESTADO[SIT_P[p.situacao][1]]}">${SIT_P[p.situacao][0]}</span> <span class="dica">consultado em ${dhBr(p.consultado_em)}</span></p>
+    ${p.erro ? `<p class="dica cor-ambar">${esc(p.erro)}</p>` : ''}
+    ${p.detalhe.filter((s) => s.pedidos.length).map((s) => `<h4>${esc(s.nome)}</h4>
+      <ul class="dicas">${s.pedidos.map((x) => `<li>Nº ${esc(x.numero)} — ${esc(x.situacao)}${x.dataDoPedido ? `, pedido em ${dataBr(x.dataDoPedido)}` : ''}</li>`).join('')}</ul>
+      ${s.parcelas.length ? `<table class="tabela"><thead><tr><th>Parcela</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>${s.parcelas.map((x) => `<tr><td>${mesBr(x.parcela)}</td><td class="num">${brl(x.valor)}</td>
+        <td>${x.atrasada ? '<span class="selo-estado" style="--c:var(--g-atencao)">Em atraso</span>' : '<span class="selo-estado" style="--c:var(--g-pend)">Em aberto</span>'}</td>
+        <td>${pode ? `<button type="button" data-das="${esc(s.sistema)}:${esc(x.parcela)}">Gerar DAS</button>` : ''}</td></tr>`).join('')}</tbody></table>` : ''}`).join('') || '<p class="dica">Nenhum pedido de parcelamento do Simples/MEI encontrado.</p>'}`;
+  const msgs = cx?.mensagens ?? [];
+  const caixaHtml = !cx ? '<p class="dica">Ainda não consultada.</p>' : `<p><span class="dica">Consultada em ${dhBr(cx.consultado_em)} · ${cx.nao_lidas} não lida(s)${cx.relevantes ? `, ${cx.relevantes} relevante(s)` : ''}</span></p>${cx.erro ? `<p class="dica cor-ambar">${esc(cx.erro)}</p>` : ''}
+    ${msgs.length ? `<div class="rolagem" style="max-height:300px"><table class="tabela"><thead><tr><th>Enviada</th><th>Assunto</th><th>Situação</th><th></th></tr></thead><tbody>${msgs.map((m) => `<tr><td>${m.enviada_em ? dataBr(m.enviada_em) : '—'}</td>
+      <td>${m.relevante ? '<strong>' : ''}${esc(m.assunto || '(sem assunto)')}${m.relevante ? '</strong>' : ''}<br><span class="dica">${esc(m.origem)}</span></td>
+      <td>${m.lida ? `<span class="dica">Lida${m.aberta_no_kontor ? ' (pelo Kontor)' : ''}</span>` : `<span class="selo-estado" style="--c:${m.relevante ? 'var(--g-atencao)' : 'var(--g-pend)'}">Não lida${m.relevante ? ' · relevante' : ''}</span>`}</td>
+      <td>${pode ? `<button type="button" data-msg="${esc(m.isn)}">Abrir</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="dica">Nenhuma mensagem.</p>'}`;
+  abrirDialogo(`<div class="dlg-largo"><h2>${esc(d.cliente)}</h2><p class="sutil">${fmtDoc(d.documento)} · cada consulta é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
+    <fieldset class="sub"><legend>Parcelamentos do Simples / MEI</legend>${d.regime === 'SIMPLES' || d.regime === 'MEI' ? parcHtml + (pode ? '<div class="acoes"><button type="button" id="dm-parc">Consultar agora</button></div>' : '') : '<p class="dica">Cliente fora do Simples e do MEI. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</p>'}</fieldset>
+    <fieldset class="sub"><legend>Caixa postal do e-CAC</legend>${caixaHtml}${pode ? '<div class="acoes"><button type="button" id="dm-caixa">Consultar agora</button></div>' : ''}</fieldset>
+    <p class="erro" id="dm-erro"></p><div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    const erro = (e) => (dlg.querySelector('#dm-erro').textContent = mensagemErro(e));
+    const botao = (sel, url) => { const b = dlg.querySelector(sel); if (b) b.onclick = async () => { b.disabled = true; b.textContent = 'Consultando…'; try { await api('POST', url); detalheMonitor(empresaId); } catch (e) { b.disabled = false; b.textContent = 'Consultar agora'; erro(e); } }; };
+    botao('#dm-parc', `/api/escritorio/parcelamentos/${empresaId}/consultar`);
+    botao('#dm-caixa', `/api/escritorio/caixa-postal/${empresaId}/consultar`);
+    dlg.querySelectorAll('[data-das]').forEach((b) => (b.onclick = async () => {
+      const [sistema, parcela] = b.dataset.das.split(':');
+      b.disabled = true; b.textContent = 'Gerando…';
+      try { const r = await api('POST', `/api/escritorio/parcelamentos/${empresaId}/das`, { sistema, parcela }); await baixar(`/api/escritorio/guias/${r.id}/pdf`, r.nome); b.textContent = 'DAS gerado ✓'; }
+      catch (e) { b.disabled = false; b.textContent = 'Gerar DAS'; erro(e); }
+    }));
+    dlg.querySelectorAll('[data-msg]').forEach((b) => (b.onclick = () => abrirMensagemCaixa(empresaId, b.dataset.msg, msgs.find((m) => m.isn === b.dataset.msg))));
+  });
+}
+
+function abrirMensagemCaixa(empresaId, isn, m) {
+  abrirDialogo(`<div class="dlg-largo"><h2>Abrir mensagem da caixa postal</h2>
+    <p><strong>${esc(m?.assunto || '')}</strong></p>
+    <div class="banner teste"><strong>Atenção:</strong> abrir o conteúdo pelo Kontor pode registrar a leitura da mensagem no e-CAC do cliente. Se for uma intimação ou um termo, a leitura pode contar como <strong>ciência</strong> e começar a correr o prazo. ${m?.lida ? 'Esta mensagem já aparece como lida.' : 'Esta mensagem ainda não foi lida.'}</div>
+    <div id="cx-texto"></div><p class="erro" id="cx-erro"></p>
+    <div class="acoes"><button class="primario" id="cx-abrir">Abrir mesmo assim</button><button type="button" id="cx-voltar">Voltar</button></div></div>`, (dlg) => {
+    dlg.querySelector('#cx-voltar').onclick = () => detalheMonitor(empresaId);
+    dlg.querySelector('#cx-abrir').onclick = async (ev) => {
+      ev.target.disabled = true; ev.target.textContent = 'Abrindo…';
+      try {
+        const r = await api('POST', `/api/escritorio/caixa-postal/${empresaId}/mensagem`, { isn });
+        dlg.querySelector('.banner').remove(); ev.target.remove();
+        dlg.querySelector('#cx-texto').innerHTML = `<p class="dica">${r.enviada_em ? `Enviada em ${dataBr(r.enviada_em)}` : ''}${r.origem ? ` · ${esc(r.origem)}` : ''}${r.controle ? ` · nº ${esc(r.controle)}` : ''}${r.ciencia_em ? ` · ciência em ${dataBr(r.ciencia_em)}` : ''}</p>
+          <div class="cartao" style="white-space:pre-wrap;max-height:50vh;overflow:auto">${esc(r.texto || '(sem texto)')}</div>`;
+      } catch (e) { ev.target.disabled = false; ev.target.textContent = 'Abrir mesmo assim'; dlg.querySelector('#cx-erro').textContent = mensagemErro(e); }
+    };
+  });
 }

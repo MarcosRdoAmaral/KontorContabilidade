@@ -1,6 +1,7 @@
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
 import { situacaoPrazo } from './obrigacoes.js';
+import { ultimasCaixas, ultimosParcelamentos } from './parcelamentos-caixa.js';
 
 /**
  * Monitor fiscal: situação de cada cliente da carteira por processo (PGDAS-D, PGMEI, DCTFWeb, FGTS Digital,
@@ -19,7 +20,9 @@ export const PROCESSOS = [
   { id: 'DCTFWEB', nome: 'DCTFWeb' },
   { id: 'FGTS', nome: 'FGTS Digital' },
   { id: 'SITFIS', nome: 'Situação fiscal' },
-  { id: 'CERT', nome: 'Certificados e procurações' },
+  { id: 'PARC', nome: 'Parcelamentos' },
+  { id: 'CAIXA', nome: 'Caixa postal' },
+  { id: 'CERT', nome: 'Certificados' },
   { id: 'OBRIG', nome: 'Demais obrigações' },
 ] as const;
 type Proc = (typeof PROCESSOS)[number]['id'];
@@ -57,6 +60,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
   const sit = ultimo(`SELECT s.id, s.empresa_id, s.status, s.situacao, s.qtd_pendencias, s.total_aberto, s.erro, s.solicitada_em, s.concluida_em FROM situacao_fiscal s
     WHERE s.id IN (SELECT MAX(id) FROM situacao_fiscal WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
   const fech = db.prepare(`SELECT empresa_id, tipo, situacao, erro, competencia, atualizado_em FROM fechamentos WHERE empresa_id IN (${em}) AND competencia >= ?`).all(mesesAntes(mes, 2)) as any[];
+  const parcs = ultimosParcelamentos(ids), caixas = ultimasCaixas(ids);
   const certs = db.prepare(`SELECT empresa_id, tipo, titular, validade FROM certificados WHERE escritorio_id = ? AND renovado = 0 AND empresa_id IN (${em})`).all(escritorioId) as any[];
 
   const notificacoes: Notif[] = [];
@@ -83,12 +87,21 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
     proc.SITFIS = !s ? null : s.status === 'SOLICITADA' ? 'PROCESSANDO' : s.status === 'ERRO' ? 'PENDENTE' : s.situacao === 'REGULAR' ? 'EM_DIA' : s.situacao === 'PENDENCIAS' ? 'ATENCAO' : 'PENDENTE';
     if (s && proc.SITFIS !== 'EM_DIA' && proc.SITFIS !== 'PROCESSANDO') n(proc.SITFIS!, 'SITFIS', s.status === 'ERRO' ? 'Situação fiscal: erro na consulta' : s.situacao === 'PENDENCIAS' ? `Situação fiscal: ${s.qtd_pendencias ?? ''} pendência(s)` : 'Situação fiscal: verificar o relatório',
       s.status === 'ERRO' ? (s.erro ?? '') : s.total_aberto ? `Em aberto ${Number(s.total_aberto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} na Receita/PGFN.` : 'Confira o relatório da Receita/PGFN.', (s.concluida_em ?? s.solicitada_em).slice(0, 10));
+    const pc = parcs.get(c.id);
+    proc.PARC = !pc ? null : pc.situacao === 'EM_ATRASO' ? 'ATENCAO' : pc.situacao === 'EM_DIA' || pc.situacao === 'SEM_PARCELAMENTO' ? 'EM_DIA' : 'PENDENTE';
+    if (pc && proc.PARC !== 'EM_DIA') n(proc.PARC!, 'PARC', pc.situacao === 'EM_ATRASO' ? `Parcelamento com ${pc.qtd_atrasadas} parcela(s) em atraso` : pc.situacao === 'SEM_PROCURACAO' ? 'Parcelamentos: sem procuração' : 'Parcelamentos: erro na consulta',
+      pc.situacao === 'EM_ATRASO' ? `Em atraso ${Number(pc.valor_atrasado ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.` : (pc.erro ?? ''), pc.consultado_em.slice(0, 10));
+    const cx = caixas.get(c.id);
+    proc.CAIXA = !cx ? null : cx.situacao !== 'OK' ? 'PENDENTE' : cx.relevantes ? 'ATENCAO' : cx.nao_lidas ? 'PENDENTE' : 'EM_DIA';
+    if (cx && cx.situacao !== 'OK') n('PENDENTE', 'CAIXA', cx.situacao === 'SEM_PROCURACAO' ? 'Caixa postal: sem procuração' : 'Caixa postal: erro na consulta', cx.erro ?? '', cx.consultado_em.slice(0, 10));
+    for (const m of (cx?.mensagens ?? []).filter((m: any) => !m.lida).slice(0, 5)) n(m.relevante ? 'ATENCAO' : 'PENDENTE', 'CAIXA', `Caixa postal: ${m.assunto || 'mensagem não lida'}`, `${m.origem ? `${m.origem}. ` : ''}Não lida${m.relevante ? ', marcada como relevante pela Receita' : ''}.`, m.enviada_em ?? cx.consultado_em.slice(0, 10));
     // certificados: o A1 enviado ao sistema e os cadastrados em Certificados (inclui procurações)
     const validades = [...certs.filter((x) => x.empresa_id === c.id).map((x) => ({ nome: x.tipo === 'PROCURACAO' ? 'Procuração' : `Certificado ${x.tipo}`, validade: x.validade })),
       ...(c.tem_a1 && c.cert_validade ? [{ nome: 'Certificado A1', validade: String(c.cert_validade).slice(0, 10) }] : [])];
     proc.CERT = pior(validades.map((v) => (v.validade < hoje ? 'ATENCAO' : v.validade <= somaDias(hoje, 30) ? 'PENDENTE' : 'EM_DIA')));
     for (const v of validades) if (v.validade <= somaDias(hoje, 30)) n(v.validade < hoje ? 'ATENCAO' : 'PENDENTE', 'CERT', `${v.nome}: ${v.validade < hoje ? 'validade vencida' : 'vence em breve'}`, `Validade ${v.validade.split('-').reverse().join('/')}.`, v.validade < hoje ? v.validade : hoje);
-    return { empresa_id: c.id, cliente: c.cliente, documento: c.documento, regime: c.regime, processos: proc, geral: pior(Object.values(proc)) };
+    return { empresa_id: c.id, cliente: c.cliente, documento: c.documento, regime: c.regime, processos: proc,
+      parc_consultado: pc?.consultado_em ?? null, caixa_consultada: cx?.consultado_em ?? null, nao_lidas: cx?.nao_lidas ?? null, geral: pior(Object.values(proc)) };
   });
 
   /** null = sem informação (processo que não se aplica ao cliente ou nunca consultado). */
