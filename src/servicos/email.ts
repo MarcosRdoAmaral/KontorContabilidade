@@ -58,11 +58,37 @@ export async function testarConfig(escritorioId: number, para: string) {
   const c = lerConfig(escritorioId);
   if (!c) throw new ErroNegocio('Salve a configuração de e-mail antes de testar.');
   try {
-    await fabrica(c).sendMail({
+    await fabrica(c).sendMail(assinar(escritorioId, {
       from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para,
       subject: 'Teste de e-mail — Kontor Gestão Contabilidade', text: 'Se você recebeu esta mensagem, o envio de NFS-e por e-mail está configurado corretamente.',
-    });
+    }));
   } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
+}
+
+/**
+ * Assinatura do escritório (imagem enviada em Configurações > E-mail) no fim de todos os e-mails do Kontor aos
+ * clientes. Vai como imagem embutida (cid), que aparece mesmo quando o leitor bloqueia imagens externas.
+ */
+export function assinaturaDoEscritorio(escritorioId: number) {
+  const r = db.prepare('SELECT assinatura_img, assinatura_mime FROM escritorios WHERE id = ?').get(escritorioId) as any;
+  return r?.assinatura_img ? { img: Buffer.from(r.assinatura_img), mime: String(r.assinatura_mime || 'image/png') } : null;
+}
+export function salvarAssinatura(escritorioId: number, dataUrl: string | null) {
+  if (!dataUrl) { db.prepare('UPDATE escritorios SET assinatura_img = NULL, assinatura_mime = NULL WHERE id = ?').run(escritorioId); return { ok: true }; }
+  const m = /^data:(image\/(?:png|jpeg|gif));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!m) throw new ErroNegocio('Envie a assinatura como imagem PNG, JPG ou GIF.');
+  const img = Buffer.from(m[2], 'base64');
+  if (img.length > 600 * 1024) throw new ErroNegocio('A imagem da assinatura passa de 600 KB. Use uma versão menor (até uns 800 pixels de largura).');
+  db.prepare('UPDATE escritorios SET assinatura_img = ?, assinatura_mime = ? WHERE id = ?').run(img, m[1], escritorioId);
+  return { ok: true };
+}
+function assinar<T extends { text?: string; html?: string; attachments?: any[] }>(escritorioId: number, m: T): T {
+  const a = assinaturaDoEscritorio(escritorioId);
+  if (!a) return m;
+  const img = `<p style="margin:20px 0 0"><img src="cid:assinatura@kontor" alt="Assinatura" style="max-width:480px;width:100%;height:auto;display:block;border:0"></p>`;
+  const html = m.html ? m.html.replace(/<\/div>\s*$/, `${img}</div>`) : `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${String(m.text ?? '').split('\n').map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}${img}</div>`;
+  return { ...m, html: html.includes('cid:assinatura@kontor') ? html : html + img,
+    attachments: [...(m.attachments ?? []), { filename: `assinatura.${a.mime.split('/')[1].replace('jpeg', 'jpg')}`, content: a.img, contentType: a.mime, cid: 'assinatura@kontor', contentDisposition: 'inline' }] };
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]!));
@@ -107,7 +133,7 @@ export async function enviarNotaPorEmail(notaId: number, escritorioId: number, p
   const registrar = (status: 'ENVIADO' | 'ERRO', erro?: string) =>
     db.prepare('INSERT INTO emails_enviados (nota_id, para, status, erro, enviado_por) VALUES (?,?,?,?,?)').run(notaId, destino, status, erro ?? null, usuarioId);
   try {
-    await fabrica(c).sendMail({
+    await fabrica(c).sendMail(assinar(escritorioId, {
       from: `"${c.remetente_nome}" <${c.remetente_email}>`,
       to: destino,
       ...(nota.empresa_email ? { replyTo: nota.empresa_email } : {}),
@@ -120,7 +146,7 @@ export async function enviarNotaPorEmail(notaId: number, escritorioId: number, p
         ...(ev?.xml_pedido ? [{ filename: `Cancelamento_NFSe_${nota.n_nfse}.xml`, content: ev.xml_pedido, contentType: 'application/xml; charset=utf-8' }] : []),
         ...(adicional.extras ?? []),
       ],
-    });
+    }));
   } catch (e) {
     const msg = traduzirErro(e);
     registrar('ERRO', msg);
@@ -159,13 +185,13 @@ export async function enviarMensagemBoleto(escritorioId: number, para: string[],
     'O boleto segue em anexo (PDF).',
   ];
   try {
-    await fabrica(c).sendMail({
+    await fabrica(c).sendMail(assinar(escritorioId, {
       from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para.join(', '), ...(emp.email ? { replyTo: emp.email } : {}),
       subject: `Boleto com vencimento em ${cob.vencimento.split('-').reverse().join('/')} — ${emp.nome_fantasia || emp.razao_social}`,
       text: linhas.join('\n'),
       html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
       attachments: anexos,
-    });
+    }));
   } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
 }
 
@@ -177,13 +203,13 @@ export async function enviarPacoteContabilidade(escritorioId: number, para: stri
   const nome = empresa.nome_fantasia || empresa.razao_social;
   const linhas = ['Olá!', '', `Segue o fechamento de ${rotuloMes} de ${empresa.razao_social} (${empresa.documento}).`, '', ...resumo, '', 'O pacote vai em anexo (ZIP). Gerado automaticamente pelo Kontor Gestão Contabilidade.'];
   try {
-    await fabrica(c).sendMail({
+    await fabrica(c).sendMail(assinar(escritorioId, {
       from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para.join(', '), ...(empresa.email ? { replyTo: empresa.email } : {}),
       subject: `Fechamento ${rotuloMes} — ${nome}`,
       text: linhas.join('\n'),
       html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
       attachments: [{ filename: nomeZip, content: zip, contentType: 'application/zip' }],
-    });
+    }));
   } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
 }
 
@@ -192,12 +218,12 @@ export async function enviarEmailSimples(escritorioId: number, para: string[], a
   const c = lerConfig(escritorioId);
   if (!c) return false;
   try {
-    await fabrica(c).sendMail({
+    await fabrica(c).sendMail(assinar(escritorioId, {
       from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para.join(', '), subject: assunto,
       text: linhas.join('\n'),
       html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
       attachments: anexos,
-    });
+    }));
     return true;
   } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
 }

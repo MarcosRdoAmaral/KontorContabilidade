@@ -428,3 +428,5 @@ input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); 
 .dp-doc { display: flex; font-size: .85rem; margin: 2px 0; }
 .linha-campo { display: flex; gap: 8px; }
 .linha-campo input { flex: 1; }
+.ass-img { max-width: 480px; width: 100%; height: auto; display: block; background: #fff; border-radius: 6px; margin: 8px 0; }
+.botao-arquivo .botao { display: inline-block; padding: 10px 16px; font-size: 1rem; color: var(--tinta); border: 1px solid var(--borda-botao); border-radius: var(--raio); cursor: pointer; }

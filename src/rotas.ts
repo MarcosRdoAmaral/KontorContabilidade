@@ -8,7 +8,7 @@ import { cifrar, cifrarTexto } from './cofre.js';
 import { MODULOS, conferirSenha, configurarPrimeiroAcesso, empresaPermitida, exigirLogin, exigirPapel, gerarToken, modulosDoUsuario, restritoAEmpresas, sistemaConfigurado, type Usuario } from './auth.js';
 import { EdicaoUsuario, NovoUsuario, confirmarRecuperacao, criarUsuario, editarUsuario, limparFalhas, listarUsuarios, loginBloqueado, redefinirSenha, registrarFalha, solicitarRecuperacao, trocarMinhaSenha } from './servicos/usuarios.js';
 import { config } from './config.js';
-import { ConfigSmtp, ListaEmails, configPublica, enviarNotaPorEmail, historicoEmails, salvarConfig, testarConfig } from './servicos/email.js';
+import { ConfigSmtp, ListaEmails, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
 import { ativarLicenca, exigirLicenca, statusLicenca } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas } from './servicos/faturamento.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
@@ -499,6 +499,13 @@ export async function rotas(app: FastifyInstance) {
       salvarConfig(u(req).escritorio_id, ConfigSmtp.parse(req.body));
       return { ok: true };
     });
+    api.get('/api/email/assinatura', { preHandler: exigirPapel('admin') }, async (req, reply) => {
+      const a = assinaturaDoEscritorio(u(req).escritorio_id);
+      if (!a) return reply.code(404).send({ erro: 'Sem assinatura.' });
+      return reply.type(a.mime).send(a.img);
+    });
+    api.put('/api/email/assinatura', { preHandler: exigirPapel('admin'), bodyLimit: 2 * 1024 * 1024 }, async (req) =>
+      salvarAssinatura(u(req).escritorio_id, z.object({ imagem: z.string().max(1_000_000).nullable() }).parse(req.body).imagem));
     api.post('/api/email/testar', { preHandler: exigirPapel('admin') }, async (req) => {
       const { para } = z.object({ para: z.string().email('E-mail de destino inválido') }).parse(req.body);
       await testarConfig(u(req).escritorio_id, para);

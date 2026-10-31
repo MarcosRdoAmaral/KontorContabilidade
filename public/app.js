@@ -3355,6 +3355,26 @@ async function telaEmail() {
       catch (e) { $('#erro-teste').textContent = mensagemErro(e); botao.disabled = false; botao.textContent = 'Enviar teste'; }
     };
   });
+  // Assinatura no fim dos e-mails
+  corpoConfig().insertAdjacentHTML('beforeend', `<section class="cartao" style="margin-top:16px"><h2 style="margin-top:0">Assinatura dos e-mails</h2>
+    <p class="sutil">A imagem vai no fim de todos os e-mails que o Kontor manda aos clientes: notas, boletos, fechamentos, documentos do DP e o e-mail de teste. Use PNG ou JPG com até uns 800 pixels de largura (no máximo 600 KB).</p>
+    <div id="ass-previa"></div>
+    <div class="acoes"><label class="botao-arquivo"><input type="file" id="ass-arquivo" accept="image/png,image/jpeg,image/gif" hidden><span class="botao">Escolher imagem…</span></label><button type="button" id="ass-remover" hidden>Remover assinatura</button></div>
+    <p class="erro" id="ass-erro"></p></section>`);
+  const previaAss = async () => {
+    try {
+      const r = await api('GET', '/api/email/assinatura', undefined, { bruto: true });
+      $('#ass-previa').innerHTML = `<img src="${URL.createObjectURL(await r.blob())}" alt="Assinatura" class="ass-img">`; $('#ass-remover').hidden = false;
+    } catch { $('#ass-previa').innerHTML = '<p class="dica">Nenhuma assinatura cadastrada.</p>'; $('#ass-remover').hidden = true; }
+  };
+  $('#ass-arquivo').onchange = (ev) => {
+    const arq = ev.target.files[0]; if (!arq) return;
+    const leitor = new FileReader();
+    leitor.onload = async () => { try { await api('PUT', '/api/email/assinatura', { imagem: leitor.result }); $('#ass-erro').textContent = ''; aviso('Assinatura salva. Mande um e-mail de teste para ver como fica.'); previaAss(); } catch (e) { $('#ass-erro').textContent = mensagemErro(e); } };
+    leitor.readAsDataURL(arq); ev.target.value = '';
+  };
+  $('#ass-remover').onclick = async () => { await api('PUT', '/api/email/assinatura', { imagem: null }); aviso('Assinatura removida.'); previaAss(); };
+  previaAss();
 }
 
 async function telaBackup() {

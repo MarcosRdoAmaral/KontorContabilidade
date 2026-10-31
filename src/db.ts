@@ -1071,6 +1071,9 @@ const migracoes: string[] = [
     enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX ix_dp_envios ON dp_envios(empresa_id, competencia);`,
+  // 40: assinatura (imagem) no fim dos e-mails do escritório
+  `ALTER TABLE escritorios ADD COLUMN assinatura_img BLOB;
+  ALTER TABLE escritorios ADD COLUMN assinatura_mime TEXT;`,
 ];
 
 export function migrar(): void {
