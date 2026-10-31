@@ -1,3 +1,4 @@
+import { monitorFiscal, resumoFinanceiro } from './servicos/monitor.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db.js';
@@ -54,6 +55,8 @@ export async function rotasEscritorio(app: FastifyInstance) {
 
     api.get('/api/escritorio/tabelas', async () => ({ regimes: ROTULO_REGIME, tiposCertificado: TIPOS_CERT, indices: ROTULO_INDICE, camposModelo: CAMPOS_MODELO, escopoPadrao: ESCOPO_PADRAO }));
     api.get('/api/escritorio/equipe', async (req) => db.prepare('SELECT id, nome, login FROM usuarios WHERE escritorio_id = ? AND ativo = 1 AND mestre = 0 ORDER BY nome').all(u(req).escritorio_id));
+    api.get('/api/escritorio/monitor', async (req) => monitorFiscal(u(req).escritorio_id, empresasDoUsuario(u(req))));
+    api.get('/api/escritorio/resumo-financeiro/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return resumoFinanceiro(u(req).escritorio_id, id, mesDe(req.query)); });
     api.get('/api/escritorio/visao', async (req) => visaoGeral(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))));
 
     // ---------- Carteira ----------

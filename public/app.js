@@ -414,12 +414,12 @@ function telaInicial() {
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
 function telaPermitida(nome) {
-  const modulo = { controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
+  const modulo = { monitor: 'visao', resumo: 'captura', controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
   return nome === 'config' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
 const rotas = {
-  controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
+  monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
   painel: telaPainel, emitir: telaEmitir, notas: telaNotas, nota: telaNota,
   cobrancas: telaCobrancas, banco: telaBanco, despesas: telaDespesas, compras: telaCompras, entradas: telaCompras, 'compra-nova': telaCompraManual, 'nfe-sefaz': telaNfeSefaz, tributacao: telaTributacao, extrato: telaExtrato, cartao: telaCartao, agenda: telaAgenda, relatorios: telaRelatorios, tomadores: telaTomadores, servicos: telaServicos, empresas: telaEmpresas, config: telaConfig,
 };
@@ -433,7 +433,7 @@ function rotear() {
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
-  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
+  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'monitor', 'resumo', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
   if (precisaEmpresa && !empresa()) {
     conteudo.innerHTML = `<div class="vazio"><p>Cadastre o primeiro cliente na carteira para começar.</p>
       ${estado.usuario.papel !== 'cliente' ? '<a href="#/carteira">Ir para a Carteira de clientes</a>' : ''}</div>`;
@@ -4385,7 +4385,7 @@ async function telaCaptura() {
       <td><span class="dica">NF-e:</span> ${ultima(l.ultima_consulta, l.ultimo_resultado, l.ultimo_erro, l.proxima_consulta, l.pode_consultar, l.tem_certificado)}
         ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado)}`}</td>
       <td>${!l.tem_certificado ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
-      <td class="acoes-linha"><button data-notas="${l.id}">Notas</button> <button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
+      <td class="acoes-linha">${l.eh_escritorio ? '' : `<a href="#/resumo/${l.id}"><button type="button">Resumo</button></a> `}<button data-notas="${l.id}">Notas</button> <button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
     </tbody></table></div>
     <p class="dica">O pacote do mês (ZIP) traz os XML das notas de compra, de venda e de serviço (prestadas e tomadas), com planilhas de conferência.</p>`;
   $('#mes-cap').onchange = (ev) => { telaCaptura.mes = ev.target.value || mesAtual(); telaCaptura(); };
@@ -5132,4 +5132,199 @@ async function detalheSituacaoFiscal(id) {
     $('#sf-aviso') && ($('#sf-aviso').onclick = () => previaAvisoCliente(d, id));
     dlg.querySelectorAll('[data-pdfh]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/situacao-fiscal/${b.dataset.pdfh}/pdf`, 'situacao-fiscal.pdf', true)));
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// Gráficos simples (SVG/HTML, sem biblioteca): rosca, barras empilhadas e colunas
+// ---------------------------------------------------------------------------
+const curto = (v) => (v >= 1e6 ? `${(v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi` : v >= 1e3 ? `${(v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: v >= 1e5 ? 0 : 1 })} mil` : String(Math.round(v)));
+const ESTADOS = [
+  ['ATENCAO', 'Atenção', 'Há algo vencido, em aberto ou com erro'],
+  ['PENDENTE', 'Pendentes', 'Há algo a fazer ou a conferir'],
+  ['PROCESSANDO', 'Processando', 'Consulta ou cálculo em andamento'],
+  ['EM_DIA', 'Em dia', 'Tudo entregue e regular'],
+  ['SEM_DADOS', 'Sem informação', 'Não se aplica ou nunca consultado'],
+];
+const COR_ESTADO = { EM_DIA: 'var(--g-ok)', PENDENTE: 'var(--g-pend)', ATENCAO: 'var(--g-atencao)', PROCESSANDO: 'var(--g-proc)', SEM_DADOS: 'var(--g-vazio)' };
+const ROTULO_ESTADO = Object.fromEntries(ESTADOS.map(([k, r]) => [k, r]));
+
+/** Rosca: segs = [{ valor, cor, rotulo }]. */
+function graficoRosca(segs, centro, sub, tam = 180) {
+  const tot = segs.reduce((a, x) => a + x.valor, 0);
+  const r = 70, c = 2 * Math.PI * r;
+  let acc = 0;
+  const arcos = tot ? segs.filter((x) => x.valor > 0).map((x) => {
+    const parte = (x.valor / tot) * c, folga = segs.filter((y) => y.valor > 0).length > 1 ? Math.min(3, parte / 3) : 0;
+    const el = `<circle r="${r}" cx="90" cy="90" fill="none" stroke="${x.cor}" stroke-width="26" stroke-dasharray="${Math.max(parte - folga, 0.5)} ${c}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(x.rotulo)}: ${esc(x.texto ?? String(x.valor))} (${Math.round((x.valor / tot) * 100)}%)</title></circle>`;
+    acc += parte; return el;
+  }).join('') : `<circle r="${r}" cx="90" cy="90" fill="none" stroke="var(--g-vazio)" stroke-width="26"/>`;
+  return `<svg class="rosca" viewBox="0 0 180 180" width="${tam}" height="${tam}" role="img" aria-label="${esc(segs.map((x) => `${x.rotulo}: ${x.texto ?? x.valor}`).join('; '))}">${arcos}
+    <text x="90" y="86" text-anchor="middle" class="rosca-centro">${esc(centro)}</text><text x="90" y="106" text-anchor="middle" class="rosca-sub">${esc(sub)}</text></svg>`;
+}
+
+/** Barra horizontal empilhada (HTML): segs = [{ valor, cor, rotulo, attrs? }]. */
+function barraEmpilhada(segs) {
+  const tot = segs.reduce((a, x) => a + x.valor, 0);
+  if (!tot) return '<div class="barra-emp vazia"></div>';
+  return `<div class="barra-emp">${segs.filter((x) => x.valor > 0).map((x) => `<span style="flex:${x.valor};background:${x.cor}" title="${esc(x.rotulo)}: ${x.valor}" ${x.attrs ?? ''}></span>`).join('')}</div>`;
+}
+
+/** Colunas empilhadas por mês (SVG), um eixo só: series = [{ chave, rotulo, cor }], dados = [{ mes, [chave]: valor }]. */
+function graficoColunas(dados, series, { altura = 240, largura = 560 } = {}) {
+  const w = largura, h = altura, esq = 64, base = h - 26, topo = 10;
+  const tot = dados.map((d) => series.reduce((a, s) => a + (d[s.chave] || 0), 0));
+  const max = Math.max(...tot, 1);
+  const passo = 10 ** Math.floor(Math.log10(max)); const teto = Math.ceil(max / passo) * passo;
+  const y = (v) => base - (v / teto) * (base - topo);
+  const bw = Math.min(34, ((w - esq - 10) / dados.length) * 0.6), gx = (w - esq - 10) / dados.length;
+  const grade = [0, 0.25, 0.5, 0.75, 1].map((f) => `<line x1="${esq}" x2="${w - 10}" y1="${y(teto * f)}" y2="${y(teto * f)}" class="grade"/><text x="${esq - 6}" y="${y(teto * f) + 4}" text-anchor="end" class="eixo">${curto(teto * f)}</text>`).join('');
+  const cols = dados.map((d, i) => {
+    let acc = 0; const x = esq + gx * i + (gx - bw) / 2;
+    const partes = series.map((s, k) => {
+      const v = d[s.chave] || 0; if (!v) return '';
+      const y0 = y(acc), y1 = y(acc + v); acc += v;
+      const alto = Math.max(y0 - y1 - (k ? 2 : 0), 1);
+      return `<rect x="${x}" y="${y1}" width="${bw}" height="${alto}" rx="${acc === tot[i] ? 3 : 0}" fill="${s.cor}"/>`;
+    }).join('');
+    const dica = `${nomeMes(d.mes)} — ${series.map((s) => `${s.rotulo}: ${brl(d[s.chave] || 0)}`).join(' · ')}`;
+    return `<g class="coluna"><rect x="${esq + gx * i}" y="${topo}" width="${gx}" height="${base - topo}" fill="transparent"><title>${esc(dica)}</title></rect>${partes}
+      <text x="${x + bw / 2}" y="${h - 8}" text-anchor="middle" class="eixo">${nomeMes(d.mes)}</text></g>`;
+  }).join('');
+  return `<svg class="colunas" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Gráfico mensal">${grade}${cols}</svg>`;
+}
+const legendaSeries = (series) => `<div class="legenda">${series.map((s) => `<span><i style="background:${s.cor}"></i>${esc(s.rotulo)}</span>`).join('')}</div>`;
+
+// ---------------------------------------------------------------------------
+// Monitor fiscal
+// ---------------------------------------------------------------------------
+async function telaMonitor() {
+  const d = await api('GET', '/api/escritorio/monitor');
+  const f = telaMonitor.filtro ??= { estado: null, processo: null, q: '' };
+  const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
+  conteudo.innerHTML = `
+    <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
+      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-atualizar">Atualizar</button></div></div>
+    <div class="mon-grade">
+      <section class="cartao mon-pend">
+        <h2>Pendências fiscais</h2><p class="sutil">Clique numa situação ou num processo para ver os clientes.</p>
+        <div class="mon-pend-corpo">
+          <div class="mon-geral"><h3>Visão geral dos clientes</h3>${graficoRosca(segsGeral, String(d.total), 'clientes')}
+            <ul class="mon-leg">${ESTADOS.map(([k, r, dica]) => `<li><button type="button" class="mon-fil ${f.estado === k && !f.processo ? 'ativo' : ''}" data-estado="${k}"><i style="background:${COR_ESTADO[k]}"></i><span><strong>${r}</strong><br><span class="dica">${dica}</span></span><b>${d.geral[k]}</b></button></li>`).join('')}</ul></div>
+          <div class="mon-proc"><h3>Por processo</h3>
+            ${legendaSeries(ESTADOS.map(([k, r]) => ({ cor: COR_ESTADO[k], rotulo: `${r} (${d.processos.reduce((a, p) => a + p.contagem[k], 0)})` })))}
+            ${d.processos.map((p) => `<div class="mon-linha"><button type="button" class="mon-fil ${f.processo === p.id && !f.estado ? 'ativo' : ''}" data-processo="${p.id}">${esc(p.nome)} ›</button>
+              ${barraEmpilhada(ESTADOS.map(([k, r]) => ({ valor: p.contagem[k], cor: COR_ESTADO[k], rotulo: r, attrs: `data-processo="${p.id}" data-estado="${k}" class="mon-seg"` })))}</div>`).join('')}
+          </div>
+        </div>
+      </section>
+      <section class="cartao mon-notif">
+        <h2>Notificações</h2><p class="sutil">O que pede ação, do mais grave ao mais recente.</p>
+        <input type="search" id="mon-busca" placeholder="Busque por título, processo ou cliente" value="${esc(f.q)}">
+        <div id="mon-lista-notif" class="mon-notif-lista"></div>
+      </section>
+    </div>
+    <section class="cartao">
+      <h2>Sublimites do Simples</h2>
+      <p class="sutil">RBT12 (${nomeMes(d.sublimites.periodo.de)} a ${nomeMes(d.sublimites.periodo.ate)}) dos 10 maiores clientes do Simples. Usa o faturamento do Controle mensal quando preenchido; nos outros meses, as notas de venda e de serviço capturadas.</p>
+      ${d.sublimites.clientes.length ? `<div class="mon-sub">${d.sublimites.clientes.map((c) => {
+        const pct = c.rbt12 / d.sublimites.limite; const cor = c.rbt12 > d.sublimites.sublimite ? 'var(--g-atencao)' : c.rbt12 > d.sublimites.sublimite * 0.8 ? 'var(--g-pend)' : 'var(--g-s1)';
+        return `<div class="mon-sub-linha"><span class="mon-sub-nome">${esc(c.cliente)}</span><div class="mon-sub-trilho"><span style="width:${Math.min(pct, 1) * 100}%;background:${cor}" title="${brl(c.rbt12)}"></span><i class="marca-sub" style="left:${(d.sublimites.sublimite / d.sublimites.limite) * 100}%" title="Sublimite R$ 3,6 mi"></i></div>
+          <span class="num">${brl(c.rbt12)}<br><span class="dica">${Math.round((c.rbt12 / d.sublimites.sublimite) * 100)}% do sublimite${c.meses_do_controle ? '' : ' · só notas'}</span></span></div>`; }).join('')}
+        <p class="dica">Traço vertical: sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS acima dele). A barra vai até o limite de R$ 4,8 milhões do Simples. Âmbar a partir de 80% do sublimite; vermelho acima dele.</p></div>`
+        : '<div class="vazio">Sem faturamento dos clientes do Simples nos últimos 12 meses (preencha o Controle mensal ou capture as notas).</div>'}
+    </section>
+    <section class="cartao"><h2 id="mon-tit-clientes">Clientes</h2><div id="mon-clientes"></div></section>`;
+
+  const pintarNotif = () => {
+    const q = norm(f.q);
+    const l = d.notificacoes.filter((n) => !q || norm(`${n.titulo} ${n.texto} ${n.cliente} ${d.processos.find((p) => p.id === n.processo)?.nome}`).includes(q));
+    $('#mon-lista-notif').innerHTML = l.length ? l.slice(0, 120).map((n) => `<article class="mon-n mon-n-${n.nivel}">
+      <header><span class="selo-estado" style="--c:${COR_ESTADO[n.nivel]}">${ROTULO_ESTADO[n.nivel]}</span><strong>${esc(n.titulo)}</strong></header>
+      <p>${esc(n.cliente)}${n.texto ? ` — ${esc(n.texto)}` : ''}</p><span class="dica">${dataBr(n.data)}</span></article>`).join('')
+      : `<div class="vazio">${d.notificacoes.length ? 'Nada encontrado.' : 'Nenhuma notificação: tudo em dia no que o Kontor acompanha.'}</div>`;
+  };
+  const pintarClientes = () => {
+    let l = d.clientes;
+    if (f.processo) l = l.filter((c) => (f.estado ? (c.processos[f.processo] ?? 'SEM_DADOS') === f.estado : c.processos[f.processo] && c.processos[f.processo] !== 'EM_DIA'));
+    else if (f.estado) l = l.filter((c) => (c.geral ?? 'SEM_DADOS') === f.estado);
+    const nomeP = d.processos.find((p) => p.id === f.processo)?.nome;
+    $('#mon-tit-clientes').textContent = `Clientes${nomeP ? ` — ${nomeP}` : ''}${f.estado ? ` — ${ROTULO_ESTADO[f.estado]}` : f.processo ? ' — com pendência' : ''} (${l.length})`;
+    const chip = (e) => `<span class="selo-estado" style="--c:${COR_ESTADO[e ?? 'SEM_DADOS']}">${e ? ROTULO_ESTADO[e] : '—'}</span>`;
+    $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>Geral</th>${d.processos.map((p) => `<th>${esc(p.nome)}</th>`).join('')}</tr></thead><tbody>
+      ${l.map((c) => `<tr><td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => `<td>${chip(c.processos[p.id])}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>` : '<div class="vazio">Nenhum cliente nesta situação.</div>');
+    $('#mon-limpar') && ($('#mon-limpar').onclick = () => { f.estado = null; f.processo = null; telaMonitor(); });
+  };
+  $('#mon-busca').oninput = (e) => { f.q = e.target.value; pintarNotif(); };
+  $('#mon-atualizar').onclick = () => telaMonitor();
+  conteudo.querySelectorAll('[data-estado], [data-processo]').forEach((el) => (el.onclick = () => {
+    f.estado = el.dataset.estado ?? null; f.processo = el.dataset.processo ?? null; telaMonitor().then(() => $('#mon-tit-clientes').scrollIntoView({ behavior: 'smooth' }));
+  }));
+  pintarNotif(); pintarClientes();
+}
+
+// ---------------------------------------------------------------------------
+// Resumo financeiro do cliente (pelos XML capturados)
+// ---------------------------------------------------------------------------
+async function telaResumoXml(param) {
+  const st = telaResumoXml.estado ??= { mes: mesAtual(), aba: 'desempenho' };
+  const clientes = (await api('GET', `/api/escritorio/captura?mes=${st.mes}`)).filter((l) => !l.eh_escritorio);
+  const id = Number(param) || clientes[0]?.id;
+  if (!id) { conteudo.innerHTML = '<div class="vazio">Nenhum cliente na carteira.</div>'; return; }
+  const d = await api('GET', `/api/escritorio/resumo-financeiro/${id}?mes=${st.mes}`);
+  const k = d.kpis;
+  const S_REC = [{ chave: 'receita_nfe', rotulo: 'Vendas (NF-e)', cor: 'var(--g-s1)' }, { chave: 'receita_nfse', rotulo: 'Serviços prestados (NFS-e)', cor: 'var(--g-s2)' }];
+  const S_CUS = [{ chave: 'custo_nfe', rotulo: 'Mercadorias e insumos (NF-e)', cor: 'var(--g-s1)' }, { chave: 'custo_nfse', rotulo: 'Serviços de terceiros (NFS-e)', cor: 'var(--g-s2)' }];
+  const S_DES = [{ chave: 'receita', rotulo: 'Receita bruta', cor: 'var(--g-s2)' }, { chave: 'custo', rotulo: 'Custos de entrada', cor: 'var(--g-s1)' }];
+  const serie = d.serie.map((m) => ({ ...m, receita: m.receita_nfe + m.receita_nfse, custo: m.custo_nfe + m.custo_nfse }));
+  const pct = (v, t) => (t ? `${(v / t * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—');
+  const composicao = (series, titulo, vazio) => {
+    const tot = series.reduce((a, s) => a + d.atual[s.chave], 0);
+    return `<div class="duas-colunas mon-comp">
+      <div class="cartao"><h3>${titulo} — ${nomeMes(st.mes)}</h3>${tot ? `<div class="mon-rosca">${graficoRosca(series.map((s) => ({ valor: d.atual[s.chave], cor: s.cor, rotulo: s.rotulo, texto: brl(d.atual[s.chave]) })), `R$ ${curto(tot)}`, 'total no mês')}
+        <ul class="mon-leg simples">${series.map((s) => `<li><i style="background:${s.cor}"></i><span>${esc(s.rotulo)}</span><b>${pct(d.atual[s.chave], tot)}</b><span class="dica">${brl(d.atual[s.chave])}</span></li>`).join('')}</ul></div>` : `<div class="vazio">${vazio}</div>`}</div>
+      <div class="cartao"><h3>Evolução — ${nomeMes(serie[0].mes)} a ${nomeMes(st.mes)}</h3>${legendaSeries(series)}${graficoColunas(serie, series)}</div></div>`;
+  };
+  const tabela = () => `<details class="mon-tabela"><summary>Ver os números em tabela</summary><div class="rolagem"><table class="tabela"><thead><tr><th>Mês</th><th class="num">Vendas NF-e</th><th class="num">Serviços NFS-e</th><th class="num">Compras NF-e</th><th class="num">Serviços tomados</th><th class="num">Lucro bruto</th><th class="num">XML</th></tr></thead><tbody>
+    ${serie.map((m) => `<tr><td>${nomeMes(m.mes)}</td><td class="num">${brl(m.receita_nfe)}</td><td class="num">${brl(m.receita_nfse)}</td><td class="num">${brl(m.custo_nfe)}</td><td class="num">${brl(m.custo_nfse)}</td><td class="num">${brl(m.receita - m.custo)}</td><td class="num">${m.xml_nfe_saida + m.xml_nfe_entrada + m.xml_nfse}</td></tr>`).join('')}</tbody></table></div></details>`;
+  const ABAS = [['desempenho', 'Desempenho'], ['custos', 'Composição de custos'], ['receita', 'Mix de receita']];
+  conteudo.innerHTML = `
+    <div class="topo"><div><p><a href="#/captura">‹ Captura de documentos</a></p><h1>Resumo financeiro</h1><p class="sutil">Receitas e custos de ${esc(d.cliente)} pelas notas capturadas (NF-e de venda e de compra, NFS-e prestadas e tomadas).</p></div>
+      <div class="mon-filtros"><label>Cliente <select id="rx-cli">${clientes.map((c) => `<option value="${c.id}" ${c.id === id ? 'selected' : ''}>${esc(c.cliente)}</option>`).join('')}</select></label>
+        <label>Mês <input type="month" id="rx-mes" value="${st.mes}"></label></div></div>
+    <p class="dica">${fmtDoc(d.documento)} · última captura: ${d.ultima_captura ? dhBr(d.ultima_captura) : 'nunca'}</p>
+    <div class="mon-kpis">
+      <div class="cartao kpi"><span class="dica">XML no mês</span><strong>${k.xmls}</strong><span class="dica">NF-e e NFS-e do período</span></div>
+      <div class="cartao kpi"><span class="dica">Receita bruta</span><strong>${brl(k.receita)}</strong><span class="dica">Notas de venda e de serviço</span></div>
+      <div class="cartao kpi"><span class="dica">Custos de entrada</span><strong>${brl(k.custo)}</strong><span class="dica">Compras e serviços tomados</span></div>
+      <div class="cartao kpi kpi-destaque"><span class="dica">Lucro bruto</span><strong class="${k.lucro < 0 ? 'cor-vermelho' : 'cor-verde'}">${k.lucro >= 0 ? '+ ' : ''}${brl(k.lucro)}</strong><span class="dica">${k.margem == null ? 'Sem receita no mês' : `Margem de ${pct(k.lucro, k.receita)} antes dos impostos`}</span></div>
+    </div>
+    <nav class="abas" aria-label="Resumo">${ABAS.map(([a, n]) => `<a href="#" data-aba="${a}" class="${a === st.aba ? 'ativo' : ''}">${n}</a>`).join('')}</nav>
+    ${st.aba === 'desempenho' ? `<div class="cartao"><h3>Receita bruta × custos de entrada — 12 meses</h3>${legendaSeries(S_DES)}${graficoColunasLado(serie, S_DES)}</div>`
+      : st.aba === 'custos' ? composicao(S_CUS, 'Custos por natureza', 'Nenhuma nota de entrada no mês.')
+      : composicao(S_REC, 'Receita por origem', 'Nenhuma nota de venda ou de serviço no mês.')}
+    ${tabela()}
+    <p class="dica">Fora da conta: remessas, retornos, devoluções, transferências e bonificações (pela natureza da operação)${k.fora ? `, ${k.fora} nota(s) neste mês` : ''}, e notas canceladas. CT-e e NFC-e não são capturados. É uma visão gerencial, não substitui a escrituração.</p>`;
+  $('#rx-cli').onchange = (e) => { location.hash = `#/resumo/${e.target.value}`; };
+  $('#rx-mes').onchange = (e) => { st.mes = e.target.value || mesAtual(); telaResumoXml(id); };
+  conteudo.querySelectorAll('[data-aba]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); st.aba = a.dataset.aba; telaResumoXml(id); }));
+}
+
+/** Colunas lado a lado (receita e custo de cada mês), mesmo eixo. */
+function graficoColunasLado(dados, series, largura = 1080) {
+  const w = largura, h = 280, esq = 64, base = h - 26, topo = 10;
+  const max = Math.max(...dados.flatMap((d) => series.map((s) => d[s.chave] || 0)), 1);
+  const passo = 10 ** Math.floor(Math.log10(max)); const teto = Math.ceil(max / passo) * passo;
+  const y = (v) => base - (v / teto) * (base - topo);
+  const gx = (w - esq - 10) / dados.length, bw = Math.min(16, gx * 0.32);
+  const grade = [0, 0.25, 0.5, 0.75, 1].map((f) => `<line x1="${esq}" x2="${w - 10}" y1="${y(teto * f)}" y2="${y(teto * f)}" class="grade"/><text x="${esq - 6}" y="${y(teto * f) + 4}" text-anchor="end" class="eixo">${curto(teto * f)}</text>`).join('');
+  const cols = dados.map((d, i) => {
+    const x0 = esq + gx * i + (gx - bw * series.length - 2 * (series.length - 1)) / 2;
+    const dica = `${nomeMes(d.mes)} — ${series.map((s) => `${s.rotulo}: ${brl(d[s.chave] || 0)}`).join(' · ')} · Lucro bruto: ${brl((d.receita || 0) - (d.custo || 0))}`;
+    return `<g class="coluna"><rect x="${esq + gx * i}" y="${topo}" width="${gx}" height="${base - topo}" fill="transparent"><title>${esc(dica)}</title></rect>
+      ${series.map((s, k) => { const v = d[s.chave] || 0; return v ? `<rect x="${x0 + k * (bw + 2)}" y="${y(v)}" width="${bw}" height="${Math.max(base - y(v), 1)}" rx="3" fill="${s.cor}"/>` : ''; }).join('')}
+      <text x="${esq + gx * i + gx / 2}" y="${h - 8}" text-anchor="middle" class="eixo">${nomeMes(d.mes)}</text></g>`;
+  }).join('');
+  return `<svg class="colunas" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Receita e custos por mês">${grade}${cols}</svg>`;
 }

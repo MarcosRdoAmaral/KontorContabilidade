@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.15.0';
+export const MANUAL_VERSAO = '1.16.0';
 
 export const MANUAL = [
   {
@@ -132,9 +132,22 @@ export const MANUAL = [
       <p>Contratos com 13º aparecem na aba 13º honorário para emitir em dezembro. A aba Em atraso mostra os boletos de honorário vencidos por cliente.</p>`,
   },
   {
+    id: 'monitor', titulo: 'Monitor fiscal', resumo: 'Pendências de cada cliente por processo, notificações e sublimites do Simples.',
+    corpo: `
+      <p>Em Escritório &gt; Monitor fiscal, uma tela com a situação de toda a carteira no que o Kontor acompanha. Nada é consultado na Receita ao abrir: a tela lê o que já está no sistema.</p>
+      <ul>
+        <li><strong>Visão geral dos clientes:</strong> cada cliente entra na pior situação entre os processos: <em>Atenção</em> (algo vencido, em aberto ou com erro), <em>Pendentes</em> (algo a fazer ou conferir), <em>Processando</em>, <em>Em dia</em> ou <em>Sem informação</em>.</li>
+        <li><strong>Por processo:</strong> PGDAS-D e PGMEI (obrigações DAS e DAS do MEI e o fechamento), DCTFWeb (DCTFWeb e DARF previdenciário), FGTS Digital (última consulta), Situação fiscal (último relatório da Receita/PGFN), Certificados e procurações (vencidos ou vencendo em 30 dias) e Demais obrigações. Clique no nome do processo, num pedaço da barra ou numa situação para listar os clientes.</li>
+        <li><strong>Notificações:</strong> o que pede ação, do mais grave ao mais recente, com busca por cliente, processo ou assunto.</li>
+        <li><strong>Sublimites do Simples:</strong> RBT12 dos 10 maiores clientes do Simples (12 meses antes do mês atual), comparado ao sublimite de R$ 3,6 milhões e ao limite de R$ 4,8 milhões. Usa o faturamento do Controle mensal quando preenchido e, nos outros meses, as notas capturadas.</li>
+      </ul>`,
+  },
+  {
     id: 'captura', titulo: 'Captura de documentos', resumo: 'NF-e de compra e de venda, NFS-e prestadas e tomadas de todos os clientes, e o pacote do mês.',
     corpo: `
       <p>Uma tela para os documentos de toda a carteira, mês a mês. A tabela mostra, por cliente, as NF-e de compra, as NF-e de venda, as NFS-e prestadas e as tomadas.</p>
+      <h3>Resumo financeiro do cliente</h3>
+      <p>O botão <em>Resumo</em> de cada cliente mostra, no mês escolhido, quantos XML foram capturados, a receita bruta (NF-e de venda e NFS-e prestadas), os custos de entrada (NF-e de compra e NFS-e tomadas) e o lucro bruto com a margem. As abas trazem os 12 meses: receita × custos, a composição dos custos e o mix da receita, com a tabela dos números. Remessas, retornos, devoluções, transferências e bonificações ficam fora pela natureza da operação, assim como as notas canceladas. É uma visão gerencial: CT-e e NFC-e não são capturados e não substitui a escrituração.</p>
       <h3>NF-e de compra</h3>
       <p>Com o certificado A1 do cliente (Cadastros &gt; Empresas &gt; Certificado), o sistema consulta a SEFAZ e baixa as NF-e emitidas contra ele.</p>
       <h3>NF-e de venda</h3>
