@@ -106,7 +106,7 @@ export async function emitirDasParcela(escritorioId: number, usuarioId: number, 
 
 export async function consultarCaixaPostal(escritorioId: number, usuarioId: number | null, empresaId: number, transporte?: Transporte) {
   const e = cliente(escritorioId, empresaId);
-  const r = await Integra.para(escritorioId, transporte).consultar(e.documento, 'CAIXAPOSTAL', 'MSGCONTRIBUINTE61', { statusLeitura: '0', indicadorPagina: '0', ponteiroPagina: '00000000000000' });
+  const r = await Integra.para(escritorioId, transporte).consultar(e.documento, 'CAIXAPOSTAL', 'MSGCONTRIBUINTE61', { statusLeitura: '0', indicadorPagina: '0', ponteiroPagina: '0'.repeat(24) });
   const grava = (situacao: string, msgs: any[], erro: string | null) => {
     const naoLidas = msgs.filter((m) => !m.lida);
     db.prepare('INSERT INTO caixa_postal_consultas (empresa_id, situacao, nao_lidas, relevantes, mensagens_json, erro, usuario_id) VALUES (?,?,?,?,?,?,?)')

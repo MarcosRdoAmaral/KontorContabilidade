@@ -33,7 +33,7 @@ test('parcelamentos do Simples e caixa postal pelo Integra Contador', async () =
         if (idServico.startsWith('PEDIDOSPARC')) return { status: 404, corpo: { status: 404, mensagens: [{ codigo: 'x', texto: 'Não foram encontrados parcelamentos para o contribuinte.' }], dados: '' } };
         if (idServico === 'GERARDAS161') { assert.equal(JSON.parse(dados).parcelaParaEmitir, 202401); assert.equal(endpoint, 'Emitir'); return ok({ docArrecadacaoPdfB64: Buffer.from('%PDF-1.4 x').toString('base64'), valor: 315.2 }); }
         if (idServico === 'MSGCONTRIBUINTE61') {
-          assert.equal(JSON.parse(dados).statusLeitura, '0');
+          assert.equal(JSON.parse(dados).statusLeitura, '0'); assert.match(JSON.parse(dados).ponteiroPagina, /^\d{24}$/);
           return ok({ codigo: '00', conteudo: [{ quantidadeMensagens: '2', indicadorUltimaPagina: 'S', listaMensagens: [
             { isn: '123', assuntoModelo: 'Intimação ++VARIAVEL++', valorParametroAssunto: 'nº 55', dataEnvio: '20261020', indicadorLeitura: '0', relevancia: '2', descricaoOrigem: 'DRF Florianópolis' },
             { isn: '124', assuntoModelo: 'Aviso', dataEnvio: '20261001', indicadorLeitura: '1', relevancia: '1' }] }] });
