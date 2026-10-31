@@ -46,3 +46,19 @@ export function salvarLinha(escritorioId: number, usuarioId: number, d: z.infer<
   })();
   return { ok: true, dados };
 }
+
+/**
+ * Lança no Controle mensal o valor de uma guia. Sem `sobrescrever`, não mexe no que já foi digitado; com ele (guia
+ * acabou de ser emitida), o valor da guia substitui o anterior. A data de envio nunca é marcada aqui.
+ */
+export function lancarNoControle(empresaId: number, mes: string, area: Area, campo: string, valor: number | null, usuarioId: number | null, sobrescrever = false) {
+  if (valor == null) return;
+  const atual = db.prepare('SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = ? AND area = ?').get(empresaId, mes, area) as any;
+  const d = atual ? JSON.parse(atual.dados_json) : {};
+  if (d[campo] != null && (!sobrescrever || d[campo] === valor)) return;
+  d[campo] = valor;
+  if (area === 'FISCAL') d.emissao ??= new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  db.prepare(`INSERT INTO controle_mensal (empresa_id, competencia, area, dados_json, usuario_id) VALUES (?,?,?,?,?)
+    ON CONFLICT(empresa_id, competencia, area) DO UPDATE SET dados_json = excluded.dados_json, usuario_id = COALESCE(excluded.usuario_id, controle_mensal.usuario_id), atualizado_em = datetime('now')`)
+    .run(empresaId, mes, area, JSON.stringify(d), usuarioId);
+}

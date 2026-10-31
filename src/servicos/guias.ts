@@ -3,6 +3,8 @@ import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
 import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from './integra-contador.js';
 import { siafiDoIbge } from './siafi.js';
+import { lancarNoControle } from './controle-mensal.js';
+import { lerGuia } from './fechamento.js';
 import type { ItemPendencia } from './situacao-fiscal.js';
 
 /**
@@ -104,9 +106,16 @@ export async function gerarGuia(escritorioId: number, usuarioId: number, empresa
   const valor = numero(procurar(r.dados, (k, v) => /^(valorTotalConsolidado|valorTotal|valorTotalDas|totalConsolidado|valorDocumento)$/i.test(k) && v != null && typeof v !== 'object'));
   const validadeBruta = procurar(r.dados, (k, v) => /^(dataValidadeCalculo|dataLimiteAcolhimento|dataValidade|dataArrecadacao|dataPagamento)$/i.test(k) && v != null && typeof v !== 'object');
   const validade = validadeBruta ? (/^\d{8}$/.test(String(validadeBruta)) ? String(validadeBruta).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : String(validadeBruta).slice(0, 10)) : (p.tipo === 'DAS' ? null : p.data);
+  let valorFinal = valor;
+  if (p.tipo === 'DCTFWEB') {
+    // o DARF da DCTFWeb emitido vai para o DARF Prev. da competência no Controle mensal
+    if (valorFinal == null) valorFinal = (await lerGuia(Buffer.from(pdf, 'base64'))).valor;
+    const [mm, aaaa] = p.periodo.split('/');
+    lancarNoControle(empresaId, `${aaaa}-${mm}`, 'DP', 'darf_prev', valorFinal, usuarioId, true);
+  }
   const res = db.prepare(`INSERT INTO guias_recalculadas (empresa_id, tipo, titulo, periodo, valor, validade, pdf, usuario_id) VALUES (?,?,?,?,?,?,?,?)`)
-    .run(empresaId, p.tipo, titulo, p.periodo, valor, validade, Buffer.from(pdf, 'base64'), usuarioId);
-  return { id: Number(res.lastInsertRowid), titulo, valor, validade, nome: nomeArquivo(e.documento, p.tipo, p.periodo) };
+    .run(empresaId, p.tipo, titulo, p.periodo, valorFinal, validade, Buffer.from(pdf, 'base64'), usuarioId);
+  return { id: Number(res.lastInsertRowid), titulo, valor: valorFinal, validade, nome: nomeArquivo(e.documento, p.tipo, p.periodo) };
 }
 
 const nomeArquivo = (doc: string, tipo: string, periodo: string) => `${tipo}-${doc}-${String(periodo).replace(/\D+/g, '-').replace(/^-|-$/g, '')}.pdf`;

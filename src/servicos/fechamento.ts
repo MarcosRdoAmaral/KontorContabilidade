@@ -6,6 +6,7 @@ import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from '.
 import { assinarDctfweb } from '../nfse/assinatura.js';
 import { textoDoPdf } from './situacao-fiscal.js';
 import { enviarEmailSimples } from './email.js';
+import { lancarNoControle } from './controle-mensal.js';
 
 /**
  * Fechamento mensal pelo Integra Contador:
@@ -60,15 +61,43 @@ function marcarTarefa(empresaId: number, mes: string, codigo: string, usuarioId:
     .run(hojeBr(), usuarioId, protocolo, obs, empresaId, mes, codigo);
 }
 
-/** Lança no Controle mensal o valor da guia (sem apagar o que já foi digitado à mão). */
-function lancarNoControle(empresaId: number, mes: string, area: 'FISCAL' | 'DP', campo: string, valor: number | null, usuarioId: number) {
-  if (valor == null) return;
-  const atual = db.prepare('SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = ? AND area = ?').get(empresaId, mes, area) as any;
-  const d = atual ? JSON.parse(atual.dados_json) : {};
-  if (d[campo] != null) return;
-  d[campo] = valor; d.emissao ??= hojeBr();
-  db.prepare(`INSERT INTO controle_mensal (empresa_id, competencia, area, dados_json, usuario_id) VALUES (?,?,?,?,?)
-    ON CONFLICT(empresa_id, competencia, area) DO UPDATE SET dados_json = excluded.dados_json, usuario_id = excluded.usuario_id, atualizado_em = datetime('now')`).run(empresaId, mes, area, JSON.stringify(d), usuarioId);
+/**
+ * Ao abrir o Controle mensal: grava o valor das guias emitidas no DARF Prev. (DP) e no imposto (Fiscal), substituindo
+ * o que houver (a guia emitida manda; vale a mais recente entre o fechamento e a Situação fiscal). O envio ao cliente
+ * não é marcado aqui: só quando o e-mail ou o WhatsApp sai.
+ */
+export async function sincronizarControle(escritorioId: number, mes: string) {
+  const [aaaa, mm] = mes.split('-');
+  // [empresa, área] -> guia mais recente
+  const maisRecente = new Map<string, { empresa: number; area: 'DP' | 'FISCAL'; campo: string; quando: string; valor: () => Promise<number | null> }>();
+  const candidata = (c: { empresa: number; area: 'DP' | 'FISCAL'; campo: string; quando: string; valor: () => Promise<number | null> }) => {
+    const k = `${c.empresa}:${c.area}`; const atual = maisRecente.get(k);
+    if (!atual || c.quando > atual.quando) maisRecente.set(k, c);
+  };
+  for (const f of db.prepare(`SELECT f.id, f.empresa_id, f.tipo, f.valor, f.atualizado_em FROM fechamentos f JOIN empresas e ON e.id = f.empresa_id
+      WHERE e.escritorio_id = ? AND f.competencia = ? AND f.situacao = 'TRANSMITIDA' AND f.guia_pdf IS NOT NULL`).all(escritorioId, mes) as any[]) {
+    candidata({ empresa: f.empresa_id, area: f.tipo === 'DCTFWEB' ? 'DP' : 'FISCAL', campo: f.tipo === 'DCTFWEB' ? 'darf_prev' : 'imposto', quando: f.atualizado_em,
+      valor: async () => {
+        if (f.valor != null) return f.valor;
+        const g = db.prepare('SELECT guia_pdf FROM fechamentos WHERE id = ?').get(f.id) as any;
+        const lida = await lerGuia(Buffer.from(g.guia_pdf));
+        if (lida.valor != null) db.prepare('UPDATE fechamentos SET valor = ?, vencimento = COALESCE(vencimento, ?) WHERE id = ?').run(lida.valor, lida.vencimento, f.id);
+        return lida.valor;
+      } });
+  }
+  // DARF da DCTFWeb emitido pela Situação fiscal (guias recalculadas)
+  for (const g of db.prepare(`SELECT g.id, g.empresa_id, g.valor, g.criado_em FROM guias_recalculadas g JOIN empresas e ON e.id = g.empresa_id
+      WHERE e.escritorio_id = ? AND g.tipo = 'DCTFWEB' AND g.periodo = ?`).all(escritorioId, `${mm}/${aaaa}`) as any[]) {
+    candidata({ empresa: g.empresa_id, area: 'DP', campo: 'darf_prev', quando: g.criado_em,
+      valor: async () => {
+        if (g.valor != null) return g.valor;
+        const r = db.prepare('SELECT pdf FROM guias_recalculadas WHERE id = ?').get(g.id) as any;
+        const v = (await lerGuia(Buffer.from(r.pdf))).valor;
+        if (v != null) db.prepare('UPDATE guias_recalculadas SET valor = ? WHERE id = ?').run(v, g.id);
+        return v;
+      } });
+  }
+  for (const c of maisRecente.values()) lancarNoControle(c.empresa, mes, c.area, c.campo, await c.valor(), null, true);
 }
 
 /** Valor e vencimento lidos do PDF da guia (DARF/DAS). */
@@ -76,7 +105,9 @@ export async function lerGuia(pdf: Buffer): Promise<{ valor: number | null; venc
   let t = '';
   try { t = (await textoDoPdf(pdf)).replace(/\s+/g, ' '); } catch { return { valor: null, vencimento: null }; }
   const moeda = (s?: string) => (s ? Number(s.replace(/\./g, '').replace(',', '.')) : null);
-  const valor = moeda(/valor\s+total(?:\s+do\s+documento)?\s*:?\s*(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/i.exec(t)?.[1]);
+  // "Valor Total do Documento"; se o texto do PDF vier fora de ordem, o total é o maior valor da guia (principal + multa + juros)
+  const valores = [...t.matchAll(/(?<![\d.,])(\d{1,3}(?:\.\d{3})*,\d{2})(?![\d,])/g)].map((m) => moeda(m[1])!).filter((v) => v > 0);
+  const valor = moeda(/valor\s+total(?:\s+do\s+documento)?\s*:?\s*(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/i.exec(t)?.[1]) ?? (valores.length ? Math.max(...valores) : null);
   const venc = /(?:pagar\s+(?:este\s+documento\s+)?at[ée]|data\s+de\s+vencimento|vencimento)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i.exec(t)?.[1];
   return { valor, vencimento: venc ? venc.split('/').reverse().join('-') : null };
 }
@@ -154,7 +185,7 @@ export async function transmitirDctfweb(escritorioId: number, usuarioId: number,
       ...(guia ? { guia_pdf: Buffer.from(guia, 'base64'), valor: lida.valor, vencimento: lida.vencimento } : {}), erro: avisoGuia,
     });
     marcarTarefa(empresaId, mes, 'DCTFWEB', usuarioId, recibo ? String(recibo) : null, jaTransmitida ? 'DCTFWeb transmitida por outro sistema; recibo e DARF buscados pelo Kontor.' : 'DCTFWeb transmitida pelo Kontor (Integra Contador).');
-    lancarNoControle(empresaId, mes, 'DP', 'darf_prev', lida.valor, usuarioId);
+    lancarNoControle(empresaId, mes, 'DP', 'darf_prev', lida.valor, usuarioId, true);
     return { jaTransmitida, recibo, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!guia, aviso: avisoGuia };
   } catch (err: any) {
     // uma busca que não achou nada não estraga um fechamento já guardado
@@ -259,7 +290,7 @@ export async function buscarPgdas(escritorioId: number, usuarioId: number, empre
     declaracao_pdf: pdfDe(d?.declaracao), recibo_pdf: pdfDe(d?.recibo), guia_pdf: das ? Buffer.from(das, 'base64') : null, erro: aviso,
   });
   marcarTarefa(empresaId, mes, 'DAS', usuarioId, numero, 'PGDAS-D transmitido por outro sistema; declaração e DAS buscados pelo Kontor.');
-  lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', lida.valor, usuarioId);
+  lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', lida.valor, usuarioId, true);
   return { recibo: numero, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!das, aviso, maed: !!d?.maed };
 }
 

@@ -13,7 +13,7 @@ import { REGIMES, AndamentoTarefa, ExcecoesCliente, Obrigacao, ROTULO_REGIME, de
 import { CAMPOS_MODELO, ESCOPO_PADRAO, MarcaDagua, configMarca, imagemMarca, pdfExemplo, removerImagemMarca, salvarImagemMarca, salvarMarca, tipoImagem, Contrato, Modelo, ROTULO_INDICE, acumulado12Meses, anexarAssinado, aplicarReajuste, arquivoAssinado, configHonorarios, criarContrato, editarContrato, emitirDecimoTerceiro, excluirContrato, excluirModelo, historicoReajustes, inadimplencia, listarContratos, listarDecimoTerceiro, listarModelos, mudarStatus, pdfDoContrato, salvarConfigHonorarios, salvarModelo, sincronizarFaturamento, textoDoContrato } from './servicos/honorarios.js';
 import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutXml, statusCaptura } from './servicos/captura.js';
 import { xmlSaida } from './servicos/nfe-saidas.js';
-import { buscarPgdas, ATIVIDADES_PGDAS, AtividadesCliente, EntradaPgdas, TRIBUTOS_SN, arquivoFechamento, calcularPgdas, enviarFechamento, fechamentoDoCliente, mensagemFechamento, resumoFechamentos, salvarAtividades, transmitirDctfweb, transmitirPgdas } from './servicos/fechamento.js';
+import { buscarPgdas, sincronizarControle, ATIVIDADES_PGDAS, AtividadesCliente, EntradaPgdas, TRIBUTOS_SN, arquivoFechamento, calcularPgdas, enviarFechamento, fechamentoDoCliente, mensagemFechamento, resumoFechamentos, salvarAtividades, transmitirDctfweb, transmitirPgdas } from './servicos/fechamento.js';
 import { AREAS, LinhaControle, listarControle, salvarLinha } from './servicos/controle-mensal.js';
 import { Acesso, listarAcessos, revelarAcesso, salvarAcesso } from './servicos/acessos.js';
 import { analisarControle, importarControle } from './servicos/importar-controle.js';
@@ -333,7 +333,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     });
     // ---------- Fechamento mensal (PGDAS-D, DCTFWeb, envio ao cliente) ----------
     const mesQ = (req: any) => z.object({ mes: z.string().regex(/^\d{4}-\d{2}$/) }).parse({ ...(req.query ?? {}), ...(req.body ?? {}) }).mes;
-    api.get('/api/escritorio/fechamento', async (req) => ({ resumo: resumoFechamentos(u(req).escritorio_id, mesQ(req)), atividades: ATIVIDADES_PGDAS, tributos: TRIBUTOS_SN }));
+    api.get('/api/escritorio/fechamento', async (req) => { await sincronizarControle(u(req).escritorio_id, mesQ(req)); return ({ resumo: resumoFechamentos(u(req).escritorio_id, mesQ(req)), atividades: ATIVIDADES_PGDAS, tributos: TRIBUTOS_SN }); });
     api.get('/api/escritorio/fechamento/:id', async (req) => { checar(req, id(req)); return { ...fechamentoDoCliente(u(req).escritorio_id, id(req), mesQ(req)), mensagem: mensagemFechamento(u(req).escritorio_id, id(req), mesQ(req)).linhas }; });
     api.put('/api/escritorio/fechamento/:id/atividades', async (req) => { checar(req, id(req)); return salvarAtividades(u(req).escritorio_id, id(req), AtividadesCliente.parse((req.body as any)?.ids)); });
     api.post('/api/escritorio/fechamento/:id/dctfweb', async (req) => { checar(req, id(req)); return transmitirDctfweb(u(req).escritorio_id, u(req).id, id(req), mesQ(req), undefined, false, dataPag(req)); });

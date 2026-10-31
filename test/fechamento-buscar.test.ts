@@ -84,3 +84,24 @@ test('DARF: se a Receita falha no cálculo de juros e multa, tenta com o próxim
   assert.deepEqual(datas, [20261105], 'usa a data escolhida');
   assert.equal(r2.temGuia, true);
 });
+
+test('DARF emitido atualiza o DARF Prev. do controle (sem marcar envio); valor lido depois ao abrir o controle', async () => {
+  const F = await import('../src/servicos/fechamento.js');
+  const { db } = await import('../src/db.js');
+  const a = (db.prepare("SELECT id FROM empresas WHERE razao_social = 'Alfa'").get() as any).id;
+  const dp = () => JSON.parse((db.prepare("SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = '2026-09' AND area = 'DP'").get(a) as any)?.dados_json ?? '{}');
+  // guia guardada sem valor (PDF ilegível na hora): ao abrir o controle, o Kontor tenta ler de novo e não inventa valor
+  db.prepare("UPDATE fechamentos SET valor = NULL WHERE empresa_id = ? AND tipo = 'DCTFWEB'").run(a);
+  await F.sincronizarControle(1, '2026-09');
+  assert.equal(dp().darf_prev, undefined);
+  // valor conhecido: preenche o DARF Prev. em branco e não marca o envio
+  db.prepare("UPDATE fechamentos SET valor = 1234.56 WHERE empresa_id = ? AND tipo = 'DCTFWEB'").run(a);
+  await F.sincronizarControle(1, '2026-09');
+  assert.equal(dp().darf_prev, 1234.56);
+  assert.equal(dp().enviado, undefined);
+  const { lancarNoControle } = await import('../src/servicos/controle-mensal.js');
+  lancarNoControle(a, '2026-09', 'DP', 'darf_prev', 1300, 1, true);
+  assert.equal(dp().darf_prev, 1300, 'DARF emitido de novo (com juros) substitui');
+  lancarNoControle(a, '2026-09', 'DP', 'darf_prev', 999, 1);
+  assert.equal(dp().darf_prev, 1300, 'sem sobrescrever não mexe');
+});

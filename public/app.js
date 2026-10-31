@@ -82,6 +82,7 @@ function abrirDialogo(html, aoAbrir) {
   const d = $('#dialogo');
   $('#dialogo-corpo').innerHTML = html;
   d.showModal();
+  d.onclose = null;
   d.querySelectorAll('[data-fechar]').forEach((b) => (b.onclick = () => d.close()));
   aoAbrir?.(d);
   return d;
@@ -4610,7 +4611,9 @@ const CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'E-mail', OUTRO: 'Outro' };
 
 async function telaControle() {
   const f = telaControle.filtro ??= { mes: (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(), area: 'FISCAL', q: '', pendentes: false, todosDp: false };
-  const [lista, fech] = await Promise.all([api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`), f.area === 'CONTABIL' ? { resumo: {} } : api('GET', `/api/escritorio/fechamento?mes=${f.mes}`).catch(() => ({ resumo: {} }))]);
+  // o fechamento vem antes: ao carregar, ele lança no controle o valor das guias já emitidas
+  const fech = f.area === 'CONTABIL' ? { resumo: {} } : await api('GET', `/api/escritorio/fechamento?mes=${f.mes}`).catch(() => ({ resumo: {} }));
+  const lista = await api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`);
   telaControle.tabelas = fech;
   const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal', CONTABIL: 'Contábil' };
   conteudo.innerHTML = `
@@ -4647,7 +4650,7 @@ async function telaControle() {
       <td class="num">${num('faturamento', d.faturamento)}</td><td class="num">${num('imposto', d.imposto)}</td><td class="num" data-aliq>${aliq(d)}</td><td>${dt('emissao', d.emissao)}</td>
       <td><select data-canal><option value="">—</option>${Object.entries(CANAL).map(([k, v]) => `<option value="${k}" ${c.canal_envio === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
     if (f.area === 'DP') return `<tr data-id="${c.empresa_id}" class="${d.sem_folha ? 'inativo' : ''}"><td><input data-registro value="${esc(c.registro_dp ?? '')}" size="5" maxlength="20"></td>${cliente(c)}${celFech(c, 'DCTFWEB')}<td>${chk('sem_folha', d.sem_folha, 'Sem folha calculada')}</td>
-      <td class="num">${num('darf_prev', d.darf_prev)}</td><td class="num">${num('fgts', d.fgts)}</td><td class="num">${num('sindicato', d.sindicato)}</td><td class="num" data-total>${fmtValor((d.darf_prev ?? 0) + (d.fgts ?? 0) + (d.sindicato ?? 0)) || '—'}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
+      <td class="num">${num('darf_prev', d.darf_prev ?? 0)}</td><td class="num">${num('fgts', d.fgts ?? 0)}</td><td class="num">${num('sindicato', d.sindicato ?? 0)}</td><td class="num" data-total>${fmtValor((d.darf_prev ?? 0) + (d.fgts ?? 0) + (d.sindicato ?? 0)) || '—'}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
     return `<tr data-id="${c.empresa_id}">${cliente(c)}<td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
   };
   const totais = () => {
@@ -4731,7 +4734,7 @@ function loteFechamento(titulo, alvo, explicacao, acao, aoFim) {
         catch (e) { linhas.push(`<li class="cor-vermelho"><strong>${esc(c.cliente)}</strong>: ${esc(mensagemErro(e))}</li>`); }
       }
       res.innerHTML = `<div class="banner">Concluído.</div><ul class="dicas">${linhas.join('')}</ul>`;
-      dlg.querySelector('[data-fechar]').onclick = () => { dlg.close(); aoFim?.(); };
+      dlg.onclose = () => aoFim?.();
     };
   });
 }
@@ -4776,7 +4779,7 @@ async function abrirFechamento(empresaId, mes, aoFim) {
     <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
     const erro = (e) => ($('#fc-erro').textContent = mensagemErro(e));
     const recarregar = () => abrirFechamento(empresaId, mes, aoFim);
-    dlg.querySelector('[data-fechar]').onclick = () => { dlg.close(); aoFim?.(); };
+    dlg.onclose = () => aoFim?.(); // Fechar, Esc ou clique fora: a tabela atrás se atualiza
     dlg.querySelectorAll('[data-arq]').forEach((b) => (b.onclick = () => { const [tipo, qual] = b.dataset.arq.split(':'); baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=${tipo}&qual=${qual}`, `${tipo}-${qual}.pdf`, true); }));
     if (simples) {
       const sel = dlg.querySelector('#fc-ativ');
