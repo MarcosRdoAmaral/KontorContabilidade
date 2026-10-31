@@ -120,7 +120,7 @@ export async function consultarCaixaPostal(escritorioId: number, usuarioId: numb
   }
   const msgs = lista(r.dados, 'listaMensagens').slice(0, 50).map((m: any) => ({
     isn: String(m.isn ?? ''),
-    assunto: String(m.assuntoModelo ?? '').replace(/\+\+VARIAVEL\+\+/g, String(m.valorParametroAssunto ?? '')).trim(),
+    assunto: decodificarEntidades(String(m.assuntoModelo ?? '').replace(/\+\+VARIAVEL\+\+/g, String(m.valorParametroAssunto ?? ''))).trim(),
     enviada_em: dataReceita(m.dataEnvio),
     lida: String(m.indicadorLeitura ?? '') === '1',
     ciencia_em: dataReceita(m.dataCiencia) || null,
@@ -132,6 +132,36 @@ export async function consultarCaixaPostal(escritorioId: number, usuarioId: numb
 }
 
 /** Conteúdo de UMA mensagem. Pode registrar a leitura no e-CAC (e a ciência, se for intimação). */
+// Texto da Receita vem em HTML, às vezes com as entidades escapadas duas vezes (&amp;aacute;).
+const ENTIDADES: Record<string, string> = {
+  nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ordm: 'º', ordf: 'ª', deg: '°', sect: '§', middot: '·', bull: '•', hellip: '…', ndash: '–', mdash: '—',
+  lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', laquo: '«', raquo: '»', euro: '€', copy: '©', reg: '®',
+};
+for (const [l, acentos] of Object.entries({ a: 'áàâãäå', e: 'éèêë', i: 'íìîï', o: 'óòôõö', u: 'úùûü' }))
+  ['acute', 'grave', 'circ', 'tilde', 'uml', 'ring'].forEach((nome, k) => {
+    const mapa: Record<string, number[]> = { a: [0, 1, 2, 3, 4, 5], e: [0, 1, 2, -1, 3, -1], i: [0, 1, 2, -1, 3, -1], o: [0, 1, 2, 3, 4, -1], u: [0, 1, 2, -1, 3, -1] };
+    const pos = mapa[l][k]; if (pos < 0) return;
+    ENTIDADES[l + nome] = acentos[pos]; ENTIDADES[l.toUpperCase() + nome] = acentos[pos].toUpperCase();
+  });
+Object.assign(ENTIDADES, { ccedil: 'ç', Ccedil: 'Ç', ntilde: 'ñ', Ntilde: 'Ñ' });
+export function decodificarEntidades(s: string): string {
+  for (let i = 0; i < 3 && /&(#\d+|#x[\da-f]+|[a-z]+\d*);/i.test(s); i++)
+    s = s.replace(/&(#\d+|#x[\da-f]+|[a-z]+\d*);/gi, (x, n: string) => n[0] === '#' ? String.fromCodePoint(n[1].toLowerCase() === 'x' ? parseInt(n.slice(2), 16) : Number(n.slice(1))) : ENTIDADES[n] ?? x);
+  return s;
+}
+export function htmlParaTexto(html: string): string {
+  if (!/<[a-z!/]/i.test(html) && /&(amp;)*lt;\s*\/?[a-z]/i.test(html)) html = decodificarEntidades(html); // HTML inteiro escapado
+  const t = html.replace(/\r/g, '').replace(/\n/g, ' ')
+    .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\/\s*\1\s*>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
+    .replace(/<\/?(p|div|ul|ol|h[1-6]|table|tr|blockquote)[^>]*>/gi, '\n\n')
+    .replace(/<\/t[dh]>/gi, '  ')
+    .replace(/<[^>]+>/g, '');
+  return decodificarEntidades(t).replace(/ /g, ' ').split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n')
+    .replace(/\n(• )/g, '\n$1').replace(/\n{3,}/g, '\n\n').replace(/(\n• [^\n]*)\n\n(?=• )/g, '$1\n').trim();
+}
+
 export async function abrirMensagem(escritorioId: number, empresaId: number, isn: string, transporte?: Transporte) {
   const e = cliente(escritorioId, empresaId);
   if (!/^\d{1,12}$/.test(isn)) throw new ErroNegocio('Mensagem inválida.');
@@ -151,10 +181,10 @@ export async function abrirMensagem(escritorioId: number, empresaId: number, isn
     db.prepare('UPDATE caixa_postal_consultas SET mensagens_json = ?, nao_lidas = ?, relevantes = ? WHERE id = ?').run(JSON.stringify(l), nl.length, nl.filter((x: any) => x.relevante).length, ult.id);
   }
   return {
-    assunto: String(m.assuntoModelo ?? '').replace(/\+\+VARIAVEL\+\+/g, String(m.valorParametroAssunto ?? '')),
+    assunto: decodificarEntidades(String(m.assuntoModelo ?? '').replace(/\+\+VARIAVEL\+\+/g, String(m.valorParametroAssunto ?? ''))),
     enviada_em: dataReceita(m.dataEnvio), origem: String(m.descricaoOrigem ?? ''), controle: String(m.numeroControle ?? ''),
     ciencia_em: dataReceita(m.dataCiencia) || null,
-    texto: corpo.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\n{3,}/g, '\n\n').trim(),
+    texto: htmlParaTexto(corpo),
   };
 }
 
