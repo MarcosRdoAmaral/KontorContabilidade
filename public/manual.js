@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.23.1';
+export const MANUAL_VERSAO = '1.24.0';
 
 export const MANUAL = [
   {
@@ -32,6 +32,15 @@ export const MANUAL = [
       <h3>Como o sistema é organizado</h3>
       <p>No alto do menu lateral fica a <strong>empresa selecionada</strong>: quase todas as telas mostram os dados dela. Troque a empresa ali a qualquer momento. O restante do menu segue o fluxo do dia a dia: emitir, acompanhar notas, cobrar, controlar despesas e consultar relatórios.</p>
       <p class="dica">O menu mostra só o que o seu usuário tem permissão de usar (Configurações &gt; Usuários e acessos). Este manual está liberado para todos os usuários: em Relatórios &gt; Documentação, ou no item Documentação do menu para quem não tem o acesso a Relatórios.</p>`,
+  },
+  {
+    id: 'inicio', titulo: 'Início', resumo: 'Tela de abertura com lembretes do dia, dica e mensagem.',
+    corpo: `
+      <p>Ao abrir o programa, a tela <strong>Início</strong> mostra a logo, a saudação e, à direita:</p>
+      <ul>
+        <li><strong>Lembretes de hoje:</strong> obrigações atrasadas, que vencem hoje ou nos próximos 3 dias; certificados e procurações vencendo em 30 dias; DAS e DARF do mês passado gerados e ainda não enviados; falhas no envio automático do DP; mensagens relevantes não lidas na caixa postal; parcelas em atraso e clientes perto do sublimite. Cada usuário vê só o que tem acesso; clique no lembrete para ir à tela.</li>
+        <li><strong>Dica do dia</strong> sobre o Kontor e uma <strong>mensagem</strong> para o dia, que mudam todo dia.</li>
+      </ul>`,
   },
   {
     id: 'visao', titulo: 'Visão geral do escritório', resumo: 'Prazos, certificados e honorários de toda a carteira numa tela.',

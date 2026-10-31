@@ -1,3 +1,4 @@
+import { lembretesDoDia } from './servicos/inicio.js';
 import { ClienteDp, ConfigDp, painelDp, salvarClienteDp, salvarConfigDp, varrerPastaDp } from './servicos/envio-dp.js';
 import { abrirMensagem, consultarCaixaPostal, consultarParcelamentos, detalheCliente, emitirDasParcela } from './servicos/parcelamentos-caixa.js';
 import { monitorFiscal, resumoFinanceiro } from './servicos/monitor.js';
@@ -79,6 +80,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.put('/api/escritorio/envio-dp/config', async (req) => salvarConfigDp(u(req).escritorio_id, ConfigDp.parse(req.body)));
     api.put('/api/escritorio/envio-dp/cliente/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return salvarClienteDp(u(req).escritorio_id, id, ClienteDp.parse(req.body)); });
     api.post('/api/escritorio/envio-dp/verificar', async (req) => varrerPastaDp(u(req).escritorio_id, !!(req.body as any)?.enviar));
+    api.get('/api/inicio', async (req) => ({ lembretes: lembretesDoDia(u(req).escritorio_id, modulosDoUsuario(u(req)), empresasDoUsuario(u(req))) }));
     api.get('/api/escritorio/monitor', async (req) => { await atualizarReceitas(u(req).escritorio_id); return monitorFiscal(u(req).escritorio_id, empresasDoUsuario(u(req))); });
     api.get('/api/escritorio/resumo-financeiro/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return resumoFinanceiro(u(req).escritorio_id, id, mesDe(req.query)); });
     api.get('/api/escritorio/visao', async (req) => visaoGeral(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))));

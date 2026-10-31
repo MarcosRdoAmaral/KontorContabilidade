@@ -409,6 +409,9 @@ async function iniciar() {
 }
 
 function telaInicial() {
+  return 'inicio'; // tela de abertura: logo, lembretes, dica e mensagem do dia
+}
+function primeiraTelaDoMenu() {
   // a primeira tela do menu (na ordem em que aparece) que o usuário pode abrir
   const doMenu = [...document.querySelectorAll('#menu a[data-modulo]')].map((a) => a.getAttribute('href').replace('#/', '')).find((n) => telaPermitida(n));
   return doMenu ?? estado.usuario.modulos.find((x) => x !== 'excluir') ?? 'config';
@@ -417,11 +420,11 @@ function telaInicial() {
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
 function telaPermitida(nome) {
   const modulo = { monitor: 'visao', resumo: 'captura', controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
-  return nome === 'config' || (modulo && estado.usuario.modulos.includes(modulo));
+  return nome === 'config' || nome === 'inicio' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
 const rotas = {
-  monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
+  inicio: telaInicio, monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
   painel: telaPainel, emitir: telaEmitir, notas: telaNotas, nota: telaNota,
   cobrancas: telaCobrancas, banco: telaBanco, despesas: telaDespesas, compras: telaCompras, entradas: telaCompras, 'compra-nova': telaCompraManual, 'nfe-sefaz': telaNfeSefaz, tributacao: telaTributacao, extrato: telaExtrato, cartao: telaCartao, agenda: telaAgenda, relatorios: telaRelatorios, tomadores: telaTomadores, servicos: telaServicos, empresas: telaEmpresas, config: telaConfig,
 };
@@ -435,7 +438,7 @@ function rotear() {
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
-  const precisaEmpresa = !manual && !['painel', 'empresas', 'nota', 'config', 'visao', 'monitor', 'resumo', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
+  const precisaEmpresa = !manual && !['inicio', 'painel', 'empresas', 'nota', 'config', 'visao', 'monitor', 'resumo', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
   if (precisaEmpresa && !empresa()) {
     conteudo.innerHTML = `<div class="vazio"><p>Cadastre o primeiro cliente na carteira para começar.</p>
       ${estado.usuario.papel !== 'cliente' ? '<a href="#/carteira">Ir para a Carteira de clientes</a>' : ''}</div>`;
@@ -5536,4 +5539,84 @@ function resultadoDp(r) {
   return `<div class="cartao"><h3 style="margin-top:0">Resultado</h3><table class="tabela"><thead><tr><th>Cliente</th><th>Competência</th><th>Na pasta</th><th>Faltando</th><th>Situação</th></tr></thead><tbody>
     ${r.map((x) => `<tr><td>${esc(x.cliente)}</td><td>${x.competencia.slice(5)}/${x.competencia.slice(0, 4)}</td><td>${x.arquivos.map((t) => T[t]).join(', ')}</td><td>${x.faltando.length ? `<span class="cor-ambar">${x.faltando.map((t) => T[t]).join(', ')}</span>` : '—'}</td>
       <td><span class="selo-estado" style="--c:${COR_ESTADO[SIT_DP[x.situacao][1]]}">${x.mensagem === 'pronto para enviar' ? 'Pronto para enviar' : SIT_DP[x.situacao][0]}</span>${x.mensagem && x.mensagem !== 'pronto para enviar' ? `<br><span class="dica">${esc(x.mensagem)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Início: logo, lembretes do dia, dica e mensagem do dia
+// ---------------------------------------------------------------------------
+const DICAS_KONTOR = [
+  'No Monitor fiscal, clique num pedaço da barra de um processo para ver só os clientes naquela situação.',
+  'Transmitiu no seu sistema? Em Controle mensal, "Buscar DAS já transmitidos" traz a declaração, o DAS e o faturamento de todos os clientes de uma vez.',
+  'A data de pagamento do DARF da DCTFWeb pode ser escolhida: juros e multa são calculados até ela.',
+  'O envio automático do DP manda os documentos sozinho quando o conjunto do mês chega na pasta do cliente.',
+  'Em Configurações > E-mail você coloca a assinatura do escritório no fim de todos os e-mails aos clientes.',
+  'O quadro Faturamento acumulado avisa quem está perto do sublimite antes de virar problema.',
+  'Na caixa postal do e-CAC, o Kontor só lista as mensagens: abrir o conteúdo pode contar como ciência, por isso ele sempre pergunta antes.',
+  'O Resumo financeiro do cliente (Captura de documentos > Resumo) mostra receita, custos e lucro bruto pelos XML capturados.',
+  'Ver prévia, no envio automático do DP, mostra o que seria enviado sem mandar nada.',
+  'Cliente sem e-mail na Carteira não recebe envio automático: vale conferir os cadastros de vez em quando.',
+  'Em Situação fiscal dá para recalcular guias em aberto e gerar um PDF por guia, sem sair do sistema.',
+  'Use "Só não enviados" no Controle mensal para enxergar rápido o que ainda falta mandar.',
+  'A busca automática de notas consulta sozinha com o programa aberto, respeitando o intervalo de cada órgão.',
+  'O backup automático guarda uma cópia por dia; uma cópia fora do computador de vez em quando é uma ótima ideia.',
+  'Clique no nome do cliente na lista do Monitor fiscal para ver os parcelamentos e a caixa postal dele.',
+  'PGDAS-D sem faturamento? O Kontor transmite o zerado em lote para os clientes marcados como sem movimento.',
+  'O aviso de versão nova tem "Baixar e instalar ao fechar": a atualização fica pronta para quando você encerrar o dia.',
+  'Em Senhas e acessos, as senhas ficam criptografadas e só aparecem quando alguém clica em Mostrar.',
+];
+const MENSAGENS_DIA = [
+  'Um passo de cada vez: o dia rende mais quando a primeira tarefa é a mais importante.',
+  'Prazo cumprido hoje é tranquilidade amanhã. Bom trabalho!',
+  'Pequenas organizações diárias evitam grandes correrias no fim do mês.',
+  'Você não precisa fazer tudo hoje, só o que realmente importa.',
+  'Cliente bem atendido é o melhor marketing que existe.',
+  'Faça uma pausa curta, respire fundo e volte com a cabeça leve.',
+  'Cada guia enviada no prazo é uma preocupação a menos para alguém.',
+  'Comece pelo que está atrasado; o resto flui melhor depois.',
+  'Um café, uma lista e foco: o dia está nas suas mãos.',
+  'Erros acontecem; o que importa é perceber cedo e corrigir com calma.',
+  'Organização não é fazer mais, é fazer o certo na hora certa.',
+  'Hoje é um bom dia para resolver aquela pendência que está esperando.',
+  'Celebre as pequenas vitórias: elas somam muito no fim do mês.',
+  'Trabalho bem feito fala por si. Siga firme!',
+  'Beba água, alongue os ombros e siga em frente.',
+  'Contabilidade é cuidar do negócio dos outros com o mesmo zelo do seu. Obrigado por isso.',
+  'O que foi planejado ontem fica mais leve hoje.',
+  'Peça ajuda quando precisar: equipe forte é equipe que conversa.',
+  'Desligue as notificações por meia hora e veja o quanto você avança.',
+  'Ninguém faz tudo sozinho. Valorize quem está do seu lado hoje.',
+  'Termine o dia anotando a primeira tarefa de amanhã: a manhã começa mais fácil.',
+  'Mês fechado com calma vale mais do que mês fechado às pressas.',
+  'Seu cuidado de hoje evita a dor de cabeça de amanhã de muitos clientes.',
+  'Respire: um problema de cada vez sempre tem solução.',
+];
+
+async function telaInicio() {
+  const agora = new Date();
+  const h = agora.getHours();
+  const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const dia = Math.floor((Date.now() - agora.getTimezoneOffset() * 6e4) / 864e5);
+  const nome = String(estado.usuario?.nome ?? '').split(' ')[0];
+  const dataLonga = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  conteudo.innerHTML = `
+    <div class="inicio">
+      <section class="inicio-marca">
+        <img src="/logo.png" alt="Kontor Gestão Contabilidade" class="inicio-logo">
+        <p class="inicio-saudacao">${saudacao}${nome ? `, ${esc(nome)}` : ''}!</p>
+        <p class="sutil inicio-data">${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</p>
+      </section>
+      <aside class="inicio-lado">
+        <section class="cartao"><h2>Lembretes de hoje</h2><div id="ini-lembretes"><p class="dica">Carregando…</p></div></section>
+        <section class="cartao"><h2>Dica do dia</h2><p>${esc(DICAS_KONTOR[dia % DICAS_KONTOR.length])}</p></section>
+        <section class="cartao inicio-mensagem"><h2>Para o seu dia</h2><p>${esc(MENSAGENS_DIA[dia % MENSAGENS_DIA.length])}</p></section>
+      </aside>
+    </div>`;
+  try {
+    const { lembretes } = await api('GET', '/api/inicio');
+    const cor = { ATENCAO: 'var(--g-atencao)', PENDENTE: 'var(--g-pend)', INFO: 'var(--g-proc)' };
+    $('#ini-lembretes').innerHTML = lembretes.length
+      ? `<ul class="inicio-lembretes">${lembretes.map((l) => `<li><a href="${esc(l.link)}"><i style="background:${cor[l.nivel]}"></i><span>${esc(l.texto)}</span><b>›</b></a></li>`).join('')}</ul>`
+      : '<p class="dica">Nada pendente por aqui. Aproveite o dia!</p>';
+  } catch { $('#ini-lembretes').innerHTML = '<p class="dica">Não foi possível carregar os lembretes agora.</p>'; }
 }

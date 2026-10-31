@@ -75,6 +75,10 @@ test('monitor fiscal e resumo financeiro pelos XML', async () => {
     db.prepare("UPDATE usuarios SET trocar_senha = 0 WHERE login = 'CAIO'").run();
     const tc = (await call('POST', '/api/login', { usuario: 'caio', senha: 'senha-segura-4' })).json.token;
     assert.equal((await call('GET', '/api/escritorio/monitor', undefined, tc)).status, 403);
+    // tela de início: lembretes só do que cada um pode ver
+    const li = (await call('GET', '/api/inicio', undefined, t)).json.lembretes;
+    assert.ok(li.some((l: any) => /certificado/.test(l.texto)), 'administrador vê o certificado vencido');
+    assert.deepEqual((await call('GET', '/api/inicio', undefined, tc)).json.lembretes, [], 'só Carteira: nenhum lembrete');
     assert.equal((await call('GET', `/api/escritorio/resumo-financeiro/${a}?mes=${mes}`, undefined, tc)).status, 403);
   } finally {
     await app.close();
