@@ -157,17 +157,32 @@ function repositorioAtualizacoes() {
 
 let verificando = false;
 let pendente_atualizacao = null; // { versao, notas, exe, sha } quando há versão nova
+let baixada = null;               // { versao, caminho } instalador já baixado e conferido
+let instalarAoFechar = false;     // instala a versão baixada quando o programa for fechado
+let instalando = false;
 
 ipcMain.handle('pasta:escolher', async (_e, titulo) => {
   const r = await dialog.showOpenDialog(janela, { title: String(titulo || 'Escolha a pasta'), properties: ['openDirectory'] });
   return r.canceled ? null : r.filePaths[0] ?? null;
 });
-ipcMain.handle('atualizacao:pendente', () => (pendente_atualizacao ? { versao: pendente_atualizacao.versao, notas: pendente_atualizacao.notas } : null));
+const infoPendente = () => (pendente_atualizacao ? { versao: pendente_atualizacao.versao, notas: pendente_atualizacao.notas,
+  baixada: baixada?.versao === pendente_atualizacao.versao, aoFechar: instalarAoFechar && baixada?.versao === pendente_atualizacao.versao } : null);
+ipcMain.handle('atualizacao:pendente', () => infoPendente());
 ipcMain.handle('atualizacao:instalar', async () => {
   if (!pendente_atualizacao) return { ok: false };
   try { await baixarEInstalar(pendente_atualizacao); return { ok: true }; }
   catch (e) { return { ok: false, erro: String(e?.message ?? e) }; }
 });
+// Só baixa (fica pronta para instalar); com aoFechar, instala sozinha quando o Kontor for fechado.
+ipcMain.handle('atualizacao:baixar', async (_e, opcoes) => {
+  if (!pendente_atualizacao) return { ok: false };
+  try {
+    await baixar(pendente_atualizacao);
+    instalarAoFechar = !!opcoes?.aoFechar;
+    return { ok: true, ...infoPendente() };
+  } catch (e) { return { ok: false, erro: String(e?.message ?? e) }; }
+});
+ipcMain.handle('atualizacao:aoFechar', (_e, ligar) => { instalarAoFechar = !!ligar && !!baixada; return infoPendente(); });
 
 let ultimaVerificacao = 0;
 let ultimoResultado = { situacao: 'nunca', atual: '' };
@@ -214,10 +229,11 @@ async function executarVerificacao({ manual = false } = {}) {
     janela?.webContents.send('atualizacao:nova', { versao: r.versao, notas: r.notas });
     if (!manual) return; // verificação automática ou da tela de Configurações: o aviso fixo na interface basta
     const c = await dialog.showMessageBox(janela, {
-      type: 'question', buttons: ['Atualizar agora', 'Depois'], defaultId: 0, cancelId: 1,
+      type: 'question', buttons: ['Atualizar agora', 'Baixar e instalar ao fechar', 'Depois'], defaultId: 0, cancelId: 2,
       message: `Nova versão ${r.versao} disponível`,
       detail: `Você está na versão ${app.getVersion()}.\n\nAntes de instalar, o programa faz uma cópia de segurança dos seus dados. Suas notas e cadastros são mantidos.${r.notas ? '\n\nNovidades:\n' + r.notas.slice(0, 800) : ''}`,
     });
+    if (c.response === 1) { await baixar(r); instalarAoFechar = true; janela?.webContents.send('atualizacao:nova', infoPendente()); return; }
     if (c.response !== 0) return;
     await baixarEInstalar(r);
   } catch (e) {
@@ -227,30 +243,43 @@ async function executarVerificacao({ manual = false } = {}) {
   } finally { verificando = false; }
 }
 
-async function baixarEInstalar(r) {
+/** Baixa o instalador da versão nova (conferindo o SHA-256). Se já foi baixado e confere, não baixa de novo. */
+async function baixar(r) {
   if (!urlPermitida(r.exe.browser_download_url)) throw new Error('Endereço de download não permitido.');
-  // 1) cópia de segurança dos dados
+  if (baixada?.versao === r.versao && fs.existsSync(baixada.caminho)) return baixada.caminho;
+  const destino = path.join(app.getPath('temp'), r.exe.name);
+  const esperado = r.sha ? (await (await net.fetch(r.sha.browser_download_url)).text()).trim().split(/\s+/)[0].toLowerCase() : null;
+  const hashDe = (arq) => crypto.createHash('sha256').update(fs.readFileSync(arq)).digest('hex');
+  if (!(esperado && fs.existsSync(destino) && hashDe(destino) === esperado)) {
+    janela?.setProgressBar(2); // indeterminado
+    try {
+      const resp = await net.fetch(r.exe.browser_download_url);
+      if (!resp.ok) throw new Error(`Download falhou (${resp.status}).`);
+      const hash = crypto.createHash('sha256');
+      const saida = fs.createWriteStream(destino);
+      for await (const parte of resp.body) { hash.update(parte); if (!saida.write(parte)) await new Promise((ok) => saida.once('drain', ok)); }
+      await new Promise((ok, erro) => { saida.end(ok); saida.on('error', erro); });
+      if (esperado && esperado !== hash.digest('hex')) { fs.rmSync(destino, { force: true }); throw new Error('O arquivo baixado está corrompido (SHA-256 diferente). Tente novamente.'); }
+    } finally { janela?.setProgressBar(-1); }
+  }
+  baixada = { versao: r.versao, caminho: destino };
+  return destino;
+}
+
+/** Cópia de segurança dos dados e abre o instalador (ele fecha o programa, troca os arquivos e preserva os dados). */
+function instalar(caminho) {
+  if (instalando) return;
+  instalando = true;
   const dia = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
   const pastaBkp = path.join(pastaDados, 'antes-de-atualizar');
   fs.mkdirSync(pastaBkp, { recursive: true });
   banco.copiarPara(path.join(pastaBkp, `nfse-v${app.getVersion()}-${dia}.db`));
+  spawn(caminho, [], { detached: true, stdio: 'ignore' }).unref();
+}
 
-  // 2) download com conferência do SHA-256
-  janela?.setProgressBar(2); // indeterminado
-  const destino = path.join(app.getPath('temp'), r.exe.name);
-  const resp = await net.fetch(r.exe.browser_download_url);
-  if (!resp.ok) throw new Error(`Download falhou (${resp.status}).`);
-  const hash = crypto.createHash('sha256');
-  const saida = fs.createWriteStream(destino);
-  for await (const parte of resp.body) { hash.update(parte); if (!saida.write(parte)) await new Promise((ok) => saida.once('drain', ok)); }
-  await new Promise((ok, erro) => { saida.end(ok); saida.on('error', erro); });
-  janela?.setProgressBar(-1);
-  if (r.sha) {
-    const esperado = (await (await net.fetch(r.sha.browser_download_url)).text()).trim().split(/\s+/)[0].toLowerCase();
-    if (esperado !== hash.digest('hex')) { fs.rmSync(destino, { force: true }); throw new Error('O arquivo baixado está corrompido (SHA-256 diferente). Tente novamente.'); }
-  }
-  // 3) abre o instalador e encerra: ele fecha o programa, troca os arquivos e preserva os dados
-  spawn(destino, [], { detached: true, stdio: 'ignore' }).unref();
+async function baixarEInstalar(r) {
+  const caminho = await baixar(r);
+  instalar(caminho);
   app.quit();
 }
 
@@ -277,7 +306,11 @@ function montarMenu() {
 
 app.on('second-instance', () => { if (janela) { if (janela.isMinimized()) janela.restore(); janela.focus(); } });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { servidor?.close(); });
+app.on('before-quit', () => {
+  // "Baixar e instalar ao fechar": ao sair, instala a versão já baixada
+  if (instalarAoFechar && baixada && !instalando && fs.existsSync(baixada.caminho)) { try { instalar(baixada.caminho); } catch (e) { console.error('Instalação ao fechar:', e); } }
+  servidor?.close();
+});
 
 app.whenReady().then(async () => {
   try {

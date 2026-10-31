@@ -432,3 +432,4 @@ input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); 
 .botao-arquivo .botao { display: inline-block; padding: 10px 16px; font-size: 1rem; color: var(--tinta); border: 1px solid var(--borda-botao); border-radius: var(--raio); cursor: pointer; }
 .fc-zerado { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--borda-tracejada); border-radius: var(--raio); }
 .fc-zerado .acoes { margin-top: 8px; align-items: center; }
+.av-fechar { display: inline-flex; align-items: center; gap: 6px; margin: 0 6px; white-space: nowrap; }

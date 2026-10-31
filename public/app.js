@@ -3193,13 +3193,14 @@ async function telaAtualizacoes() {
         <p class="sutil">O sistema procura versões novas sozinho ao abrir, a cada hora e quando você volta à janela. Quando houver uma, aparece um aviso no topo da tela.</p>
         <p id="atu-status" class="sutil">Consultando…</p>
         <div id="atu-notas" class="novidades-caixa" hidden></div>
-        <div class="acoes"><button class="primario" id="atu-verificar">Verificar agora</button><button id="atu-instalar" hidden>Atualizar agora</button></div>`
+        <div class="acoes"><button class="primario" id="atu-verificar">Verificar agora</button><button id="atu-instalar" hidden>Atualizar agora</button>${ponte.baixarAtualizacao ? '<button id="atu-baixar-fechar" hidden>Baixar e instalar ao fechar</button><button id="atu-baixar" hidden>Só baixar</button>' : ''}</div>`
         : '<p class="sutil">A busca automática de atualizações funciona no aplicativo instalado no Windows. Neste modo de uso, a atualização é feita com o instalador novo.</p>'}
     </div>`;
   if (!ponte?.verificarAtualizacao) return;
   const mostrar = (e) => {
     $('#atu-status').textContent = desc(e) + (e?.em ? ` (verificado às ${new Date(e.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})` : '');
     $('#atu-instalar').hidden = e?.situacao !== 'nova';
+    $('#atu-baixar') && ($('#atu-baixar').hidden = $('#atu-baixar-fechar').hidden = e?.situacao !== 'nova');
     const n = $('#atu-notas'); n.hidden = !(e?.situacao === 'nova' && e.notas);
     if (!n.hidden) n.innerHTML = `<strong>Novidades da versão ${esc(e.versao)}</strong><br>${esc(e.notas).replace(/\n/g, '<br>')}`;
   };
@@ -3209,6 +3210,16 @@ async function telaAtualizacoes() {
     try { mostrar(await ponte.verificarAtualizacao()); } catch { $('#atu-status').textContent = 'Não foi possível verificar agora.'; }
     ev.target.disabled = false; ev.target.textContent = 'Verificar agora';
   };
+  const baixarAtu = (aoFechar) => async (ev) => {
+    ev.target.disabled = true; const t = ev.target.textContent; ev.target.textContent = 'Baixando…';
+    const r = await ponte.baixarAtualizacao(aoFechar);
+    ev.target.disabled = false; ev.target.textContent = t;
+    if (!r?.ok) return aviso(r?.erro ?? 'Não foi possível baixar agora.');
+    $('#atu-status').textContent = aoFechar ? `Versão ${r.versao} baixada: será instalada quando você fechar o Kontor.` : `Versão ${r.versao} baixada. Use "Atualizar agora" para instalar quando quiser.`;
+    $('#atu-instalar').textContent = 'Instalar agora';
+  };
+  $('#atu-baixar') && ($('#atu-baixar').onclick = baixarAtu(false));
+  $('#atu-baixar-fechar') && ($('#atu-baixar-fechar').onclick = baixarAtu(true));
   $('#atu-instalar').onclick = async (ev) => {
     ev.target.disabled = true; ev.target.textContent = 'Baixando…';
     const r = await ponte.instalarAtualizacao();
@@ -3451,19 +3462,36 @@ async function zerarDadosDialogo() {
   if (!ponte || typeof ponte.versaoPendente !== 'function') return;
   const faixa = document.getElementById('aviso-versao');
   let dispensado = false;
+  const esconder = () => { faixa.hidden = true; document.body.classList.remove('com-aviso-versao'); };
   const mostrar = (info) => {
     if (!info || dispensado) return;
-    faixa.innerHTML = `<span><strong>Nova versão ${esc(info.versao)} disponível.</strong> Seus dados são preservados e uma cópia de segurança é feita antes de atualizar.
+    const pronta = !!info.baixada && typeof ponte.baixarAtualizacao === 'function';
+    faixa.innerHTML = `<span><strong>${pronta ? `Versão ${esc(info.versao)} baixada.` : `Nova versão ${esc(info.versao)} disponível.`}</strong>
+      ${pronta ? (info.aoFechar ? 'Será instalada quando você fechar o Kontor.' : 'Pronta para instalar.') : 'Seus dados são preservados e uma cópia de segurança é feita antes de atualizar.'}
       ${info.notas ? `<details class="novidades"><summary>Ver novidades</summary><div>${esc(info.notas).replace(/\n/g, '<br>')}</div></details>` : ''}</span>
-      <span class="acoes-faixa"><button class="primario" id="av-atualizar">Atualizar agora</button><button id="av-depois">Depois</button></span>`;
+      <span class="acoes-faixa">${pronta
+        ? `<button class="primario" id="av-atualizar">Instalar agora</button><label class="check av-fechar"><input type="checkbox" id="av-aofechar" ${info.aoFechar ? 'checked' : ''}> Instalar ao fechar o Kontor</label>`
+        : `<button class="primario" id="av-atualizar">Atualizar agora</button>${typeof ponte.baixarAtualizacao === 'function' ? '<button id="av-baixar-fechar" title="Baixa agora e instala sozinho quando você fechar o Kontor">Baixar e instalar ao fechar</button><button id="av-baixar" title="Baixa agora; você instala quando quiser">Só baixar</button>' : ''}`}
+        <button id="av-depois">Depois</button></span>`;
     faixa.hidden = false;
     document.body.classList.add('com-aviso-versao');
-    document.getElementById('av-depois').onclick = () => { dispensado = true; faixa.hidden = true; document.body.classList.remove('com-aviso-versao'); };
+    document.getElementById('av-depois').onclick = () => { dispensado = true; esconder(); };
     document.getElementById('av-atualizar').onclick = async (ev) => {
-      ev.target.disabled = true; ev.target.textContent = 'Baixando…';
+      ev.target.disabled = true; ev.target.textContent = pronta ? 'Abrindo o instalador…' : 'Baixando…';
       const r = await ponte.instalarAtualizacao();
-      if (!r?.ok) { ev.target.disabled = false; ev.target.textContent = 'Atualizar agora'; aviso(r?.erro ?? 'Não foi possível atualizar agora.'); }
+      if (!r?.ok) { ev.target.disabled = false; ev.target.textContent = pronta ? 'Instalar agora' : 'Atualizar agora'; aviso(r?.erro ?? 'Não foi possível atualizar agora.'); }
     };
+    const baixar = (aoFechar) => async (ev) => {
+      faixa.querySelectorAll('button').forEach((b) => (b.disabled = true)); ev.target.textContent = 'Baixando…';
+      const r = await ponte.baixarAtualizacao(aoFechar);
+      if (!r?.ok) { aviso(r?.erro ?? 'Não foi possível baixar agora.'); return mostrar(info); }
+      aviso(aoFechar ? `Versão ${r.versao} baixada: será instalada quando você fechar o Kontor.` : `Versão ${r.versao} baixada. Instale quando quiser.`);
+      mostrar(r);
+    };
+    document.getElementById('av-baixar-fechar') && (document.getElementById('av-baixar-fechar').onclick = baixar(true));
+    document.getElementById('av-baixar') && (document.getElementById('av-baixar').onclick = baixar(false));
+    const cf = document.getElementById('av-aofechar');
+    if (cf) cf.onchange = async () => mostrar(await ponte.instalarAoFechar(cf.checked));
   };
   ponte.aoHaverAtualizacao(mostrar);
   ponte.versaoPendente().then(mostrar).catch(() => {});
