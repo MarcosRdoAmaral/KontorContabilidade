@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.23.0';
+export const MANUAL_VERSAO = '1.23.1';
 
 export const MANUAL = [
   {
@@ -384,7 +384,7 @@ export const MANUAL = [
   {
     id: 'despesas', titulo: 'Despesas e balanço', resumo: 'Lançar despesas e acompanhar receitas × despesas.',
     corpo: `
-      <p>Em <strong>Despesas e balanço</strong> lance as despesas da empresa por categoria e acompanhe o resultado do mês: o que foi <em>recebido</em> (boletos pagos) contra o que foi gasto. Marcar as cobranças como pagas e lançar as despesas mantém o balanço confiável. O <strong>Painel do mês</strong> resume faturado, recebido, a receber, em atraso e quem ainda falta emitir. Em cada despesa informe <strong>Pago com</strong> (PIX, débito, crédito ou dinheiro): é o que permitirá vincular o gasto ao extrato para justificá-lo. As despesas vindas do extrato aparecem com a marca “extrato” e são alteradas lá, não aqui.</p>`,
+      <p>Em <strong>Despesas e balanço</strong> lance as despesas da empresa por categoria e acompanhe o resultado do mês: o que foi <em>recebido</em> (boletos pagos) contra o que foi gasto. Marcar as cobranças como pagas e lançar as despesas mantém o balanço confiável. A <strong>Visão geral do faturamento</strong> (Faturamento &gt; Visão geral) resume faturado, recebido, a receber, em atraso e quem ainda falta emitir. Em cada despesa informe <strong>Pago com</strong> (PIX, débito, crédito ou dinheiro): é o que permitirá vincular o gasto ao extrato para justificá-lo. As despesas vindas do extrato aparecem com a marca “extrato” e são alteradas lá, não aqui.</p>`,
   },
   {
     id: 'extrato', titulo: 'Extrato e conciliação', resumo: 'Importar o extrato em PDF, classificar e ligar aos boletos.',

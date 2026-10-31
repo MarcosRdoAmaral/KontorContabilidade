@@ -409,8 +409,9 @@ async function iniciar() {
 }
 
 function telaInicial() {
-  const m = estado.usuario.modulos;
-  return m.find((x) => x !== 'excluir') ?? 'config'; // a primeira tela do menu liberada (Painel do mês)
+  // a primeira tela do menu (na ordem em que aparece) que o usuário pode abrir
+  const doMenu = [...document.querySelectorAll('#menu a[data-modulo]')].map((a) => a.getAttribute('href').replace('#/', '')).find((n) => telaPermitida(n));
+  return doMenu ?? estado.usuario.modulos.find((x) => x !== 'excluir') ?? 'config';
 }
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
@@ -446,7 +447,7 @@ function rotear() {
 window.addEventListener('hashchange', rotear);
 
 // ---------------------------------------------------------------------------
-// Painel do mês
+// Faturamento > Visão geral (antigo Painel do mês)
 // ---------------------------------------------------------------------------
 
 async function telaPainel() {
@@ -457,7 +458,7 @@ async function telaPainel() {
   const k = fin?.kpis;
   conteudo.innerHTML = `
     <div class="topo">
-      <div><h1>Painel do mês</h1><p class="sutil">Cobranças e recebimentos de ${esc(empresa()?.nome_fantasia || empresa()?.razao_social || 'sua empresa')} e notas de todas as empresas.</p></div>
+      <div><h1>Visão geral do faturamento</h1><p class="sutil">Cobranças e recebimentos de ${esc(empresa()?.nome_fantasia || empresa()?.razao_social || 'sua empresa')} e notas de todas as empresas.</p></div>
       <label>Mês <input type="month" id="mes" value="${mes}"></label>
     </div>
     ${fin ? `

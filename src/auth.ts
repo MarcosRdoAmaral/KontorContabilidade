@@ -8,7 +8,7 @@ export type Tipo = 'adm' | 'normal';
 
 /** Módulos que podem ser liberados por usuário. Configurações (usuários, e-mail, backup, licença) é sempre só do adm. */
 export const MODULOS = {
-  painel: 'Painel do mês',
+  painel: 'Visão geral do faturamento',
   visao: 'Visão geral do escritório', carteira: 'Carteira de clientes', obrigacoes: 'Obrigações e prazos', certificados: 'Certificados',
   honorarios: 'Contratos e honorários', captura: 'Captura de documentos', situacao: 'Situação fiscal',
   controle: 'Controle mensal de entregas', senhas: 'Senhas e acessos dos clientes',
