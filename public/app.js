@@ -3189,9 +3189,9 @@ function telaMinhaConta() {
 }
 
 const TEMAS = [
+  { id: 'azul-dourado', nome: 'Azul e dourado (padrão)', cores: ['#060d1d', '#091226', '#dcb25a'] },
   { id: 'preto-laranja', nome: 'Preto e laranja', cores: ['#0f0f0f', '#0a0a0a', '#fb923d'] },
   { id: 'branco-laranja', nome: 'Branco e laranja', cores: ['#ffffff', '#f6f3ef', '#d9600c'] },
-  { id: 'azul-dourado', nome: 'Azul e dourado', cores: ['#060d1d', '#091226', '#dcb25a'] },
 ];
 function aplicarTema(id) {
   document.documentElement.dataset.tema = id;
@@ -3199,7 +3199,7 @@ function aplicarTema(id) {
 }
 
 function telaAparencia() {
-  const atual = document.documentElement.dataset.tema || 'preto-laranja';
+  const atual = document.documentElement.dataset.tema || 'azul-dourado';
   corpoConfig().innerHTML = `
     <h2>Aparência</h2>
     <div class="cartao"><p class="sutil">Escolha as cores do sistema. A escolha vale para este computador e é guardada para as próximas vezes.</p>
