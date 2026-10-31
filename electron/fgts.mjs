@@ -81,7 +81,7 @@ async function definirProcurador(w, ni) {
     return !!achar();`);
   if (!pronto) throw new Error('A tela de escolha de perfil do FGTS Digital não abriu.');
   // perfil Procurador (ng-select): abre a lista e escolhe a opção, se ainda não estiver escolhida
-  await js(w, `
+  const procurador = await js(w, `
     const dlg = document.querySelector('[role=dialog]') ?? document;
     const valor = () => (dlg.querySelector('.ng-value-label, .ng-value')?.textContent ?? '').trim();
     if (!/procurador/i.test(valor())) {
@@ -93,16 +93,41 @@ async function definirProcurador(w, ni) {
         await new Promise((r) => setTimeout(r, 150));
       }
     }
-    const ni = dlg.querySelector('input[placeholder="Informe CNPJ ou CPF"]');
-    for (let i = 0; i < 20 && ni.disabled; i++) await new Promise((r) => setTimeout(r, 150));
+
+    const campoNi = async (habilitado) => {
+      let ultimo = null;
+      for (let i = 0; i < 60; i++) {
+        const l = [...document.querySelectorAll('input[placeholder="Informe CNPJ ou CPF"]')];
+        const ni = l.find((x) => x.offsetParent !== null) ?? l[0];
+        if (ni && (!habilitado || !ni.disabled)) return ni;
+        ultimo = ni ?? ultimo;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return ultimo; // continua desabilitado: tenta mesmo assim, como antes
+    };
+    const ni = await campoNi(true);
+    if (!ni) return false;
     ni.focus(); ni.select?.();
     return true;`);
   // preenche o CNPJ/CPF: digitação real na janela (a máscara do campo reage a teclas); se não pegar, grava o valor
   // direto no campo e avisa o formulário do portal
   w.focus(); w.webContents.focus();
-  await js(w, `const ni = document.querySelector('input[placeholder="Informe CNPJ ou CPF"]');
-    for (let i = 0; i < 40 && ni.disabled; i++) await new Promise((r) => setTimeout(r, 150));
+  const campo = await js(w, `
+    const campoNi = async (habilitado) => {
+      let ultimo = null;
+      for (let i = 0; i < 60; i++) {
+        const l = [...document.querySelectorAll('input[placeholder="Informe CNPJ ou CPF"]')];
+        const ni = l.find((x) => x.offsetParent !== null) ?? l[0];
+        if (ni && (!habilitado || !ni.disabled)) return ni;
+        ultimo = ni ?? ultimo;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return ultimo; // continua desabilitado: tenta mesmo assim, como antes
+    };
+    const ni = await campoNi(true);
+    if (!ni) return false;
     ni.focus(); ni.click(); return true;`);
+  if (!procurador || !campo) return { ok: false, erro: 'O campo do CNPJ/CPF não ficou disponível na tela de perfil do FGTS Digital (o portal pode ter mudado ou demorado). Tente consultar este cliente de novo.' };
   for (const ch of ni) {
     w.webContents.sendInputEvent({ type: 'keyDown', keyCode: ch });
     w.webContents.sendInputEvent({ type: 'char', keyCode: ch });
@@ -110,7 +135,19 @@ async function definirProcurador(w, ni) {
   }
   await dormir(300);
   const preenchido = await js(w, `
-    const ni = document.querySelector('input[placeholder="Informe CNPJ ou CPF"]');
+    const campoNi = async (habilitado) => {
+      let ultimo = null;
+      for (let i = 0; i < 60; i++) {
+        const l = [...document.querySelectorAll('input[placeholder="Informe CNPJ ou CPF"]')];
+        const ni = l.find((x) => x.offsetParent !== null) ?? l[0];
+        if (ni && (!habilitado || !ni.disabled)) return ni;
+        ultimo = ni ?? ultimo;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return ultimo; // continua desabilitado: tenta mesmo assim, como antes
+    };
+    const ni = await campoNi(false);
+    if (!ni) return false;
     const alvo = ${JSON.stringify(ni)};
     if (ni.value.replace(/\D/g, '') !== alvo) {
       const fmt = alvo.length === 14 ? alvo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : alvo.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
