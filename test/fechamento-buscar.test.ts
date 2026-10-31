@@ -105,3 +105,39 @@ test('DARF emitido atualiza o DARF Prev. do controle (sem marcar envio); valor l
   lancarNoControle(a, '2026-09', 'DP', 'darf_prev', 999, 1);
   assert.equal(dp().darf_prev, 1300, 'sem sobrescrever não mexe');
 });
+
+test('PGDAS-D: faturamento lido da declaração; transmissão só zerada', async () => {
+  const F = await import('../src/servicos/fechamento.js');
+  const { db } = await import('../src/db.js');
+  const PDFDocument = (await import('pdfkit')).default;
+  const pdfCom = (texto: string) => new Promise<Buffer>((ok) => { const d = new PDFDocument(); const p: Buffer[] = []; d.on('data', (c) => p.push(c)); d.on('end', () => ok(Buffer.concat(p))); d.text(texto); d.end(); });
+  const decl = await pdfCom('2.1) Discriminativo de receitas Receita Bruta do PA (RPA) - Competência 14.500,00 0,00 14.500,00 Receita bruta acumulada 120.000,00');
+  assert.equal(await F.faturamentoDaDeclaracao(decl), 14500);
+  assert.equal(await F.faturamentoDaDeclaracao(await pdfCom('outra coisa')), null);
+  const a = (db.prepare("SELECT id FROM empresas WHERE razao_social = 'Alfa'").get() as any).id;
+  const ok = (dados: any) => ({ status: 200, corpo: { status: 200, mensagens: [], dados: JSON.stringify(dados) } });
+  const corpos: any[] = [];
+  const transporte = {
+    async autenticar() { return { accessToken: 'a', jwtToken: 'j', expiraEm: Date.now() + 3600e3 }; },
+    async consultar(corpo: any) {
+      const s = corpo.pedidoDados.idServico; corpos.push(corpo.pedidoDados);
+      if (s === 'CONSULTIMADECREC14') return ok({ numeroDeclaracao: '1', declaracao: { pdf: decl.toString('base64') }, recibo: { pdf: decl.toString('base64') } });
+      if (s === 'GERARDAS12') return ok([{ pdf: Buffer.from('%PDF-1.4 x').toString('base64') }]);
+      if (s === 'TRANSDECLARACAO11') return ok([{ idDeclaracao: '45723174202610001', declaracao: decl.toString('base64') }]);
+      throw new Error('não devia chamar ' + s);
+    },
+  };
+  const ctl = (m: string) => JSON.parse((db.prepare("SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = ? AND area = 'FISCAL'").get(a, m) as any)?.dados_json ?? '{}');
+  const r = await F.buscarPgdas(1, 1, a, '2026-08', transporte);
+  assert.equal(r.faturamento, 14500);
+  assert.equal(ctl('2026-08').faturamento, 14500, 'faturamento no controle');
+  // zerado
+  const z = await F.transmitirPgdasZerado(1, 1, a, '2026-10', false, transporte);
+  assert.equal(z.recibo, '45723174202610001');
+  const env = JSON.parse(corpos.at(-1).dados);
+  assert.equal(env.indicadorTransmissao, true);
+  assert.equal(env.declaracao.receitaPaCompetenciaInterno, 0);
+  assert.equal(env.declaracao.estabelecimentos[0].atividades, undefined);
+  assert.deepEqual([ctl('2026-10').faturamento, ctl('2026-10').imposto, ctl('2026-10').sem_movimento], [0, 0, true]);
+  assert.equal(ctl('2026-10').emissao, undefined, 'sem guia, sem data de emissão');
+});

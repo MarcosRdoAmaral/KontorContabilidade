@@ -98,6 +98,12 @@ export async function sincronizarControle(escritorioId: number, mes: string) {
       } });
   }
   for (const c of maisRecente.values()) lancarNoControle(c.empresa, mes, c.area, c.campo, await c.valor(), null, true);
+  // faturamento lido da declaração do PGDAS-D guardada (quando o controle ainda não tem)
+  for (const f of db.prepare(`SELECT f.empresa_id, f.declaracao_pdf FROM fechamentos f JOIN empresas e ON e.id = f.empresa_id
+      WHERE e.escritorio_id = ? AND f.competencia = ? AND f.tipo = 'PGDASD' AND f.situacao = 'TRANSMITIDA' AND f.declaracao_pdf IS NOT NULL`).all(escritorioId, mes) as any[]) {
+    if (dadosControle(f.empresa_id, mes, 'FISCAL').faturamento != null) continue;
+    lancarNoControle(f.empresa_id, mes, 'FISCAL', 'faturamento', await faturamentoDaDeclaracao(Buffer.from(f.declaracao_pdf)), null);
+  }
 }
 
 /** Valor e vencimento lidos do PDF da guia (DARF/DAS). */
@@ -118,6 +124,23 @@ const codificacao = (buf: Buffer): BufferEncoding => (/encoding=["']iso-8859-1["
 // ---------------------------------------------------------------------------------------------
 // DCTFWeb
 // ---------------------------------------------------------------------------------------------
+const dadosControle = (empresaId: number, mes: string, area: 'FISCAL' | 'DP') => {
+  const r = db.prepare('SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = ? AND area = ?').get(empresaId, mes, area) as any;
+  return r ? JSON.parse(r.dados_json) : {};
+};
+
+/** Faturamento (receita bruta do PA) lido do PDF da declaração do PGDAS-D. */
+export async function faturamentoDaDeclaracao(pdf: Buffer): Promise<number | null> {
+  let t = '';
+  try { t = (await textoDoPdf(pdf)).replace(/\s+/g, ' '); } catch { return null; }
+  const moeda = (x: string) => Number(x.replace(/\./g, '').replace(',', '.'));
+  // "Receita Bruta do PA (RPA) - Competência  <mercado interno> <mercado externo> <total>"
+  const m = /Receita\s+Bruta\s+do\s+PA\s*\(RPA\)\s*-?\s*Compet[êe]ncia\s*((?:\d{1,3}(?:\.\d{3})*,\d{2}\s*){1,3})/i.exec(t);
+  if (!m) return null;
+  const v = m[1].trim().split(/\s+/).map(moeda);
+  return v.length >= 3 ? v[2] : v[0];
+}
+
 const JA_TRANSMITIDA = /Ja_Transmitida|j[áa] (foi )?transmitida|j[áa] existe declara/i;
 
 /**
@@ -130,6 +153,8 @@ export async function transmitirDctfweb(escritorioId: number, usuarioId: number,
   const e = empresaDoEscritorio(escritorioId, empresaId);
   const i = Integra.para(escritorioId, transporte);
   const dados = { categoria: 'GERAL_MENSAL', ...partes(mes) };
+  if (!soBuscar && !dadosControle(empresaId, mes, 'DP').sem_folha)
+    throw new ErroNegocio('O Kontor só transmite a DCTFWeb sem movimento. Marque "Sem folha" no Controle mensal (aba Departamento pessoal) ou, se a declaração já foi transmitida, use "Buscar recibo e DARF já transmitidos".');
   try {
     let jaTransmitida = soBuscar;
     let recibo: string | null = null;
@@ -290,8 +315,47 @@ export async function buscarPgdas(escritorioId: number, usuarioId: number, empre
     declaracao_pdf: pdfDe(d?.declaracao), recibo_pdf: pdfDe(d?.recibo), guia_pdf: das ? Buffer.from(das, 'base64') : null, erro: aviso,
   });
   marcarTarefa(empresaId, mes, 'DAS', usuarioId, numero, 'PGDAS-D transmitido por outro sistema; declaração e DAS buscados pelo Kontor.');
-  lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', lida.valor, usuarioId, true);
-  return { recibo: numero, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!das, aviso, maed: !!d?.maed };
+  const declPdf = pdfDe(d?.declaracao);
+  const faturamento = declPdf ? await faturamentoDaDeclaracao(declPdf) : null;
+  lancarNoControle(empresaId, mes, 'FISCAL', 'faturamento', faturamento, usuarioId, true);
+  lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', lida.valor ?? (faturamento === 0 ? 0 : null), usuarioId, true);
+  return { recibo: numero, faturamento, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!das, aviso, maed: !!d?.maed };
+}
+
+/**
+ * PGDAS-D sem faturamento no mês (receita zero): o único que o Kontor transmite. Não há DAS. Marca a obrigação como
+ * entregue e o mês como sem movimento no Controle mensal.
+ */
+export async function transmitirPgdasZerado(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, retificadora = false, transporte?: Transporte) {
+  const mes = MES.parse(mesBr);
+  semDemonstracao(escritorioId, transporte);
+  const e = empresaDoEscritorio(escritorioId, empresaId);
+  if (e.regime !== 'SIMPLES') throw new ErroNegocio('O PGDAS-D é só para clientes do Simples Nacional.');
+  const entrada: EntradaPgdas = { receitas: [], folha: null, retificadora };
+  const i = Integra.para(escritorioId, transporte);
+  try {
+    const r = await i.consultar(e.documento, 'PGDASD', 'TRANSDECLARACAO11', { ...declaracaoPgdas(e, mes, entrada), indicadorTransmissao: true, indicadorComparacao: false }, 'Declarar');
+    if (!r.ok) {
+      if (/j[áa] (existe|foi transmitid|h[áa] declara)|retifica/i.test(textoMsgs(r.mensagens)) && !retificadora)
+        throw new ErroNegocio('Já existe declaração do PGDAS-D neste mês. Para trocar por uma zerada, marque "Retificadora"; se ela já está certa, use "Buscar declaração e DAS já transmitidos".');
+      erroIntegra(r, 'PGDAS-D (transmissão sem faturamento)');
+    }
+    const t = Array.isArray(r.dados) ? r.dados[0] : r.dados;
+    const recibo = t?.idDeclaracao ? String(t.idDeclaracao) : null;
+    gravar(empresaId, mes, 'PGDASD', usuarioId, {
+      situacao: 'TRANSMITIDA', recibo, transmitida_em: new Date().toISOString(), valor: 0, vencimento: null, entrada_json: JSON.stringify(entrada), valores_json: '[]',
+      declaracao_pdf: t?.declaracao ? Buffer.from(t.declaracao, 'base64') : null, recibo_pdf: t?.recibo ? Buffer.from(t.recibo, 'base64') : null, guia_pdf: null, erro: null,
+    });
+    marcarTarefa(empresaId, mes, 'DAS', usuarioId, recibo, 'PGDAS-D sem faturamento transmitido pelo Kontor (Integra Contador).');
+    lancarNoControle(empresaId, mes, 'FISCAL', 'faturamento', 0, usuarioId, true);
+    lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', 0, usuarioId, true);
+    lancarNoControle(empresaId, mes, 'FISCAL', 'sem_movimento', true, usuarioId, true);
+    return { recibo };
+  } catch (err: any) {
+    const atual = db.prepare("SELECT situacao FROM fechamentos WHERE empresa_id = ? AND competencia = ? AND tipo = 'PGDASD'").get(empresaId, mes) as any;
+    if (atual?.situacao !== 'TRANSMITIDA') gravar(empresaId, mes, 'PGDASD', usuarioId, { situacao: 'ERRO', erro: String(err?.message ?? err) });
+    throw err;
+  }
 }
 
 /** Transmite o PGDAS-D (comparando com o cálculo já conferido) e gera o DAS. */
@@ -348,17 +412,22 @@ export function fechamentoDoCliente(escritorioId: number, empresaId: number, mes
     entrada: entrada_json ? JSON.parse(entrada_json) : null, valores: valores_json ? JSON.parse(valores_json) : null }]));
   const envios = db.prepare('SELECT canal, destino, itens, enviado_em FROM envios_fechamento WHERE empresa_id = ? AND competencia = ? ORDER BY id DESC').all(empresaId, mes);
   return { empresa_id: e.id, cliente: e.nome_fantasia || e.razao_social, documento: e.documento, email: e.email, fone: e.contato_fone, canal_envio: e.canal_envio, regime: e.regime,
-    tem_funcionarios: !!e.tem_funcionarios, atividades: e.pgdas_atividades ? JSON.parse(e.pgdas_atividades) : [], PGDASD: por.PGDASD ?? null, DCTFWEB: por.DCTFWEB ?? null, envios };
+    tem_funcionarios: !!e.tem_funcionarios, atividades: e.pgdas_atividades ? JSON.parse(e.pgdas_atividades) : [], PGDASD: por.PGDASD ?? null, DCTFWEB: por.DCTFWEB ?? null, envios,
+    sem_movimento: !!dadosControle(empresaId, mes, 'FISCAL').sem_movimento, sem_folha: !!dadosControle(empresaId, mes, 'DP').sem_folha };
 }
 
 /** Situação do fechamento de todos os clientes no mês (para a tela). */
 export function resumoFechamentos(escritorioId: number, mes: string) {
   const l = db.prepare(`SELECT f.empresa_id, f.tipo, f.situacao, f.valor, f.vencimento, f.guia_pdf IS NOT NULL AS tem_guia, f.erro FROM fechamentos f JOIN empresas e ON e.id = f.empresa_id
     WHERE e.escritorio_id = ? AND f.competencia = ?`).all(escritorioId, mes) as any[];
-  const env = db.prepare(`SELECT v.empresa_id, MAX(v.enviado_em) AS enviado_em FROM envios_fechamento v JOIN empresas e ON e.id = v.empresa_id WHERE e.escritorio_id = ? AND v.competencia = ? GROUP BY v.empresa_id`).all(escritorioId, mes) as any[];
+  const env = db.prepare(`SELECT v.empresa_id, v.itens, v.enviado_em FROM envios_fechamento v JOIN empresas e ON e.id = v.empresa_id WHERE e.escritorio_id = ? AND v.competencia = ? ORDER BY v.enviado_em`).all(escritorioId, mes) as any[];
   const r: Record<number, any> = {};
   for (const x of l) (r[x.empresa_id] ??= {})[x.tipo] = { situacao: x.situacao, valor: x.valor, vencimento: x.vencimento, tem_guia: !!x.tem_guia, erro: x.erro };
-  for (const x of env) (r[x.empresa_id] ??= {}).enviado_em = x.enviado_em;
+  for (const x of env) {
+    const o = (r[x.empresa_id] ??= {});
+    o.enviado_em = x.enviado_em;
+    for (const t of String(x.itens ?? '').split(',').filter(Boolean)) o[`enviado_${t}`] = x.enviado_em; // enviado_PGDASD, enviado_DCTFWEB
+  }
   return r;
 }
 
@@ -375,37 +444,46 @@ const dataBr = (s?: string | null) => (s ? s.slice(0, 10).split('-').reverse().j
 const rotuloMes = (mes: string) => `${mes.slice(5)}/${mes.slice(0, 4)}`;
 
 /** Texto do fechamento para o cliente (e-mail ou WhatsApp). */
-export function mensagemFechamento(escritorioId: number, empresaId: number, mes: string) {
+export type TipoGuia = 'PGDASD' | 'DCTFWEB';
+const TEXTO_GUIA: Record<TipoGuia, { assunto: string; abertura: string; vazio: string }> = {
+  PGDASD: { assunto: 'DAS do Simples Nacional', abertura: 'segue a guia do Simples Nacional (DAS)', vazio: 'Neste mês não há DAS do Simples Nacional a pagar.' },
+  DCTFWEB: { assunto: 'DARF previdenciário (DCTFWeb)', abertura: 'segue o DARF previdenciário (DCTFWeb)', vazio: 'Neste mês não há DARF da DCTFWeb a pagar.' },
+};
+
+/** Mensagem ao cliente. Com `tipo`, só aquela guia (o DAS vai separado do DARF); sem ele, as duas (como antes). */
+export function mensagemFechamento(escritorioId: number, empresaId: number, mes: string, tipo?: TipoGuia | null) {
   const f = fechamentoDoCliente(escritorioId, empresaId, mes);
   const esc = db.prepare('SELECT razao_social, nome_fantasia FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
   const guias = [
     f.PGDASD?.tem_guia ? { tipo: 'PGDASD', nome: 'DAS — Simples Nacional', valor: f.PGDASD.valor, venc: f.PGDASD.vencimento } : null,
     f.DCTFWEB?.tem_guia ? { tipo: 'DCTFWEB', nome: 'DARF — DCTFWeb (INSS)', valor: f.DCTFWEB.valor, venc: f.DCTFWEB.vencimento } : null,
-  ].filter(Boolean) as { tipo: 'PGDASD' | 'DCTFWEB'; nome: string; valor: number | null; venc: string | null }[];
-  const linhas = [`Olá! Segue o fechamento de ${rotuloMes(mes)} da ${f.cliente}:`, ''];
+  ].filter((g) => g && (!tipo || g.tipo === tipo)) as { tipo: TipoGuia; nome: string; valor: number | null; venc: string | null }[];
+  const linhas = [tipo ? `Olá! Da ${f.cliente}, ${TEXTO_GUIA[tipo].abertura} da competência ${rotuloMes(mes)}:` : `Olá! Segue o fechamento de ${rotuloMes(mes)} da ${f.cliente}:`, ''];
   for (const g of guias) linhas.push(`• ${g.nome}${g.valor != null ? `: ${brl(g.valor)}` : ''}${g.venc ? `, vencimento ${dataBr(g.venc)}` : ''}`);
-  if (!guias.length) linhas.push('Neste mês não há guias a pagar do Simples Nacional nem da DCTFWeb.');
+  if (!guias.length) linhas.push(tipo ? TEXTO_GUIA[tipo].vazio : 'Neste mês não há guias a pagar do Simples Nacional nem da DCTFWeb.');
   const total = guias.reduce((t, g) => t + (g.valor ?? 0), 0);
   if (guias.length > 1 && total) linhas.push('', `Total: ${brl(total)}`);
   linhas.push('', guias.length ? 'As guias seguem em anexo. Qualquer dúvida, estamos à disposição.' : 'Qualquer dúvida, estamos à disposição.', '', esc?.nome_fantasia || esc?.razao_social || '');
-  return { linhas, guias, cliente: f.cliente, email: f.email, fone: f.fone, canal: f.canal_envio };
+  const assunto = tipo ? `${TEXTO_GUIA[tipo].assunto} ${rotuloMes(mes)} — ${f.cliente}` : `Fechamento ${rotuloMes(mes)} — ${f.cliente}`;
+  return { linhas, guias, assunto, cliente: f.cliente, email: f.email, fone: f.fone, canal: f.canal_envio };
 }
 
 /** Envia por e-mail o fechamento ao cliente (com as guias anexas) e registra o envio no Controle mensal. */
-export async function enviarFechamento(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, canal: 'EMAIL' | 'WHATSAPP') {
+export async function enviarFechamento(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, canal: 'EMAIL' | 'WHATSAPP', tipo?: TipoGuia | null) {
   const mes = MES.parse(mesBr);
-  const m = mensagemFechamento(escritorioId, empresaId, mes);
+  const m = mensagemFechamento(escritorioId, empresaId, mes, tipo);
   let destino: string | null = null;
   if (canal === 'EMAIL') {
     if (!m.email) throw new ErroNegocio('O cliente não tem e-mail no cadastro da Carteira.');
     const anexos = m.guias.map((g) => { const a = arquivoFechamento(escritorioId, empresaId, mes, g.tipo, 'guia'); return { filename: a.nome, content: a.pdf, contentType: 'application/pdf' }; });
-    const ok = await enviarEmailSimples(escritorioId, m.email.split(/[,;\s]+/).filter(Boolean), `Fechamento ${rotuloMes(mes)} — ${m.cliente}`, m.linhas, anexos);
+    const ok = await enviarEmailSimples(escritorioId, m.email.split(/[,;\s]+/).filter(Boolean), m.assunto, m.linhas, anexos);
     if (!ok) throw new ErroNegocio('Configure o envio de e-mail (SMTP) em Configurações > E-mail.');
     destino = m.email;
   } else destino = m.fone ?? null; // o WhatsApp é aberto na tela com a mensagem; aqui só fica o registro
-  db.prepare('INSERT INTO envios_fechamento (empresa_id, competencia, canal, destino, itens, usuario_id) VALUES (?,?,?,?,?,?)').run(empresaId, mes, canal, destino, m.guias.map((g) => g.tipo).join(','), usuarioId);
-  // marca "enviado" nas áreas do Controle mensal que têm guia
-  for (const area of [m.guias.some((g) => g.tipo === 'PGDASD') ? 'FISCAL' : null, m.guias.some((g) => g.tipo === 'DCTFWEB') ? 'DP' : null].filter(Boolean) as ('FISCAL' | 'DP')[]) {
+  const itens = tipo ? [tipo] : m.guias.map((g) => g.tipo);
+  db.prepare('INSERT INTO envios_fechamento (empresa_id, competencia, canal, destino, itens, usuario_id) VALUES (?,?,?,?,?,?)').run(empresaId, mes, canal, destino, itens.join(','), usuarioId);
+  // marca "enviado" na área do Controle mensal da guia enviada (Fiscal = DAS, DP = DARF)
+  for (const area of [itens.includes('PGDASD') ? 'FISCAL' : null, itens.includes('DCTFWEB') ? 'DP' : null].filter(Boolean) as ('FISCAL' | 'DP')[]) {
     const atual = db.prepare('SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = ? AND area = ?').get(empresaId, mes, area) as any;
     const d = atual ? JSON.parse(atual.dados_json) : {};
     d.enviado ??= hojeBr();

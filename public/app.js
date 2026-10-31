@@ -4631,14 +4631,15 @@ const CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'E-mail', OUTRO: 'Outro' };
 
 async function telaControle() {
   const f = telaControle.filtro ??= { mes: (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(), area: 'FISCAL', q: '', pendentes: false, todosDp: false };
+  if (f.area === 'CONTABIL') f.area = 'FISCAL';
   // o fechamento vem antes: ao carregar, ele lança no controle o valor das guias já emitidas
   const fech = f.area === 'CONTABIL' ? { resumo: {} } : await api('GET', `/api/escritorio/fechamento?mes=${f.mes}`).catch(() => ({ resumo: {} }));
   const lista = await api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`);
   telaControle.tabelas = fech;
-  const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal', CONTABIL: 'Contábil' };
+  const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal' }; // a aba Contábil volta depois
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Controle mensal</h1><p class="sutil">Entregas de cada cliente na competência: impostos e guias do fiscal, folha e encargos do departamento pessoal e a contabilização. Tudo é salvo ao sair de cada campo.</p></div>
-      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes com folha que ainda não foi transmitida">Transmitir DCTFWeb (lote)</button> <button id="ct-dctf-busca" title="Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF">Buscar DARFs já transmitidos</button> <button id="ct-envio-dp" title="Envia aos clientes os documentos do DP que chegam na pasta do escritório">Envio automático do DP</button> ' : ''}${f.area === 'FISCAL' ? '<button id="ct-pg-busca" title="Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS">Buscar DAS já transmitidos</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail o fechamento (guias) aos clientes com guia gerada e ainda não enviados">Enviar fechamentos por e-mail</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
+      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes marcados como sem folha">Transmitir DCTFWeb sem movimento (lote)</button> <button id="ct-dctf-busca" title="Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF">Buscar DARFs já transmitidos</button> <button id="ct-envio-dp" title="Envia aos clientes os documentos do DP que chegam na pasta do escritório">Envio automático do DP</button> ' : ''}${f.area === 'FISCAL' ? '<button id="ct-pg-busca" title="Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS">Buscar DAS já transmitidos</button> <button id="ct-pg-zerado" title="Transmite o PGDAS-D zerado dos clientes marcados como sem movimento">Transmitir PGDAS-D zerados (lote)</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail a guia da aba (DAS no Fiscal, DARF no DP) aos clientes que ainda não receberam">' + (f.area === 'FISCAL' ? 'Enviar DAS por e-mail' : 'Enviar DARFs por e-mail') + '</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
     <div class="filtros">
       <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
       <label style="flex:1 1 220px">Buscar <input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Cliente"></label>
@@ -4703,7 +4704,7 @@ async function telaControle() {
         const tt = tr.querySelector('[data-total]'); if (tt) tt.textContent = fmtValor((c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0)) || '—';
         totais();
       }));
-      tr.querySelectorAll('[data-fech]').forEach((b) => (b.onclick = () => abrirFechamento(c.empresa_id, f.mes, () => telaControle())));
+      tr.querySelectorAll('[data-fech]').forEach((b) => (b.onclick = () => abrirFechamento(c.empresa_id, f.mes, () => telaControle(), f.area === 'DP' ? 'DCTFWEB' : 'PGDASD')));
       const h = tr.querySelector('[data-hoje]'); if (h) h.onclick = () => { const i = tr.querySelector('[data-k="enviado"]'); i.value = hoje(); i.onchange(); };
       const cn = tr.querySelector('[data-canal]'); if (cn) cn.onchange = () => { c.canal_envio = cn.value || null; salvar(c, { canal_envio: c.canal_envio }); };
       const rg = tr.querySelector('[data-registro]'); if (rg) rg.onchange = () => { c.registro_dp = rg.value.trim() || null; salvar(c, { registro_dp: c.registro_dp ?? '' }); };
@@ -4716,8 +4717,8 @@ async function telaControle() {
   conteudo.querySelectorAll('#ct-abas a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); f.area = a.dataset.a; telaControle(); }));
   $('#ct-imp').onclick = () => importarPlanilhaControle(telaControle);
   $('#ct-dctf-lote') && ($('#ct-dctf-lote').onclick = () => {
-    const alvo = visiveis().filter((c) => c.tem_funcionarios && !c.dados.sem_folha && fech.resumo[c.empresa_id]?.DCTFWEB?.situacao !== 'TRANSMITIDA');
-    loteFechamento(`Transmitir a DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para cada cliente com folha (marcado sem folha fica de fora), o Kontor busca a declaração em andamento, assina com o certificado do escritório, transmite e gera o DARF. A folha precisa estar fechada no eSocial (e a EFD-Reinf, se houver). Cada cliente usa algumas chamadas ao Integra Contador, cobradas pelo SERPRO.',
+    const alvo = visiveis().filter((c) => c.dados.sem_folha && fech.resumo[c.empresa_id]?.DCTFWEB?.situacao !== 'TRANSMITIDA');
+    loteFechamento(`Transmitir a DCTFWeb sem movimento de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes marcados como "Sem folha" no mês e ainda não transmitidos: o Kontor busca a DCTFWeb sem movimento em andamento, assina com o certificado do escritório e transmite. Declarações com movimento são transmitidas no seu sistema da folha; aqui você só busca o recibo e o DARF. Algumas chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb`, { mes: f.mes }).then((r) => (r.jaTransmitida ? 'já estava transmitida' : `transmitida${r.recibo ? `, recibo ${r.recibo}` : ''}`) + (r.valor != null ? ` — DARF ${brl(r.valor)}` : r.aviso ? ` — ${r.aviso}` : '')), telaControle);
   });
   $('#ct-dctf-busca') && ($('#ct-dctf-busca').onclick = () => {
@@ -4726,16 +4727,21 @@ async function telaControle() {
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DARF ${brl(r.valor)}` : r.aviso || 'recibo encontrado, sem DARF')), telaControle);
   });
   $('#ct-envio-dp') && ($('#ct-envio-dp').onclick = () => envioDp(telaControle));
+  $('#ct-pg-zerado') && ($('#ct-pg-zerado').onclick = () => {
+    const alvo = visiveis().filter((c) => c.regime === 'SIMPLES' && c.dados.sem_movimento && fech.resumo[c.empresa_id]?.PGDASD?.situacao !== 'TRANSMITIDA');
+    loteFechamento(`Transmitir PGDAS-D zerados de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes do Simples marcados como "Sem mov." no mês e ainda não transmitidos: o Kontor transmite o PGDAS-D com receita zero (sem DAS). Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO. Se já houver declaração no mês, o cliente aparece com erro e fica como está.',
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/zerado`, { mes: f.mes }).then((r) => `transmitido${r.recibo ? ` (${r.recibo})` : ''}`), telaControle);
+  });
   $('#ct-pg-busca') && ($('#ct-pg-busca').onclick = () => {
     const alvo = visiveis().filter((c) => c.regime === 'SIMPLES' && !c.dados.sem_movimento && !fech.resumo[c.empresa_id]?.PGDASD?.tem_guia);
     loteFechamento(`Buscar DAS do Simples de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite o PGDAS-D em outro sistema (SCI, portal do Simples): o Kontor não transmite nada, só busca a declaração e o recibo já transmitidos e gera o DAS. Ficam de fora os clientes sem movimento e os que já têm DAS. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
-      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DAS ${brl(r.valor)}` : r.aviso || 'declaração encontrada, sem DAS')), telaControle);
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/buscar`, { mes: f.mes }).then((r) => `${r.faturamento != null ? `faturamento ${brl(r.faturamento)} · ` : ''}${r.valor != null ? `DAS ${brl(r.valor)}` : r.aviso || 'declaração encontrada, sem DAS'}`), telaControle);
   });
   $('#ct-env-lote') && ($('#ct-env-lote').onclick = () => {
     const tipo = f.area === 'FISCAL' ? 'PGDASD' : 'DCTFWEB';
-    const alvo = visiveis().filter((c) => fech.resumo[c.empresa_id]?.[tipo]?.tem_guia && !fech.resumo[c.empresa_id]?.enviado_em && c.canal_envio !== 'WHATSAPP' && c.email);
-    loteFechamento(`Enviar os fechamentos de ${rotuloMes(f.mes)} por e-mail`, alvo, 'Vai um e-mail para cada cliente com as guias geradas no mês (DAS e DARF da DCTFWeb) e o resumo dos valores. Ficam de fora quem já recebeu, quem não tem e-mail e quem é atendido pelo WhatsApp (esses se enviam pelo botão do cliente).',
-      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/enviar`, { mes: f.mes, canal: 'EMAIL' }).then((r) => `enviado para ${r.enviadoPara}`), telaControle);
+    const alvo = visiveis().filter((c) => fech.resumo[c.empresa_id]?.[tipo]?.tem_guia && !fech.resumo[c.empresa_id]?.[`enviado_${tipo}`] && c.canal_envio !== 'WHATSAPP' && c.email);
+    loteFechamento(`Enviar ${tipo === 'PGDASD' ? 'os DAS do Simples' : 'os DARFs da DCTFWeb'} de ${rotuloMes(f.mes)} por e-mail`, alvo, `Vai um e-mail para cada cliente só com ${tipo === 'PGDASD' ? 'o DAS do Simples Nacional' : 'o DARF previdenciário (DCTFWeb)'} do mês, com o valor e o vencimento. Ficam de fora quem já recebeu essa guia, quem não tem e-mail e quem é atendido pelo WhatsApp (esses se enviam pelo botão do cliente).`,
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/enviar`, { mes: f.mes, canal: 'EMAIL', tipo }).then((r) => `enviado para ${r.enviadoPara}`), telaControle);
   });
   pintar();
 }
@@ -4761,9 +4767,10 @@ function loteFechamento(titulo, alvo, explicacao, acao, aoFim) {
 }
 
 /** Fechamento do cliente na competência: PGDAS-D (receitas por atividade, cálculo, transmissão e DAS), DCTFWeb e envio. */
-async function abrirFechamento(empresaId, mes, aoFim) {
+/** Fechamento do cliente; `foco` = 'PGDASD' (aba Fiscal: só o DAS) ou 'DCTFWEB' (aba DP: só o DARF). */
+async function abrirFechamento(empresaId, mes, aoFim, foco = 'PGDASD') {
   let d;
-  try { d = await api('GET', `/api/escritorio/fechamento/${empresaId}?mes=${mes}`); } catch (e) { return aviso(mensagemErro(e)); }
+  try { d = await api('GET', `/api/escritorio/fechamento/${empresaId}?mes=${mes}&tipo=${foco}`); } catch (e) { return aviso(mensagemErro(e)); }
   const tab = telaControle.tabelas ?? (await api('GET', `/api/escritorio/fechamento?mes=${mes}`));
   const ATV = tab.atividades, TRIB = tab.tributos;
   const pg = d.PGDASD, dc = d.DCTFWEB;
@@ -4771,61 +4778,40 @@ async function abrirFechamento(empresaId, mes, aoFim) {
   const valorDe = (id) => ent.receitas?.find((r) => r.idAtividade === id)?.valor;
   const arq = (tipo, qual, rot) => `<button type="button" data-arq="${tipo}:${qual}">${rot}</button>`;
   const fatorR = (ids) => ids.some((id) => [10, 11, 12, 29].includes(Number(id)));
-  const simples = d.regime === 'SIMPLES';
-  abrirDialogo(`<div class="dlg-largo"><h2>Fechamento ${rotuloMes(mes)} — ${esc(d.cliente)}</h2>
+  const simples = d.regime === 'SIMPLES' && foco === 'PGDASD';
+  abrirDialogo(`<div class="dlg-largo"><h2>${foco === 'PGDASD' ? 'Simples Nacional' : 'DCTFWeb'} ${rotuloMes(mes)} — ${esc(d.cliente)}</h2>
     <p class="sutil">${fmtDoc(d.documento)} · cada transmissão e guia é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
     ${simples ? `<fieldset class="sub"><legend>Simples Nacional (PGDAS-D)</legend>
       ${pg ? `<p>Situação: <strong class="${pg.situacao === 'TRANSMITIDA' ? 'cor-verde' : pg.situacao === 'ERRO' ? 'cor-vermelho' : 'cor-ambar'}">${pg.situacao === 'TRANSMITIDA' ? `Transmitida${pg.recibo ? ` (${esc(pg.recibo)})` : ''} em ${dhBr(pg.transmitida_em)}` : pg.situacao === 'CALCULADO' ? 'Calculada, ainda não transmitida' : 'Erro'}</strong>${pg.erro ? `<br><span class="dica cor-vermelho">${esc(pg.erro)}</span>` : ''}</p>` : ''}
-      <label class="largo">Atividades do cliente <span class="dica">(fica guardado para os próximos meses)</span>
-        <div id="fc-ativ" class="lista-checks">${Object.entries(ATV).map(([id, nome]) => `<label class="check"><input type="checkbox" value="${id}" ${d.atividades.includes(Number(id)) ? 'checked' : ''}> ${esc(nome)}</label>`).join('')}</div></label>
-      <div id="fc-rec" class="grade"></div>
-      <label class="check"><input type="checkbox" id="fc-ret" ${ent.retificadora ? 'checked' : ''}> Retificadora (já existe declaração deste mês)</label>
-      <div id="fc-calc">${pg?.valores ? tabelaTributos(pg.valores, TRIB) : ''}</div>
-      <p class="dica">Declaração já transmitida? <button type="button" id="fc-pg-buscar">Buscar declaração e DAS já transmitidos</button></p>
-      <div class="acoes"><button type="button" id="fc-calcular">Calcular</button><button type="button" class="primario" id="fc-transmitir" ${pg?.situacao === 'CALCULADO' ? '' : 'disabled'}>Transmitir e gerar o DAS</button>
-        ${pg?.tem_guia ? arq('PGDASD', 'guia', 'DAS (PDF)') : ''}${pg?.tem_recibo ? arq('PGDASD', 'recibo', 'Recibo') : ''}${pg?.tem_declaracao ? arq('PGDASD', 'declaracao', 'Declaração') : ''}</div>
-    </fieldset>` : '<p class="dica">Cliente fora do Simples Nacional: o PGDAS-D não se aplica.</p>'}
-    ${d.tem_funcionarios || dc ? `<fieldset class="sub"><legend>DCTFWeb</legend>
-      ${dc ? `<p>Situação: <strong class="${dc.situacao === 'TRANSMITIDA' ? 'cor-verde' : 'cor-vermelho'}">${dc.situacao === 'TRANSMITIDA' ? `Transmitida${dc.recibo ? ` (recibo ${esc(dc.recibo)})` : ''}${dc.transmitida_em ? ` em ${dhBr(dc.transmitida_em)}` : ''}` : 'Erro'}</strong>${dc.valor != null ? ` · DARF ${brl(dc.valor)}${dc.vencimento ? `, vence ${dataBr(dc.vencimento)}` : ''}` : ''}${dc.erro ? `<br><span class="dica ${dc.situacao === 'ERRO' ? 'cor-vermelho' : ''}">${esc(dc.erro)}</span>` : ''}</p>` : '<p class="dica">A declaração em andamento vem do fechamento da folha no eSocial (e da EFD-Reinf). O Kontor assina com o certificado do escritório, transmite e gera o DARF.</p>'}
-      <p class="dica">Declaração já transmitida? <button type="button" id="fc-dc-buscar">Buscar recibo e DARF já transmitidos</button></p>
+      <div class="acoes"><button type="button" class="primario" id="fc-pg-buscar">Buscar declaração e DAS já transmitidos</button>${pg?.tem_guia ? arq('PGDASD', 'guia', 'DAS (PDF)') : ''}${pg?.tem_recibo ? arq('PGDASD', 'recibo', 'Recibo') : ''}${pg?.tem_declaracao ? arq('PGDASD', 'declaracao', 'Declaração') : ''}</div>
+      <div class="fc-zerado"><strong>Sem faturamento no mês?</strong> O Kontor transmite o PGDAS-D zerado (receita 0, sem DAS).${d.sem_movimento ? '' : ' <span class="dica">No Controle mensal o mês não está marcado como sem movimento.</span>'}
+        <div class="acoes"><label class="check"><input type="checkbox" id="fc-ret"> Retificadora (substitui declaração já feita)</label><button type="button" id="fc-zerado">Transmitir PGDAS-D zerado</button></div></div>
+    </fieldset>` : foco === 'PGDASD' ? '<p class="dica">Cliente fora do Simples Nacional: o PGDAS-D não se aplica.</p>' : ''}
+    ${foco === 'DCTFWEB' ? `<fieldset class="sub"><legend>DCTFWeb</legend>
+      ${dc ? `<p>Situação: <strong class="${dc.situacao === 'TRANSMITIDA' ? 'cor-verde' : 'cor-vermelho'}">${dc.situacao === 'TRANSMITIDA' ? `Transmitida${dc.recibo ? ` (recibo ${esc(dc.recibo)})` : ''}${dc.transmitida_em ? ` em ${dhBr(dc.transmitida_em)}` : ''}` : 'Erro'}</strong>${dc.valor != null ? ` · DARF ${brl(dc.valor)}${dc.vencimento ? `, vence ${dataBr(dc.vencimento)}` : ''}` : ''}${dc.erro ? `<br><span class="dica ${dc.situacao === 'ERRO' ? 'cor-vermelho' : ''}">${esc(dc.erro)}</span>` : ''}</p>` : '<p class="dica">Transmitiu a DCTFWeb no seu sistema da folha? Busque aqui o recibo e o DARF, para enviar ao cliente.</p>'}
       <label>Data de pagamento do DARF <input type="date" id="fc-dc-data"><span class="dica">Em branco = hoje. Para DARF em atraso, juros e multa são calculados até esta data.</span></label>
-      <div class="acoes"><button type="button" class="primario" id="fc-dctf">${dc?.situacao === 'TRANSMITIDA' ? 'Gerar o DARF de novo' : 'Transmitir e gerar o DARF'}</button>${dc?.tem_guia ? arq('DCTFWEB', 'guia', 'DARF (PDF)') : ''}${dc?.tem_recibo ? arq('DCTFWEB', 'recibo', 'Recibo') : ''}</div>
+      <div class="acoes"><button type="button" class="primario" id="fc-dc-buscar">Buscar recibo e DARF já transmitidos</button>${dc?.tem_guia ? arq('DCTFWEB', 'guia', 'DARF (PDF)') : ''}${dc?.tem_recibo ? arq('DCTFWEB', 'recibo', 'Recibo') : ''}</div>
+      <div class="fc-zerado"><strong>Sem folha no mês?</strong> ${d.sem_folha ? 'O Kontor transmite a DCTFWeb sem movimento que estiver em andamento.' : 'Para o Kontor transmitir a DCTFWeb sem movimento, marque "Sem folha" no Controle mensal.'}
+        <div class="acoes"><button type="button" id="fc-dctf" ${d.sem_folha ? '' : 'disabled'}>Transmitir DCTFWeb sem movimento</button></div></div></div>
     </fieldset>` : ''}
     <fieldset class="sub"><legend>Enviar ao cliente</legend>
       <div class="cartao" style="white-space:pre-wrap">${d.mensagem.map(esc).join('\n')}</div>
       <p class="dica">${d.email ? `E-mail: ${esc(d.email)}` : 'Sem e-mail no cadastro.'}${d.fone ? ` · WhatsApp: ${esc(d.fone)}` : ''}${d.envios.length ? ` · último envio ${dhBr(d.envios[0].enviado_em)} (${d.envios[0].canal === 'EMAIL' ? 'e-mail' : 'WhatsApp'})` : ''}</p>
-      <div class="acoes"><button type="button" id="fc-email" ${d.email ? '' : 'disabled'}>Enviar por e-mail (com as guias)</button><button type="button" id="fc-whats" ${d.fone ? '' : 'disabled'} title="Abre o WhatsApp com a mensagem e baixa as guias para anexar">WhatsApp</button></div>
+      <div class="acoes"><button type="button" id="fc-email" ${d.email ? '' : 'disabled'}>Enviar por e-mail (com a guia)</button><button type="button" id="fc-whats" ${d.fone ? '' : 'disabled'} title="Abre o WhatsApp com a mensagem e baixa as guias para anexar">WhatsApp</button></div>
     </fieldset>
     <p class="erro" id="fc-erro"></p>
     <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
     const erro = (e) => ($('#fc-erro').textContent = mensagemErro(e));
-    const recarregar = () => abrirFechamento(empresaId, mes, aoFim);
+    const recarregar = () => abrirFechamento(empresaId, mes, aoFim, foco);
     dlg.onclose = () => aoFim?.(); // Fechar, Esc ou clique fora: a tabela atrás se atualiza
     dlg.querySelectorAll('[data-arq]').forEach((b) => (b.onclick = () => { const [tipo, qual] = b.dataset.arq.split(':'); baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=${tipo}&qual=${qual}`, `${tipo}-${qual}.pdf`, true); }));
-    if (simples) {
-      const sel = dlg.querySelector('#fc-ativ');
-      const desenhar = () => {
-        const ids = [...sel.querySelectorAll('input:checked')].map((o) => Number(o.value));
-        dlg.querySelector('#fc-rec').innerHTML = ids.map((id) => `<label>Receita — ${esc(ATV[id] ?? id)} <input data-rec="${id}" inputmode="decimal" value="${fmtValor(valorDe(id))}"></label>`).join('')
-          + (fatorR(ids) ? `<label>Folha de salários do mês (Fator R) <input id="fc-folha" inputmode="decimal" value="${fmtValor(ent.folha)}"></label>` : '');
-        dlg.querySelectorAll('[data-rec], #fc-folha').forEach((i) => (i.oninput = () => { dlg.querySelector('#fc-transmitir').disabled = true; }));
-      };
-      sel.onchange = async () => { desenhar(); try { await api('PUT', `/api/escritorio/fechamento/${empresaId}/atividades`, { ids: [...sel.querySelectorAll('input:checked')].map((o) => Number(o.value)) }); } catch (e) { erro(e); } };
-      desenhar();
-      const entrada = () => ({ receitas: [...dlg.querySelectorAll('[data-rec]')].map((i) => ({ idAtividade: Number(i.dataset.rec), valor: numero(i.value) ?? 0 })), folha: dlg.querySelector('#fc-folha') ? numero(dlg.querySelector('#fc-folha').value) : null, retificadora: dlg.querySelector('#fc-ret').checked });
-      dlg.querySelector('#fc-calcular').onclick = async (ev) => {
-        const e1 = entrada(); if (!e1.receitas.length) return erro(new Error('Escolha as atividades do cliente.'));
-        ev.target.disabled = true; ev.target.textContent = 'Calculando…';
-        try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/pgdas/calcular`, { mes, ...e1 }); dlg.querySelector('#fc-calc').innerHTML = tabelaTributos(r.valores, TRIB); dlg.querySelector('#fc-transmitir').disabled = false; }
-        catch (e) { erro(e); } finally { ev.target.disabled = false; ev.target.textContent = 'Calcular'; }
-      };
-      dlg.querySelector('#fc-transmitir').onclick = async (ev) => {
-        if (!confirm(`Transmitir o PGDAS-D de ${rotuloMes(mes)} de ${d.cliente}? A declaração é entregue à Receita.`)) return;
-        ev.target.disabled = true; ev.target.textContent = 'Transmitindo…';
-        try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/pgdas/transmitir`, { mes, ...entrada() }); aviso(`PGDAS-D transmitido${r.recibo ? ` (${r.recibo})` : ''}${r.valor ? `: DAS ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`); recarregar(); }
-        catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DAS'; erro(e); }
-      };
-    }
+    const bz = dlg.querySelector('#fc-zerado');
+    if (bz) bz.onclick = async () => {
+      if (!confirm(`Transmitir o PGDAS-D de ${rotuloMes(mes)} de ${d.cliente} SEM FATURAMENTO (receita zero)? A declaração é entregue à Receita.`)) return;
+      bz.disabled = true; bz.textContent = 'Transmitindo…';
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/pgdas/zerado`, { mes, retificadora: dlg.querySelector('#fc-ret').checked }); aviso(`PGDAS-D zerado transmitido${r.recibo ? ` (${r.recibo})` : ''}.`); recarregar(); }
+      catch (e) { bz.disabled = false; bz.textContent = 'Transmitir PGDAS-D zerado'; erro(e); }
+    };
     const dataDarf = () => dlg.querySelector('#fc-dc-data')?.value || undefined;
     const buscar = (sel, url, rotulo, msg) => { const b = dlg.querySelector(sel); if (b) b.onclick = async () => {
       b.disabled = true; b.textContent = 'Buscando na Receita…';
@@ -4833,27 +4819,27 @@ async function abrirFechamento(empresaId, mes, aoFim) {
       catch (e) { b.disabled = false; b.textContent = rotulo; erro(e); }
     }; };
     buscar('#fc-pg-buscar', `/api/escritorio/fechamento/${empresaId}/pgdas/buscar`, 'Buscar declaração e DAS já transmitidos',
-      (r) => `PGDAS-D encontrado (declaração ${r.recibo})${r.valor != null ? `: DAS ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`);
+      (r) => `PGDAS-D encontrado (declaração ${r.recibo})${r.faturamento != null ? `, faturamento ${brl(r.faturamento)}` : ''}${r.valor != null ? `, DAS ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`);
     buscar('#fc-dc-buscar', `/api/escritorio/fechamento/${empresaId}/dctfweb/buscar`, 'Buscar recibo e DARF já transmitidos',
       (r) => `DCTFWeb encontrada${r.valor != null ? `: DARF ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`);
     const bd = dlg.querySelector('#fc-dctf');
-    if (bd) bd.onclick = async (ev) => {
-      if (!confirm(`${dc?.situacao === 'TRANSMITIDA' ? 'Gerar de novo o DARF' : 'Transmitir a DCTFWeb'} de ${rotuloMes(mes)} de ${d.cliente}?`)) return;
-      ev.target.disabled = true; ev.target.textContent = 'Falando com a Receita…';
-      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/dctfweb${dc?.situacao === 'TRANSMITIDA' ? '/buscar' : ''}`, { mes, dataPagamento: dataDarf() }); aviso(`DCTFWeb ${r.jaTransmitida ? 'já estava transmitida' : 'transmitida'}${r.valor != null ? `: DARF ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`); recarregar(); }
-      catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DARF'; erro(e); }
+    if (bd) bd.onclick = async () => {
+      if (!confirm(`Transmitir a DCTFWeb SEM MOVIMENTO de ${rotuloMes(mes)} de ${d.cliente}?`)) return;
+      bd.disabled = true; bd.textContent = 'Falando com a Receita…';
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/dctfweb`, { mes, dataPagamento: dataDarf() }); aviso(`DCTFWeb ${r.jaTransmitida ? 'já estava transmitida' : 'sem movimento transmitida'}.${r.aviso && r.valor != null ? ` ${r.aviso}` : ''}`); recarregar(); }
+      catch (e) { bd.disabled = false; bd.textContent = 'Transmitir DCTFWeb sem movimento'; erro(e); }
     };
     dlg.querySelector('#fc-email').onclick = async (ev) => {
       ev.target.disabled = true;
-      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'EMAIL' }); aviso(`Fechamento enviado para ${r.enviadoPara}.`); recarregar(); }
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'EMAIL', tipo: foco }); aviso(`${foco === 'PGDASD' ? 'DAS' : 'DARF'} enviado para ${r.enviadoPara}.`); recarregar(); }
       catch (e) { ev.target.disabled = false; erro(e); }
     };
     dlg.querySelector('#fc-whats').onclick = async () => {
       const fone = String(d.fone ?? '').replace(/\D/g, '');
       window.open(`https://wa.me/${fone.length <= 11 ? '55' + fone : fone}?text=${encodeURIComponent(d.mensagem.join('\n'))}`, '_blank');
-      if (pg?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=PGDASD&qual=guia`, `DAS-${d.documento}-${mes}.pdf`);
-      if (dc?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=DCTFWEB&qual=guia`, `DARF-DCTFWeb-${d.documento}-${mes}.pdf`);
-      try { await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'WHATSAPP' }); aviso('Mensagem aberta no WhatsApp e guias baixadas para anexar. Envio registrado.'); } catch (e) { erro(e); }
+      if (foco === 'PGDASD' && pg?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=PGDASD&qual=guia`, `DAS-${d.documento}-${mes}.pdf`);
+      if (foco === 'DCTFWEB' && dc?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=DCTFWEB&qual=guia`, `DARF-DCTFWeb-${d.documento}-${mes}.pdf`);
+      try { await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'WHATSAPP', tipo: foco }); aviso('Mensagem aberta no WhatsApp e a guia baixada para anexar. Envio registrado.'); } catch (e) { erro(e); }
     };
   });
 }

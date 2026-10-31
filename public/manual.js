@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.20.0';
+export const MANUAL_VERSAO = '1.21.0';
 
 export const MANUAL = [
   {
@@ -63,27 +63,25 @@ export const MANUAL = [
       <p class="dica">O botão ⋯ leva aos dados de emissão (certificado A1, logo, dados bancários), à emissão de NFS-e e às NF-e recebidas do cliente.</p>`,
   },
   {
-    id: 'controle', titulo: 'Controle mensal, fechamento e senhas', resumo: 'Impostos, folha e envios de cada competência; transmissão do PGDAS-D e da DCTFWeb e envio ao cliente; senhas.',
+    id: 'controle', titulo: 'Controle mensal, fechamento e senhas', resumo: 'Impostos, folha e envios de cada competência; guias do Simples e da DCTFWeb e envio ao cliente; senhas.',
     corpo: `
       <h3>Controle mensal</h3>
       <p>Em Escritório &gt; Controle mensal, escolha a competência e a aba. Tudo é salvo ao sair de cada campo, com quem preencheu.</p>
       <ul>
         <li><strong>Fiscal:</strong> sem movimento, notas de entrada (Ent.) e de saída/serviço (S/S) conferidas, faturamento, imposto (a alíquota é calculada), data de emissão da guia, canal de envio (WhatsApp ou e-mail, guardado no cliente) e data de envio (botão <em>Hoje</em>).</li>
         <li><strong>Departamento pessoal:</strong> situação da DCTFWeb, sem folha, DARF previdenciário, FGTS, sindicato, total e data de envio. Mostra os clientes com funcionários (há opção para incluir os demais).</li>
-        <li><strong>Contábil:</strong> data de envio da contabilização e observações.</li>
+        
       </ul>
       <p>“Só não enviados” mostra o que falta mandar; o rodapé soma faturamento, impostos e encargos.</p>
-      <h3>Fechamento: PGDAS-D, DCTFWeb e envio ao cliente</h3>
-      <p>A coluna <em>PGDAS-D</em> (aba Fiscal, clientes do Simples) e a coluna <em>DCTFWeb</em> (aba Departamento pessoal) mostram a situação do mês; clique nela para abrir o fechamento do cliente. Tudo passa pelo Integra Contador com o certificado do escritório, então o cliente precisa ter dado procuração eletrônica ao escritório, e cada chamada é cobrada pelo SERPRO.</p>
+      <h3>Fechamento: guias do Simples e da DCTFWeb e envio ao cliente</h3>
+      <p>As declarações são transmitidas no seu sistema (SCI, portal do Simples, e-CAC); o Kontor busca o que já foi transmitido, gera a guia e envia ao cliente. A coluna <em>PGDAS-D</em> (aba Fiscal) e a coluna <em>DCTFWeb</em> (aba Departamento pessoal) mostram a situação do mês; clique nela para abrir a janela do cliente. Tudo passa pelo Integra Contador, com a procuração do cliente ao escritório, e cada chamada é cobrada pelo SERPRO.</p>
       <ul>
-        <li><strong>PGDAS-D:</strong> marque as atividades do cliente (ficam guardadas), informe a receita do mês de cada uma (e a folha, quando há atividade do Fator R) e clique em <em>Calcular</em>: aparecem os tributos e o total, sem transmitir nada. Conferido, <em>Transmitir e gerar o DAS</em> entrega a declaração e gera o DAS. Marque <em>Retificadora</em> se o mês já foi declarado. O faturamento e o imposto vão para o controle.</li>
-        <li><strong>DCTFWeb:</strong> com a folha fechada no eSocial (e a EFD-Reinf, se houver), <em>Transmitir e gerar o DARF</em> busca a declaração em andamento, assina, transmite e gera o DARF, que vai para a coluna DARF Prev. O botão <em>Transmitir DCTFWeb (lote)</em> faz isso para todos os clientes com folha ainda não transmitidos.</li>
-        <li><strong>Enviar ao cliente:</strong> a mensagem traz os valores e vencimentos. <em>Enviar por e-mail</em> manda as guias em anexo; <em>WhatsApp</em> abre a conversa com a mensagem e baixa as guias para você anexar. O envio fica registrado e a data entra no controle. <em>Enviar fechamentos por e-mail</em> manda para todos os clientes com guia que ainda não receberam (os atendidos pelo WhatsApp ficam de fora).</li>
+        <li><strong>Simples (aba Fiscal):</strong> <em>Buscar declaração e DAS já transmitidos</em> traz a declaração, o recibo e o DAS; o faturamento do mês (receita bruta do PA, lida da declaração) e o valor do DAS vão para o Controle mensal. O botão <em>Buscar DAS já transmitidos</em> faz isso para vários clientes.</li>
+        <li><strong>DCTFWeb (aba Departamento pessoal):</strong> <em>Buscar recibo e DARF já transmitidos</em> traz o recibo e gera o DARF, com juros e multa até a <em>Data de pagamento do DARF</em> (em branco = hoje). O valor vai para o DARF Prev. O botão <em>Buscar DARFs já transmitidos</em> faz isso para vários clientes.</li>
+        <li><strong>Sem movimento:</strong> o Kontor só transmite declarações zeradas. No Simples, <em>Transmitir PGDAS-D zerado</em> entrega o mês com receita zero (marque <em>Retificadora</em> se já havia declaração). Na DCTFWeb, com <em>Sem folha</em> marcado no controle, <em>Transmitir DCTFWeb sem movimento</em> transmite a declaração em andamento. Os botões de lote fazem isso para os clientes marcados como <em>Sem mov.</em> (Fiscal) ou <em>Sem folha</em> (DP).</li>
+        <li><strong>Envio ao cliente:</strong> o DAS e o DARF vão em e-mails separados: na aba Fiscal sai só o DAS e na aba Departamento pessoal só o DARF. <em>Enviar por e-mail</em> manda a guia em anexo; <em>WhatsApp</em> abre a conversa com a mensagem e baixa a guia para você anexar. O envio marca a data no controle da aba. <em>Enviar DAS por e-mail</em> e <em>Enviar DARFs por e-mail</em> mandam para todos que ainda não receberam (os atendidos pelo WhatsApp ficam de fora).</li>
       </ul>
-      <p><strong>Transmitiu em outro sistema (SCI, portal do Simples, e-CAC)?</strong> Use <em>Buscar declaração e DAS já transmitidos</em> (PGDAS-D) ou <em>Buscar recibo e DARF já transmitidos</em> (DCTFWeb) na janela do cliente, ou os botões <em>Buscar DAS já transmitidos</em> (aba Fiscal) e <em>Buscar DARFs já transmitidos</em> (aba Departamento pessoal) para vários clientes de uma vez. O Kontor não transmite nada: busca a declaração e o recibo, gera a guia, marca a obrigação como entregue e lança o valor no controle. Depois é só enviar ao cliente. Se você clicar em <em>Transmitir</em> numa DCTFWeb que já foi transmitida, o Kontor percebe e só busca o recibo e o DARF.</p>
-      <p>O DARF da DCTFWeb sai com juros e multa calculados até a <em>Data de pagamento do DARF</em> (em branco = hoje). Se a Receita falhar no cálculo de juros e multa (acontece em fim de semana, feriado ou instabilidade do sistema dela), o Kontor tenta com o próximo dia útil; se ainda assim não sair, a declaração fica como <em>Transmitida, sem guia</em> e dá para gerar o DARF de novo depois, sem transmitir outra vez.</p>
-      <p>Na aba Departamento pessoal, DARF Prev., FGTS e Sindicato começam em 0,00. O valor de cada DARF emitido pelo Kontor (no fechamento ou na Situação fiscal) vai para a coluna <em>DARF Prev.</em> da competência, substituindo o que estiver lá, e o total da linha se atualiza; vale sempre o DARF emitido mais recente. A data de envio só é marcada quando o fechamento sai por e-mail ou WhatsApp.</p>
-      <p>O PGDAS-D cobre as atividades principais, sem isenções e reduções detalhadas por tributo; MEI não entra. Comece por um cliente e confira o resultado no portal.</p>
+      <p>Na aba Departamento pessoal, DARF Prev., FGTS e Sindicato começam em 0,00. O valor de cada DARF emitido pelo Kontor (no fechamento ou na Situação fiscal) vai para o DARF Prev. da competência, substituindo o que estiver lá; vale sempre o DARF mais recente. Se a Receita falhar no cálculo de juros e multa (fim de semana, feriado ou instabilidade), o Kontor tenta com o próximo dia útil; se ainda assim não sair, a declaração fica como <em>Transmitida, sem guia</em> e dá para buscar o DARF de novo depois.</p>
       <h3>Envio automático do departamento pessoal</h3>
       <p>Na aba Departamento pessoal, o botão <em>Envio automático do DP</em> liga o envio dos documentos que o escritório salva na pasta do DP, organizada como <strong>pasta › Cliente › AAAA › MM-AAAA</strong> (a subpasta é a competência). O Kontor reconhece os arquivos pelo nome: <em>Darf Previdenciária</em>, <em>FGTS</em>, <em>Boleto Sindicato</em>, <em>Recibo Mensal</em> (pró-labore), o espelho e resumo da folha e o <em>Recibo Dctf Web</em>.</p>
       <ul>

@@ -79,6 +79,9 @@ test('fechamento: DCTFWeb assinada e transmitida, PGDAS-D calculado e transmitid
     const { transmitirDctfweb, calcularPgdas, transmitirPgdas } = await import('../src/servicos/fechamento.js');
 
     // ---------- DCTFWeb ----------
+    // o Kontor só transmite a DCTFWeb sem movimento: sem marcar "Sem folha", recusa sem falar com a Receita
+    await assert.rejects(transmitirDctfweb(1, 1, pad, '2026-09', transporte as any), /sem movimento/);
+    db.prepare("INSERT INTO controle_mensal (empresa_id, competencia, area, dados_json) VALUES (?, '2026-09', 'DP', '{\"sem_folha\":true}')").run(pad);
     const r = await transmitirDctfweb(1, 1, pad, '2026-09', transporte as any);
     assert.deepEqual([r.jaTransmitida, r.recibo, r.valor, r.vencimento, r.temGuia], [false, '260900012345', 1234.56, '2026-10-20', true]);
     const tarefa = db.prepare(`SELECT t.status, t.protocolo FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id WHERE t.empresa_id = ? AND o.codigo = 'DCTFWEB' AND t.competencia = '2026-09'`).get(pad) as any;
