@@ -313,7 +313,11 @@ test('fluxo completo: cadastro, emissão, rejeição, queda de rede, DANFSe e ca
   assert.equal(soB.status, 200, JSON.stringify(soB.json));
   assert.equal(soB.json.email.status, 'ENVIADO');
   assert.equal(enviadosEmail.length, antesEmail + 1);
-  assert.ok(enviadosEmail.at(-1).attachments.some((a: any) => /^Boleto_\d{17}\.pdf$/.test(a.filename)));
+  const anexosB = enviadosEmail.at(-1).attachments;
+  assert.equal(anexosB.filter((a: any) => a.contentType === 'application/pdf').length, 1, 'um PDF só: o demonstrativo com o boleto');
+  assert.ok(anexosB.some((a: any) => /^Demonstrativo_Cobranca_.*\.pdf$/.test(a.filename)));
+  const pdfDemo = Buffer.from(anexosB.find((a: any) => /Demonstrativo/.test(a.filename)).content).toString('latin1');
+  assert.equal(pdfDemo.match(/\/Type \/Page[^s]/g)?.length, 2, 'demonstrativo + boleto completo');
   assert.equal((await call('POST', '/api/faturar', { ...base, tomadorId: tFat.json.id, acao: 'BOLETO', valor: 250, vencimento: '2020-01-01' }, token)).status, 400, 'vencimento no passado');
   // remessa
   const rem = await call('POST', `/api/empresas/${eid}/remessas`, {}, token);

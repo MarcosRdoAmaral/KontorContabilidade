@@ -1188,7 +1188,7 @@ async function telaCobrancas() {
         <label>WhatsApp do cliente (com DDD) <input name="fone" required value="${esc(c.tomador_fone ?? '')}" placeholder="(47) 99999-9999"></label>
         <label>Mensagem <textarea name="texto" rows="7">${esc(aplicarModelo(atrasado ? m.atraso : m.lembrete, c))}</textarea></label>
         <p class="erro" id="erro-wa"></p>
-        <div class="acoes"><button class="primario" type="submit">Abrir WhatsApp</button>${c.nosso_numero ? '<button type="button" id="wa-pdf">Baixar boleto para anexar</button>' : ''}${c.forma === 'PIX' && c.pix_copia_cola ? '<button type="button" id="wa-demo">Baixar demonstrativo para anexar</button>' : ''}<button type="button" data-fechar>Fechar</button></div>
+        <div class="acoes"><button class="primario" type="submit">Abrir WhatsApp</button>${(c.forma === 'PIX' ? c.pix_copia_cola : c.nosso_numero) ? '<button type="button" id="wa-demo">Baixar demonstrativo para anexar</button>' : ''}<button type="button" data-fechar>Fechar</button></div>
       </form>`, () => {
       const pdf = $('#wa-pdf'); if (pdf) pdf.onclick = () => baixar(`/api/cobrancas/${c.id}/boleto`, `Boleto_${c.id}.pdf`);
       const dm = $('#wa-demo'); if (dm) dm.onclick = () => baixar(`/api/cobrancas/${c.id}/demonstrativo`, `Demonstrativo_${c.id}.pdf`);

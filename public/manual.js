@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.27.0';
+export const MANUAL_VERSAO = '1.27.1';
 
 export const MANUAL = [
   {
@@ -336,7 +336,7 @@ export const MANUAL = [
         <li><strong>Carteira Pix:</strong> sem boleto. O escritório gera a cobrança Pix no aplicativo do banco, clica em <em>Informar Pix</em> e cola o código <em>Pix copia e cola</em>. O Kontor confere o código (formato e dígito de conferência) e recusa se o valor do Pix for diferente do valor da cobrança. Depois disso a cobrança fica como <em>Pix pronto, a receber</em>. O código também pode ser colado já em <em>Nova cobrança</em>. Quando o cliente pagar, use <em>Marcar pago</em>.</li>
       </ul>
       <h3>Demonstrativo de cobrança</h3>
-      <p>O botão <em>Demonstrativo</em> gera o PDF com o cabeçalho do escritório (logo, CNPJ, endereço, e-mail e WhatsApp do cadastro da empresa), o cliente, o vencimento, a discriminação dos serviços (com o desconto, se houver), o total e a forma de pagamento: QR Code e copia e cola na carteira Pix, ou linha digitável e código de barras na carteira boleto. A frase do rodapé é definida no botão <em>Demonstrativo</em> do topo da tela. O demonstrativo vai anexo nos e-mails de cobrança; no Pix, o código copia e cola vai também no texto do e-mail (modelo <em>Cobrança por Pix</em>, em Configurações &gt; Modelos de e-mail). O botão <em>E-mail</em> envia ou reenvia a cobrança, e no WhatsApp o campo <code>{linha}</code> traz o Pix copia e cola nas cobranças Pix.</p>
+      <p>O botão <em>Demonstrativo</em> gera o PDF (na carteira boleto, com o boleto completo na página 2) com o cabeçalho do escritório (logo, CNPJ, endereço, e-mail e WhatsApp do cadastro da empresa), o cliente, o vencimento, a discriminação dos serviços (com o desconto, se houver), o total e a forma de pagamento: QR Code e copia e cola na carteira Pix, ou a linha digitável na carteira boleto, com o boleto inteiro (recibo do pagador e ficha de compensação) na página seguinte. A frase do rodapé é definida no botão <em>Demonstrativo</em> do topo da tela. O demonstrativo vai anexo nos e-mails de cobrança; no Pix, o código copia e cola vai também no texto do e-mail (modelo <em>Cobrança por Pix</em>, em Configurações &gt; Modelos de e-mail). O botão <em>E-mail</em> envia ou reenvia a cobrança, e no WhatsApp o campo <code>{linha}</code> traz o Pix copia e cola nas cobranças Pix.</p>
       <h3>Multa, juros e desconto por cliente</h3>
       <p>No cadastro do cliente, aba <strong>Descontos</strong>, você pode definir <em>multa</em> e <em>juros ao mês</em> próprios (em branco vale o padrão dos dados bancários da empresa; 0 isenta o cliente) e um <em>desconto por pagamento antecipado</em>: um percentual do boleto, válido até certo número de dias antes do vencimento (0 = até o vencimento). O desconto vai na remessa ao banco como desconto até a data e sai nas instruções impressas; depois do prazo vale o valor cheio. O boleto guarda as condições vigentes na data em que foi criado, então mudar o cadastro depois não altera boletos já emitidos.</p>
       <h3>Fluxo com o banco (Ailos)</h3>

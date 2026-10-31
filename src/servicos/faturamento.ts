@@ -5,7 +5,7 @@ import { ajustarVencimento } from './diautil.js';
 import { EntradaEmissao, ErroNegocio, comRetencoesDoServico, emitir } from './emissao.js';
 import { enviarMensagemBoleto, enviarNotaPorEmail } from './email.js';
 import { exigirLicenca } from '../licenca.js';
-import { boletoPdf, criarCobranca, demonstrativoPdf, listarCobrancas as listar, obterConta, obterCobranca, pendenciasPagador, referenciaDa, registrarEmailCobranca } from './cobranca.js';
+import { criarCobranca, demonstrativoPdf, listarCobrancas as listar, obterConta, obterCobranca, pendenciasPagador, referenciaDa, registrarEmailCobranca } from './cobranca.js';
 
 export type Acao = 'NOTA' | 'NOTA_BOLETO' | 'BOLETO';
 
@@ -136,9 +136,8 @@ export async function faturar(u: Usuario, entrada: EntradaFaturamento) {
         const boletos: { rotulo: string; valor: string; detalhe: string }[] = [];
         for (const c of emitidos) {
           const pix = c.forma === 'PIX';
-          if (!pix) { const b = await boletoPdf(c.id); extras.push({ filename: b.nome, content: b.pdf, contentType: 'application/pdf' }); }
           const dm = await demonstrativoPdf(c.id); extras.push({ filename: emitidos.length > 1 ? dm.nome.replace('.pdf', `_${emitidos.indexOf(c) + 1}.pdf`) : dm.nome, content: dm.pdf, contentType: 'application/pdf' });
-          boletos.push({ rotulo: `${pix ? 'Pix (demonstrativo com QR Code em anexo)' : 'Boleto (PDF em anexo)'}${emitidos.length > 1 ? ` ${emitidos.indexOf(c) + 1} de ${emitidos.length}` : ''}`, valor: c.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+          boletos.push({ rotulo: `${pix ? 'Pix (demonstrativo com QR Code em anexo)' : 'Boleto (demonstrativo com o boleto em anexo)'}${emitidos.length > 1 ? ` ${emitidos.indexOf(c) + 1} de ${emitidos.length}` : ''}`, valor: c.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
             detalhe: `Vencimento ${c.vencimento.split('-').reverse().join('/')} · ${pix ? `Pix copia e cola ${c.pix_copia_cola}` : `Linha digitável ${c.linha_digitavel}`}` });
         }
         if (cob) cob.referencia = referenciaDa(cob);
@@ -180,7 +179,6 @@ export async function enviarCobrancaPorEmail(escritorioId: number, cobrancaId: n
   const para = [...new Set([t.email, ...(t.email_cobranca ?? '').split(/[,;\s]+/)].filter((x: any) => x && /@/.test(x)).map((x: string) => x.toLowerCase()))].slice(0, 5) as string[];
   if (!para.length) throw new ErroNegocio('O cliente não tem e-mail cadastrado.');
   const anexos: { filename: string; content: Buffer; contentType: string }[] = [];
-  if (c.forma !== 'PIX') { const b = await boletoPdf(c.id); anexos.push({ filename: b.nome, content: b.pdf, contentType: 'application/pdf' }); }
   const dm = await demonstrativoPdf(c.id); anexos.push({ filename: dm.nome, content: dm.pdf, contentType: 'application/pdf' });
   try { await enviarMensagemBoleto(escritorioId, para, { ...c, referencia: referenciaDa(c) }, t, anexos); }
   catch (e) { registrarEmailCobranca(c.id, 'ERRO', para.join(', ')); throw e; }

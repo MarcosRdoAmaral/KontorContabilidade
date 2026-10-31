@@ -26,6 +26,14 @@ export function gerarBoletoPdf(b: DadosBoleto): Promise<Buffer> {
     const pdf = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `Boleto ${b.numeroDocumento}` } });
     const partes: Buffer[] = [];
     pdf.on('data', (c) => partes.push(c)); pdf.on('end', () => resolve(Buffer.concat(partes))); pdf.on('error', reject);
+    desenharBoleto(pdf, b);
+    pdf.end();
+  });
+}
+
+/** Desenha o boleto completo (recibo do pagador + ficha de compensação) na página atual do PDF. */
+export function desenharBoleto(pdf: PDFKit.PDFDocument, b: DadosBoleto, y0 = 14 * MM) {
+  {
 
     const X = 12 * MM, W = 186 * MM;
     const campo = (rot: string, val: string, x: number, y: number, w: number, h = 9 * MM, alinhar: 'left' | 'right' = 'left', negrito = false) => {
@@ -44,7 +52,7 @@ export function gerarBoletoPdf(b: DadosBoleto): Promise<Buffer> {
     };
 
     // -------- Recibo do pagador --------
-    let y = 14 * MM;
+    let y = y0;
     pdf.font('Helvetica').fontSize(6).fillColor('#444').text('Linha digitável para uso no internet banking', X, y - 8, { lineBreak: false });
     pdf.fillColor('#000').font('Helvetica-Bold').fontSize(10).text(b.linhaDigitavel, X, y + 1, { lineBreak: false });
     y += 14;
@@ -91,6 +99,5 @@ export function gerarBoletoPdf(b: DadosBoleto): Promise<Buffer> {
     const modulo = (103 * MM) / barras.reduce((a, n) => a + n, 0);
     let x = X; let preto = true;
     for (const n of barras) { if (preto) pdf.rect(x, y, n * modulo, 13 * MM).fill('#000'); x += n * modulo; preto = !preto; }
-    pdf.end();
-  });
+  }
 }

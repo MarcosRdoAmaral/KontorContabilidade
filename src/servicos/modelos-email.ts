@@ -132,7 +132,7 @@ Um abraço,
     campos: [...COMUNS, { nome: 'numero', descricao: 'Número da NFS-e', exemplo: '128' }, { nome: 'emitente', descricao: 'Quem emitiu a nota', exemplo: 'Ciclo Assessoria Contábil Ltda' },
       { nome: 'valor', descricao: 'Valor do serviço', exemplo: 'R$ 850,00' }, { nome: 'competencia', descricao: 'Competência da nota', exemplo: '01/10/2026' },
       { nome: 'chave', descricao: 'Chave de acesso', exemplo: '42061520...' }, { nome: 'link', descricao: 'Endereço da consulta pública', exemplo: 'https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=...' },
-      { nome: 'boletos', descricao: 'Quadro com os boletos (quando vão junto)', exemplo: [{ rotulo: 'Boleto', valor: 'R$ 850,00', detalhe: 'Vencimento 10/11/2026 · Linha digitável 23790.00000 00000.000000 00000.000000 1 00000000085000' }], lista: true }],
+      { nome: 'boletos', descricao: 'Quadro com os boletos (quando vão junto)', exemplo: [{ rotulo: 'Boleto (demonstrativo com o boleto em anexo)', valor: 'R$ 850,00', detalhe: 'Vencimento 10/11/2026 · Linha digitável 23790.00000 00000.000000 00000.000000 1 00000000085000' }], lista: true }],
     assunto: 'NFS-e nº {{numero}} | {{emitente}}',
     corpo: `{{saudacao}}
 
@@ -167,13 +167,13 @@ Um abraço,
 {{escritorio}}`,
   },
   {
-    chave: 'boleto', grupo: 'Faturamento', nome: 'Boleto de cobrança', descricao: 'Boleto enviado sem nota (quando o cliente não recebe NFS-e).',
+    chave: 'boleto', grupo: 'Faturamento', nome: 'Boleto de cobrança', descricao: 'Demonstrativo com o boleto, enviado sem nota (carteira boleto).',
     campos: [...COMUNS, { nome: 'emitente', descricao: 'Quem emitiu o boleto', exemplo: 'Ciclo Assessoria Contábil Ltda' }, { nome: 'valor', descricao: 'Valor', exemplo: 'R$ 850,00' },
       { nome: 'vencimento', descricao: 'Vencimento', exemplo: '10/11/2026' }, { nome: 'linha_digitavel', descricao: 'Linha digitável', exemplo: '23790.00000 00000.000000 00000.000000 1 00000000085000' }],
     assunto: 'Boleto com vencimento em {{vencimento}} | {{emitente}}',
     corpo: `{{saudacao}}
 
-Seguem em anexo o boleto de **{{valor}}**, com vencimento em **{{vencimento}}**, e o demonstrativo da cobrança, emitidos por {{emitente}}.
+Segue em anexo o demonstrativo da cobrança, com o boleto de **{{valor}}** e vencimento em **{{vencimento}}**, emitido por {{emitente}}.
 
 Se preferir, pague pela linha digitável: {{linha_digitavel}}
 

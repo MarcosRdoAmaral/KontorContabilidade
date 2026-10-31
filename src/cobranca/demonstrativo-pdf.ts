@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
-import { barrasItf } from './ailos.js';
+import { desenharBoleto, type DadosBoleto } from './boleto-pdf.js';
 
 /** Demonstrativo de cobrança (A4): cabeçalho do escritório, cliente, serviços, total e a forma de pagamento (Pix ou boleto). */
 export interface DadosDemonstrativo {
@@ -12,7 +12,8 @@ export interface DadosDemonstrativo {
   desconto?: { valor: number; motivo: string | null } | null;
   total: number;
   pix?: string | null;             // Pix copia e cola
-  boleto?: { linhaDigitavel: string; codigoBarras: string } | null;
+  /** Boleto completo: um resumo na página 1 e o boleto inteiro (recibo + ficha de compensação) na página 2. */
+  boleto?: DadosBoleto | null;
   rodape?: string | null;
 }
 
@@ -102,18 +103,14 @@ export async function gerarDemonstrativoPdf(d: DadosDemonstrativo): Promise<Buff
       y += h + 6 * MM;
     }
 
-    // Boleto
+    // Boleto: resumo aqui; o boleto completo vai na página seguinte
     if (d.boleto) {
-      const h = 34 * MM;
-      pdf.save().roundedRect(X, y, W, h, 4).dash(3, { space: 2 }).lineWidth(0.8).stroke('#b9c2cc').restore();
-      pdf.fillColor(AZUL).font('Helvetica-Bold').fontSize(9).text('PAGAMENTO VIA BOLETO BANCÁRIO', X + 5 * MM, y + 4 * MM);
+      const h = 24 * MM;
+      pdf.rect(X, y, W, h).fillAndStroke(FUNDO, LINHA);
+      pdf.fillColor(AZUL).font('Helvetica-Bold').fontSize(10).text('PAGAMENTO VIA BOLETO BANCÁRIO', X + 5 * MM, y + 4 * MM);
       pdf.fillColor(CINZA).font('Helvetica').fontSize(7).text('Linha digitável', X + 5 * MM, y + 10 * MM);
       pdf.fillColor('#111').font('Helvetica-Bold').fontSize(10.5).text(d.boleto.linhaDigitavel, X + 5 * MM, y + 13.5 * MM, { width: W - 10 * MM });
-      const barras = barrasItf(d.boleto.codigoBarras);
-      const modulo = (103 * MM) / barras.reduce((a, n) => a + n, 0);
-      let bx = X + 5 * MM, preto = true;
-      for (const n of barras) { if (preto) pdf.rect(bx, y + 20 * MM, n * modulo, 11 * MM).fill('#000'); bx += n * modulo; preto = !preto; }
-      pdf.fillColor(CINZA).font('Helvetica').fontSize(7).text('O boleto completo segue em anexo.', X + 112 * MM, y + 24 * MM, { width: W - 117 * MM, align: 'right' });
+      pdf.fillColor(CINZA).font('Helvetica').fontSize(7.5).text('O boleto completo, com o código de barras, está na página 2.', X + 5 * MM, y + 19 * MM, { width: W - 10 * MM });
       y += h + 6 * MM;
     }
 
@@ -123,6 +120,7 @@ export async function gerarDemonstrativoPdf(d: DadosDemonstrativo): Promise<Buff
     const yr = 285 * MM;
     pdf.moveTo(X, yr - 3 * MM).lineTo(X + W, yr - 3 * MM).lineWidth(0.6).stroke(LINHA);
     pdf.fillColor(CINZA).font('Helvetica').fontSize(7).text([d.emitente.nome.toUpperCase(), d.rodape].filter(Boolean).join('  •  '), X, yr, { width: W, align: 'center', lineBreak: false });
+    if (d.boleto) { pdf.addPage({ size: 'A4', margin: 0 }); desenharBoleto(pdf, d.boleto); }
     pdf.end();
   });
 }

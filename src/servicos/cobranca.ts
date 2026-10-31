@@ -4,7 +4,7 @@ import { ajustarVencimento } from './diautil.js';
 import { ErroNegocio } from './emissao.js';
 import { gerarRemessa400 } from '../cobranca/ailos400.js';
 import { codigoBarras, descreverMotivo, gerarRemessa, lerRetornoAuto, linhaDigitavel, nossoNumero, MOVIMENTO_RETORNO, type ContaAilos, type Titulo } from '../cobranca/ailos.js';
-import { gerarBoletoPdf } from '../cobranca/boleto-pdf.js';
+import { gerarBoletoPdf, type DadosBoleto } from '../cobranca/boleto-pdf.js';
 import { gerarDemonstrativoPdf } from '../cobranca/demonstrativo-pdf.js';
 import { lerPix } from '../cobranca/pix.js';
 
@@ -162,13 +162,19 @@ function mensagens(conta: any, c?: any): string[] {
 export async function boletoPdf(cobrancaId: number): Promise<{ pdf: Buffer; nome: string }> {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(cobrancaId) as any;
   if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
+  const pdf = await gerarBoletoPdf(dadosDoBoleto(c));
+  return { pdf, nome: `Boleto_${c.nosso_numero}.pdf` };
+}
+
+/** Dados do boleto de uma cobrança (para o PDF do boleto e para o demonstrativo). */
+function dadosDoBoleto(c: any): DadosBoleto {
   if (!c.nosso_numero) throw new ErroNegocio(c.observacao_banco ?? 'Este boleto ainda não foi gerado: configure os dados bancários da empresa.');
   const conta = obterConta(c.empresa_id)!;
   const emp = db.prepare('SELECT razao_social, documento FROM empresas WHERE id = ?').get(c.empresa_id) as any;
   const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
   const end = [t.logradouro, t.numero].filter(Boolean).join(', ') + (t.complemento ? ` - ${t.complemento}` : '');
   const uf = t.uf || UF_IBGE[String(t.cod_municipio ?? '').slice(0, 2)] || '';
-  const pdf = await gerarBoletoPdf({
+  return {
     beneficiario: { nome: emp.razao_social, documento: emp.documento },
     agenciaCodigo: `${conta.agencia.padStart(4, '0')}-${conta.agencia_dv} / ${conta.conta}-${conta.conta_dv}`,
     pagador: { nome: t.nome, documento: t.documento ?? '', endereco: `${end} - ${t.bairro ?? ''} - ${soDig(t.cep ?? '').replace(/(\d{5})(\d{3})/, '$1-$2')} ${t.cidade ?? ''}/${uf}` },
@@ -176,8 +182,7 @@ export async function boletoPdf(cobrancaId: number): Promise<{ pdf: Buffer; nome
     vencimento: c.vencimento, valor: c.valor, emissao: c.emissao ?? c.criado_em.slice(0, 10), carteira: conta.carteira,
     instrucoes: mensagens(conta, c).length ? mensagens(conta, c) : ['Não receber após o vencimento sem consultar o beneficiário.'],
     linhaDigitavel: c.linha_digitavel, codigoBarras: c.codigo_barras,
-  });
-  return { pdf, nome: `Boleto_${c.nosso_numero}.pdf` };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +220,7 @@ export async function demonstrativoPdf(cobrancaId: number): Promise<{ pdf: Buffe
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(cobrancaId) as any;
   if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
   if (c.forma === 'PIX' && !c.pix_copia_cola) throw new ErroNegocio('Informe o Pix copia e cola desta cobrança para gerar o demonstrativo.');
+  if (c.forma !== 'PIX' && !c.nosso_numero) throw new ErroNegocio(c.observacao_banco ?? 'O boleto desta cobrança ainda não foi gerado.');
   const e = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
   const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
   const ufT = t.uf || UF_IBGE[String(t.cod_municipio ?? '').slice(0, 2)] || '';
@@ -232,7 +238,7 @@ export async function demonstrativoPdf(cobrancaId: number): Promise<{ pdf: Buffe
     desconto: c.desconto > 0 ? { valor: c.desconto, motivo: c.desconto_motivo } : null,
     total: c.valor,
     pix: c.forma === 'PIX' ? c.pix_copia_cola : null,
-    boleto: c.forma === 'BOLETO' && c.linha_digitavel && c.codigo_barras ? { linhaDigitavel: c.linha_digitavel, codigoBarras: c.codigo_barras } : null,
+    boleto: c.forma === 'BOLETO' && c.nosso_numero ? dadosDoBoleto(c) : null,
     rodape: e.demonstrativo_rodape,
   });
   return { pdf, nome: `Demonstrativo_Cobranca_${nome(t.nome)}_${referencia.replace('/', '-')}.pdf` };
