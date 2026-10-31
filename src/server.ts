@@ -1,3 +1,4 @@
+import { envioDpAutomatico } from './servicos/envio-dp.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
@@ -75,6 +76,11 @@ export async function criarApp() {
     const timerSf = setInterval(() => { sitfisAutomatico().catch((e) => app.log.error(e)); }, 30 * 60e3);
     timerSf.unref();
     setTimeout(() => { sitfisAutomatico().catch((e) => app.log.error(e)); }, 2 * 60e3).unref();
+  }
+  // Envio automático dos documentos do DP (pasta do escritório): a cada 5 min, quando ligado em Controle mensal
+  if (process.env.ENVIO_DP_AUTOMATICO !== '0') {
+    const timerDp = setInterval(() => { envioDpAutomatico().catch((e) => app.log.error(e)); }, 5 * 60e3);
+    timerDp.unref();
   }
   // Resumo diário de prazos por e-mail (Configurações > Avisos)
   if (process.env.AVISOS_AUTOMATICOS !== '0') {

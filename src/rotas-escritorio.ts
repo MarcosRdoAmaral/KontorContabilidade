@@ -1,3 +1,4 @@
+import { ClienteDp, ConfigDp, painelDp, salvarClienteDp, salvarConfigDp, varrerPastaDp } from './servicos/envio-dp.js';
 import { abrirMensagem, consultarCaixaPostal, consultarParcelamentos, detalheCliente, emitirDasParcela } from './servicos/parcelamentos-caixa.js';
 import { monitorFiscal, resumoFinanceiro } from './servicos/monitor.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -72,6 +73,10 @@ export async function rotasEscritorio(app: FastifyInstance) {
       const { isn } = z.object({ isn: z.string().regex(/^\d{1,12}$/) }).parse(req.body);
       return abrirMensagem(u(req).escritorio_id, id, isn);
     });
+    api.get('/api/escritorio/envio-dp', async (req) => painelDp(u(req).escritorio_id));
+    api.put('/api/escritorio/envio-dp/config', async (req) => salvarConfigDp(u(req).escritorio_id, ConfigDp.parse(req.body)));
+    api.put('/api/escritorio/envio-dp/cliente/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return salvarClienteDp(u(req).escritorio_id, id, ClienteDp.parse(req.body)); });
+    api.post('/api/escritorio/envio-dp/verificar', async (req) => varrerPastaDp(u(req).escritorio_id, !!(req.body as any)?.enviar));
     api.get('/api/escritorio/monitor', async (req) => monitorFiscal(u(req).escritorio_id, empresasDoUsuario(u(req))));
     api.get('/api/escritorio/resumo-financeiro/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return resumoFinanceiro(u(req).escritorio_id, id, mesDe(req.query)); });
     api.get('/api/escritorio/visao', async (req) => visaoGeral(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))));

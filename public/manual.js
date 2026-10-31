@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.18.3';
+export const MANUAL_VERSAO = '1.19.0';
 
 export const MANUAL = [
   {
@@ -84,6 +84,14 @@ export const MANUAL = [
       <p>O DARF da DCTFWeb sai com juros e multa calculados até a <em>Data de pagamento do DARF</em> (em branco = hoje). Se a Receita falhar no cálculo de juros e multa (acontece em fim de semana, feriado ou instabilidade do sistema dela), o Kontor tenta com o próximo dia útil; se ainda assim não sair, a declaração fica como <em>Transmitida, sem guia</em> e dá para gerar o DARF de novo depois, sem transmitir outra vez.</p>
       <p>Na aba Departamento pessoal, DARF Prev., FGTS e Sindicato começam em 0,00. O valor de cada DARF emitido pelo Kontor (no fechamento ou na Situação fiscal) vai para a coluna <em>DARF Prev.</em> da competência, substituindo o que estiver lá, e o total da linha se atualiza; vale sempre o DARF emitido mais recente. A data de envio só é marcada quando o fechamento sai por e-mail ou WhatsApp.</p>
       <p>O PGDAS-D cobre as atividades principais, sem isenções e reduções detalhadas por tributo; MEI não entra. Comece por um cliente e confira o resultado no portal.</p>
+      <h3>Envio automático do departamento pessoal</h3>
+      <p>Na aba Departamento pessoal, o botão <em>Envio automático do DP</em> liga o envio dos documentos que o escritório salva na pasta do DP, organizada como <strong>pasta › Cliente › AAAA › MM-AAAA</strong> (a subpasta é a competência). O Kontor reconhece os arquivos pelo nome: <em>Darf Previdenciária</em>, <em>FGTS</em>, <em>Boleto Sindicato</em>, <em>Recibo Mensal</em> (pró-labore), o espelho e resumo da folha e o <em>Recibo Dctf Web</em>.</p>
+      <ul>
+        <li>Informe a pasta (ou use <em>Escolher…</em>), a competência a partir da qual enviar e ligue o envio. Com o programa aberto, a pasta é olhada a cada 5 minutos.</li>
+        <li>Cada pasta de cliente é ligada ao cliente da carteira pelo nome; se não bater, escolha o cliente na lista. Marque os documentos que cada cliente recebe (padrão: DARF, FGTS para quem tem funcionários e Recibo mensal).</li>
+        <li>Quando todos os documentos marcados do mês estão na pasta, vai um e-mail só para o e-mail do cliente, com os arquivos em anexo e os valores das guias. Arquivo que chega ou é substituído depois vai num e-mail de complemento. Arquivo gravado há menos de 2 minutos espera a próxima volta.</li>
+        <li>O envio marca a data de envio e lança os valores de DARF, FGTS e sindicato no Controle mensal. Cliente sem e-mail aparece como pendente. <em>Ver prévia</em> mostra o que seria enviado sem enviar.</li>
+      </ul>
       <h3>Senhas e acessos</h3>
       <p>Em Escritório &gt; Senhas e acessos ficam o CPF do responsável, o código de acesso e a atividade do Simples Nacional, e a senha previdenciária de cada cliente. As senhas são guardadas criptografadas e só aparecem ao clicar em <em>Mostrar</em> (voltam a ficar escondidas depois de um minuto), com o botão <em>Copiar</em>. Só quem tem a permissão “Senhas e acessos dos clientes” vê essa tela; ela não vem liberada por padrão para usuários novos.</p>
       <h3>Importar a planilha antiga</h3>

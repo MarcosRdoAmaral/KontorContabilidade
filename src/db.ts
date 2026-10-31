@@ -1040,6 +1040,37 @@ const migracoes: string[] = [
     consultado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX ix_caixa_postal_consultas ON caixa_postal_consultas(empresa_id, id);`,
+  // 39: envio automático dos documentos do departamento pessoal a partir da pasta do escritório
+  `ALTER TABLE empresas ADD COLUMN dp_pasta TEXT;          -- nome da pasta do cliente (quando não bate pelo nome)
+  ALTER TABLE empresas ADD COLUMN dp_docs TEXT;           -- JSON: documentos esperados no mês (vazio = padrão)
+  ALTER TABLE empresas ADD COLUMN dp_envio_auto INTEGER NOT NULL DEFAULT 1;
+  CREATE TABLE dp_arquivos (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    competencia TEXT NOT NULL,                -- AAAA-MM (da subpasta MM-AAAA)
+    tipo TEXT NOT NULL CHECK (tipo IN ('DARF','FGTS','SINDICATO','RECIBO','FOLHA','RECIBO_DCTF')),
+    caminho TEXT NOT NULL,
+    tamanho INTEGER NOT NULL,
+    modificado TEXT NOT NULL,                 -- data de modificação do arquivo (ISO)
+    valor REAL,
+    vencimento TEXT,
+    visto_em TEXT NOT NULL DEFAULT (datetime('now')),
+    envio_id INTEGER,                         -- envio em que foi junto (NULL = ainda não enviado)
+    UNIQUE (caminho, tamanho, modificado)
+  );
+  CREATE INDEX ix_dp_arquivos ON dp_arquivos(empresa_id, competencia);
+  CREATE TABLE dp_envios (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    competencia TEXT NOT NULL,
+    situacao TEXT NOT NULL CHECK (situacao IN ('ENVIADO','ERRO')),
+    destino TEXT,
+    itens TEXT,
+    complemento INTEGER NOT NULL DEFAULT 0,  -- 1 = arquivos que chegaram (ou mudaram) depois do primeiro envio
+    erro TEXT,
+    enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_dp_envios ON dp_envios(empresa_id, competencia);`,
 ];
 
 export function migrar(): void {

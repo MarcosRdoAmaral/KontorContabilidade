@@ -158,6 +158,10 @@ function repositorioAtualizacoes() {
 let verificando = false;
 let pendente_atualizacao = null; // { versao, notas, exe, sha } quando há versão nova
 
+ipcMain.handle('pasta:escolher', async (_e, titulo) => {
+  const r = await dialog.showOpenDialog(janela, { title: String(titulo || 'Escolha a pasta'), properties: ['openDirectory'] });
+  return r.canceled ? null : r.filePaths[0] ?? null;
+});
 ipcMain.handle('atualizacao:pendente', () => (pendente_atualizacao ? { versao: pendente_atualizacao.versao, notas: pendente_atualizacao.notas } : null));
 ipcMain.handle('atualizacao:instalar', async () => {
   if (!pendente_atualizacao) return { ok: false };

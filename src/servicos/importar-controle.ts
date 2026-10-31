@@ -41,11 +41,11 @@ export function lerAbas(buf: Buffer): Record<string, string[][]> {
   return abas;
 }
 
-const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
+export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
   .replace(/\b(ltda|me|epp|eireli|s a|sa|sociedade|unipessoal|limitada|comercio|servicos|de|da|do|dos|das|e)\b/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** Liga um nome da planilha a um cliente da carteira (exato, um contém o outro, ou palavras em comum). */
-function porNome(clientes: { id: number; nomes: string[] }[], nome: string): number | null {
+export function porNome(clientes: { id: number; nomes: string[] }[], nome: string): number | null {
   const n = norm(nome);
   if (n.length < 3) return null;
   const exato = clientes.filter((c) => c.nomes.includes(n));

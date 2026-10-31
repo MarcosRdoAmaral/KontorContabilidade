@@ -4618,7 +4618,7 @@ async function telaControle() {
   const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal', CONTABIL: 'Contábil' };
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Controle mensal</h1><p class="sutil">Entregas de cada cliente na competência: impostos e guias do fiscal, folha e encargos do departamento pessoal e a contabilização. Tudo é salvo ao sair de cada campo.</p></div>
-      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes com folha que ainda não foi transmitida">Transmitir DCTFWeb (lote)</button> <button id="ct-dctf-busca" title="Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF">Buscar DARFs já transmitidos</button> ' : ''}${f.area === 'FISCAL' ? '<button id="ct-pg-busca" title="Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS">Buscar DAS já transmitidos</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail o fechamento (guias) aos clientes com guia gerada e ainda não enviados">Enviar fechamentos por e-mail</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
+      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes com folha que ainda não foi transmitida">Transmitir DCTFWeb (lote)</button> <button id="ct-dctf-busca" title="Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF">Buscar DARFs já transmitidos</button> <button id="ct-envio-dp" title="Envia aos clientes os documentos do DP que chegam na pasta do escritório">Envio automático do DP</button> ' : ''}${f.area === 'FISCAL' ? '<button id="ct-pg-busca" title="Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS">Buscar DAS já transmitidos</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail o fechamento (guias) aos clientes com guia gerada e ainda não enviados">Enviar fechamentos por e-mail</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
     <div class="filtros">
       <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
       <label style="flex:1 1 220px">Buscar <input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Cliente"></label>
@@ -4705,6 +4705,7 @@ async function telaControle() {
     loteFechamento(`Buscar DARFs da DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite a DCTFWeb em outro sistema (SCI, e-CAC): o Kontor não transmite nada, só busca o recibo da declaração já transmitida e gera o DARF. Ficam de fora os clientes marcados sem folha e os que já têm DARF. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DARF ${brl(r.valor)}` : r.aviso || 'recibo encontrado, sem DARF')), telaControle);
   });
+  $('#ct-envio-dp') && ($('#ct-envio-dp').onclick = () => envioDp(telaControle));
   $('#ct-pg-busca') && ($('#ct-pg-busca').onclick = () => {
     const alvo = visiveis().filter((c) => c.regime === 'SIMPLES' && !c.dados.sem_movimento && !fech.resumo[c.empresa_id]?.PGDASD?.tem_guia);
     loteFechamento(`Buscar DAS do Simples de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite o PGDAS-D em outro sistema (SCI, portal do Simples): o Kontor não transmite nada, só busca a declaração e o recibo já transmitidos e gera o DAS. Ficam de fora os clientes sem movimento e os que já têm DAS. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
@@ -5420,4 +5421,77 @@ function abrirMensagemCaixa(empresaId, isn, m) {
       } catch (e) { ev.target.disabled = false; ev.target.textContent = 'Abrir mesmo assim'; dlg.querySelector('#cx-erro').textContent = mensagemErro(e); }
     };
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// Envio automático dos documentos do DP (pasta do escritório)
+// ---------------------------------------------------------------------------
+const SIT_DP = { ENVIADO: ['Enviado', 'EM_DIA'], COMPLEMENTO: ['Complemento enviado', 'EM_DIA'], AGUARDANDO: ['Aguardando documentos', 'PENDENTE'], JA_ENVIADO: ['Já enviado', 'EM_DIA'], SEM_EMAIL: ['Sem e-mail', 'ATENCAO'], ERRO: ['Erro', 'ATENCAO'], DESLIGADO: ['Envio desligado', 'SEM_DADOS'] };
+
+async function envioDp(aoFim, resultado = null) {
+  let d;
+  try { d = await api('GET', '/api/escritorio/envio-dp'); } catch (e) { return aviso(mensagemErro(e)); }
+  const c = d.config, T = d.tipos;
+  const cli = (id) => d.clientes.find((x) => x.id === id);
+  const selo = (k) => `<span class="selo-estado" style="--c:${COR_ESTADO[k]}">`;
+  const linhaPasta = (p) => {
+    const cl = cli(p.empresa_id);
+    return `<tr data-pasta="${esc(p.pasta)}"><td>${esc(p.pasta)}</td>
+      <td><select data-cli><option value="">— escolher o cliente —</option>${d.clientes.map((x) => `<option value="${x.id}" ${x.id === p.empresa_id ? 'selected' : ''}>${esc(x.cliente)}</option>`).join('')}</select>
+        ${cl && !cl.email ? '<br><span class="dica cor-vermelho">sem e-mail no cadastro</span>' : ''}</td>
+      <td>${cl ? Object.entries(T).map(([k, n]) => `<label class="check dp-doc"><input type="checkbox" data-doc="${k}" ${cl.docs.includes(k) ? 'checked' : ''}> ${esc(n)}</label>`).join('') : '<span class="dica">—</span>'}</td>
+      <td>${cl ? `<label class="check"><input type="checkbox" data-auto ${cl.envio_auto ? 'checked' : ''}> enviar</label>` : ''}</td></tr>`;
+  };
+  abrirDialogo(`<div class="dlg-largo"><h2>Envio automático do departamento pessoal</h2>
+    <p class="sutil">O Kontor olha a pasta do DP a cada 5 minutos, com o programa aberto. A organização esperada é <strong>pasta › Cliente › AAAA › MM-AAAA</strong> (ex.: Departamento Pessoal › Agro Conveniencia Ristow › 2026 › 10-2026), com os arquivos <em>Darf Previdenciária</em>, <em>FGTS</em>, <em>Boleto Sindicato</em>, <em>Recibo Mensal</em>, o espelho e resumo da folha e o <em>Recibo Dctf Web</em>. Quando todos os documentos marcados para o cliente chegam, vai um e-mail só com tudo; o que chegar (ou mudar) depois vai num e-mail de complemento. Os valores das guias entram no Controle mensal e a data de envio é marcada.</p>
+    <form id="dp-cfg" class="grade">
+      <label class="largo">Pasta do departamento pessoal <span class="linha-campo"><input name="pasta" value="${esc(c.pasta)}" placeholder="C:\\AAAAA\\Departamento Pessoal">${window.nfseDesktop?.escolherPasta ? '<button type="button" id="dp-escolher">Escolher…</button>' : ''}</span></label>
+      <label>A partir da competência <input type="month" name="desde" value="${esc(c.desde)}"><span class="dica">Meses anteriores nunca são enviados.</span></label>
+      <label class="check"><input type="checkbox" name="ligado" ${c.ligado ? 'checked' : ''}> Envio automático ligado</label>
+      <div class="acoes largo"><button class="primario" type="submit">Salvar</button><button type="button" id="dp-previa">Ver prévia (não envia)</button><button type="button" id="dp-agora">Verificar e enviar agora</button></div>
+    </form>
+    <p class="erro" id="dp-erro"></p>
+    <div id="dp-res">${resultado ? resultadoDp(resultado) : ''}</div>
+    ${c.pasta && !d.pasta_existe ? '<div class="banner teste">A pasta informada não foi encontrada neste computador.</div>' : ''}
+    ${d.pastas.length ? `<h3>Pastas de clientes (${d.pastas.length})</h3><p class="dica">Confira a ligação de cada pasta com o cliente e marque os documentos que ele recebe: o e-mail sai quando todos os marcados estiverem na pasta do mês.</p>
+      <div class="rolagem" style="max-height:340px"><table class="tabela"><thead><tr><th>Pasta</th><th>Cliente</th><th>Documentos enviados</th><th></th></tr></thead><tbody>${d.pastas.map(linhaPasta).join('')}</tbody></table></div>` : ''}
+    ${d.envios.length ? `<details><summary>Últimos envios (${d.envios.length})</summary><table class="tabela"><thead><tr><th>Quando</th><th>Cliente</th><th>Competência</th><th>Documentos</th><th>Situação</th></tr></thead><tbody>
+      ${d.envios.map((v) => `<tr><td>${dhBr(v.enviado_em)}</td><td>${esc(v.cliente)}</td><td>${v.competencia.slice(5)}/${v.competencia.slice(0, 4)}</td><td>${esc(String(v.itens || '').split(',').filter(Boolean).map((t) => T[t] ?? t).join(', '))}${v.complemento ? ' <span class="dica">(complemento)</span>' : ''}</td>
+        <td>${v.situacao === 'ENVIADO' ? `${selo('EM_DIA')}Enviado</span><br><span class="dica">${esc(v.destino ?? '')}</span>` : `${selo('ATENCAO')}Erro</span><br><span class="dica">${esc(v.erro ?? '')}</span>`}</td></tr>`).join('')}</tbody></table></details>` : ''}
+    <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    dlg.onclose = () => aoFim?.();
+    const f = dlg.querySelector('#dp-cfg'), erro = (e) => (dlg.querySelector('#dp-erro').textContent = mensagemErro(e));
+    const dados = () => ({ pasta: f.pasta.value.trim(), desde: f.desde.value, ligado: f.ligado.checked });
+    dlg.querySelector('#dp-escolher') && (dlg.querySelector('#dp-escolher').onclick = async () => { const p = await window.nfseDesktop.escolherPasta('Pasta do departamento pessoal'); if (p) f.pasta.value = p; });
+    f.onsubmit = async (ev) => { ev.preventDefault(); try { await api('PUT', '/api/escritorio/envio-dp/config', dados()); aviso('Configuração salva.'); envioDp(aoFim); } catch (e) { erro(e); } };
+    const verificar = async (enviar, b) => {
+      if (enviar && !confirm('Enviar agora aos clientes os conjuntos completos que ainda não foram enviados?')) return;
+      b.disabled = true; const t = b.textContent; b.textContent = 'Verificando a pasta…';
+      try { await api('PUT', '/api/escritorio/envio-dp/config', dados()); const r = await api('POST', '/api/escritorio/envio-dp/verificar', { enviar }); envioDp(aoFim, r); }
+      catch (e) { b.disabled = false; b.textContent = t; erro(e); }
+    };
+    dlg.querySelector('#dp-previa').onclick = (ev) => verificar(false, ev.target);
+    dlg.querySelector('#dp-agora').onclick = (ev) => verificar(true, ev.target);
+    dlg.querySelectorAll('tr[data-pasta]').forEach((tr) => {
+      const pasta = tr.dataset.pasta;
+      const sel = tr.querySelector('[data-cli]');
+      sel.onchange = async () => { try { if (sel.value) await api('PUT', `/api/escritorio/envio-dp/cliente/${sel.value}`, { dp_pasta: pasta }); envioDp(aoFim); } catch (e) { erro(e); } };
+      const id = Number(sel.value);
+      tr.querySelectorAll('[data-doc]').forEach((ch) => (ch.onchange = async () => {
+        const docs = [...tr.querySelectorAll('[data-doc]:checked')].map((x) => x.dataset.doc);
+        try { await api('PUT', `/api/escritorio/envio-dp/cliente/${id}`, { dp_docs: docs }); } catch (e) { ch.checked = !ch.checked; erro(e); }
+      }));
+      const au = tr.querySelector('[data-auto]');
+      if (au) au.onchange = async () => { try { await api('PUT', `/api/escritorio/envio-dp/cliente/${id}`, { dp_envio_auto: au.checked }); } catch (e) { au.checked = !au.checked; erro(e); } };
+    });
+  });
+}
+
+function resultadoDp(r) {
+  if (!r.length) return '<div class="cartao"><p class="dica">Nenhum documento novo nas pastas dos clientes ligados (a partir da competência escolhida).</p></div>';
+  const T = { DARF: 'DARF', FGTS: 'FGTS', SINDICATO: 'Sindicato', RECIBO: 'Recibo mensal', FOLHA: 'Espelho da folha', RECIBO_DCTF: 'Recibo DCTFWeb' };
+  return `<div class="cartao"><h3 style="margin-top:0">Resultado</h3><table class="tabela"><thead><tr><th>Cliente</th><th>Competência</th><th>Na pasta</th><th>Faltando</th><th>Situação</th></tr></thead><tbody>
+    ${r.map((x) => `<tr><td>${esc(x.cliente)}</td><td>${x.competencia.slice(5)}/${x.competencia.slice(0, 4)}</td><td>${x.arquivos.map((t) => T[t]).join(', ')}</td><td>${x.faltando.length ? `<span class="cor-ambar">${x.faltando.map((t) => T[t]).join(', ')}</span>` : '—'}</td>
+      <td><span class="selo-estado" style="--c:${COR_ESTADO[SIT_DP[x.situacao][1]]}">${x.mensagem === 'pronto para enviar' ? 'Pronto para enviar' : SIT_DP[x.situacao][0]}</span>${x.mensagem && x.mensagem !== 'pronto para enviar' ? `<br><span class="dica">${esc(x.mensagem)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
 }

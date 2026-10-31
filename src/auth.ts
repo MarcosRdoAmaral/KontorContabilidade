@@ -58,6 +58,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/escritorio\/resumo-financeiro\/\d+$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/controle(\/linha|\/planilha\/(analisar|importar))?$/, mod: ['controle'] },
   { r: /^\/api\/escritorio\/fechamento(\/\d+(\/atividades|\/dctfweb(\/buscar)?|\/pgdas\/(calcular|transmitir|buscar)|\/arquivo|\/enviar)?)?$/, mod: ['controle'] },
+  { r: /^\/api\/escritorio\/envio-dp(\/config|\/cliente\/\d+|\/verificar)?$/, mod: ['controle'] },
   { r: /^\/api\/escritorio\/acessos(\/\d+(\/revelar)?)?$/, mod: ['senhas'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira$/, mod: ['carteira', 'visao', 'obrigacoes', 'certificados', 'honorarios', 'captura'] },
   { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer|\/planilha\/(analisar|importar))?$/, mod: ['carteira'] },
