@@ -1,3 +1,4 @@
+import { diaUtil } from './diautil.js';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { ErroNegocio, certificadoDaEmpresa } from './emissao.js';
@@ -92,7 +93,7 @@ const JA_TRANSMITIDA = /Ja_Transmitida|j[áa] (foi )?transmitida|j[áa] existe d
  * Transmite a DCTFWeb em andamento e gera o DARF. Com soBuscar = true não transmite nada: só busca o recibo e
  * gera o DARF da declaração já transmitida por outro sistema (SCI, Domínio, e-CAC...).
  */
-export async function transmitirDctfweb(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, transporte?: Transporte, soBuscar = false) {
+export async function transmitirDctfweb(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, transporte?: Transporte, soBuscar = false, dataPagamento?: string | null) {
   const mes = MES.parse(mesBr);
   semDemonstracao(escritorioId, transporte);
   const e = empresaDoEscritorio(escritorioId, empresaId);
@@ -128,15 +129,29 @@ export async function transmitirDctfweb(escritorioId: number, usuarioId: number,
       reciboPdf = r3.ok ? pdfB64(r3.dados) : null;
       if (soBuscar && !reciboPdf) erroIntegra(r3.ok ? { ...r3, mensagens: [{ codigo: '', texto: 'Não há DCTFWeb transmitida para este período.' }] } : r3, 'DCTFWeb (recibo)');
     } catch (err) { if (soBuscar) throw err; /* segue */ }
+    // DARF: com a data de pagamento escolhida; sem ela, a Receita usa hoje. Se o cálculo de juros e multa falhar
+    // (acontece em fim de semana/feriado ou instabilidade da Receita), tenta de novo com o próximo dia útil.
+    const gerar = (data?: string | null) => i.consultar(e.documento, 'DCTFWEB', 'GERARGUIA31', { ...dados, ...(data ? { DataAcolhimentoProposta: Number(data.replace(/-/g, '')) } : {}) }, 'Emitir');
     try {
-      const r4 = await i.consultar(e.documento, 'DCTFWEB', 'GERARGUIA31', dados, 'Emitir');
+      let r4 = await gerar(dataPagamento);
       guia = r4.ok ? pdfB64(r4.dados) : null;
-      if (!guia) avisoGuia = textoMsgs(r4.mensagens) || 'A DCTFWeb não gerou DARF (sem valor a pagar ou já pago).';
+      if (!guia && !dataPagamento && /juros|multa|inesperad/i.test(textoMsgs(r4.mensagens))) {
+        r4 = await gerar(diaUtil(hojeBr(), 1));
+        guia = r4.ok ? pdfB64(r4.dados) : null;
+      }
+      if (!guia) {
+        const t = textoMsgs(r4.mensagens);
+        avisoGuia = /juros|multa|inesperad/i.test(t)
+          ? 'A Receita não conseguiu calcular juros e multa do DARF (erro no sistema da própria Receita). A declaração está transmitida: gere o DARF de novo mais tarde ou escolha outra data de pagamento.'
+          : t || 'A DCTFWeb não gerou DARF (sem valor a pagar ou já pago).';
+      }
     } catch (err: any) { avisoGuia = err?.message ?? String(err); }
     const lida = guia ? await lerGuia(Buffer.from(guia, 'base64')) : { valor: null, vencimento: null };
+    // sem DARF novo, mantém o que já estava guardado
     gravar(empresaId, mes, 'DCTFWEB', usuarioId, {
-      situacao: 'TRANSMITIDA', recibo: recibo ? String(recibo) : null, transmitida_em: jaTransmitida ? null : new Date().toISOString(), valor: lida.valor, vencimento: lida.vencimento,
-      recibo_pdf: reciboPdf ? Buffer.from(reciboPdf, 'base64') : null, guia_pdf: guia ? Buffer.from(guia, 'base64') : null, erro: avisoGuia,
+      situacao: 'TRANSMITIDA', ...(recibo ? { recibo: String(recibo) } : {}), ...(jaTransmitida ? {} : { transmitida_em: new Date().toISOString() }),
+      ...(reciboPdf ? { recibo_pdf: Buffer.from(reciboPdf, 'base64') } : {}),
+      ...(guia ? { guia_pdf: Buffer.from(guia, 'base64'), valor: lida.valor, vencimento: lida.vencimento } : {}), erro: avisoGuia,
     });
     marcarTarefa(empresaId, mes, 'DCTFWEB', usuarioId, recibo ? String(recibo) : null, jaTransmitida ? 'DCTFWeb transmitida por outro sistema; recibo e DARF buscados pelo Kontor.' : 'DCTFWeb transmitida pelo Kontor (Integra Contador).');
     lancarNoControle(empresaId, mes, 'DP', 'darf_prev', lida.valor, usuarioId);

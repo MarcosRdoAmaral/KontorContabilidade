@@ -51,3 +51,36 @@ test('busca DCTFWeb e PGDAS-D transmitidos por outro sistema, sem transmitir', a
     await app.close();
   }
 });
+
+test('DARF: se a Receita falha no cálculo de juros e multa, tenta com o próximo dia útil e guarda o aviso', async () => {
+  const F = await import('../src/servicos/fechamento.js');
+  const { db } = await import('../src/db.js');
+  const a = (db.prepare("SELECT id FROM empresas WHERE razao_social = 'Alfa'").get() as any).id;
+  const pdf = Buffer.from('%PDF-1.4 teste').toString('base64');
+  const datas: (number | undefined)[] = [];
+  let falhaSempre = true;
+  const ok = (dados: any) => ({ status: 200, corpo: { status: 200, mensagens: [], dados: JSON.stringify(dados) } });
+  const transporte = {
+    async autenticar() { return { accessToken: 'a', jwtToken: 'j', expiraEm: Date.now() + 3600e3 }; },
+    async consultar(corpo: any) {
+      const s = corpo.pedidoDados.idServico;
+      if (s === 'CONSRECIBO32') return ok({ PDFByteArrayBase64: pdf });
+      if (s === 'GERARGUIA31') {
+        const d = JSON.parse(corpo.pedidoDados.dados).DataAcolhimentoProposta; datas.push(d);
+        if (falhaSempre || d === undefined) return { status: 500, corpo: { status: 500, mensagens: [{ codigo: 'x', texto: "Exceção inesperada. Houve um erro na etapa 'Cálculo juros e multa.'" }], dados: '' } };
+        return ok({ PDFByteArrayBase64: pdf });
+      }
+      throw new Error('não devia chamar ' + s);
+    },
+  };
+  const r = await F.transmitirDctfweb(1, 1, a, '2026-09', transporte, true);
+  assert.equal(datas.length, 2, 'tentou de novo');
+  assert.equal(datas[0], undefined); assert.ok(datas[1]! > 20260000);
+  assert.match(r.aviso!, /juros e multa/);
+  const f = db.prepare("SELECT situacao, guia_pdf IS NOT NULL AS g FROM fechamentos WHERE empresa_id = ? AND tipo = 'DCTFWEB'").get(a) as any;
+  assert.deepEqual([f.situacao, f.g], ['TRANSMITIDA', 1], 'mantém o DARF já guardado');
+  falhaSempre = false; datas.length = 0;
+  const r2 = await F.transmitirDctfweb(1, 1, a, '2026-09', transporte, true, '2026-11-05');
+  assert.deepEqual(datas, [20261105], 'usa a data escolhida');
+  assert.equal(r2.temGuia, true);
+});

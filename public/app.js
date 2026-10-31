@@ -4638,7 +4638,7 @@ async function telaControle() {
   $('#ct-cab').innerHTML = `<tr>${COLS[f.area].map((c) => `<th class="${/Faturamento|Imposto|Alíquota|DARF|FGTS|Sindicato|Total/.test(c) ? 'num' : ''}">${c}</th>`).join('')}</tr>`;
   const cliente = (c) => `<td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span>${c.usuario ? `<br><span class="dica" title="${esc(dhBr(c.atualizado_em))}">por ${esc(c.usuario)}</span>` : ''}</td>`;
   const SIT_FECH = { TRANSMITIDA: ['Transmitida', 'cor-verde'], CALCULADO: ['Calculada', 'cor-ambar'], ERRO: ['Erro', 'cor-vermelho'] };
-  const celFech = (c, tipo) => { const x = fech.resumo[c.empresa_id]?.[tipo]; const [r, cor] = x ? SIT_FECH[x.situacao] : ['Abrir', 'dica'];
+  const celFech = (c, tipo) => { const x = fech.resumo[c.empresa_id]?.[tipo]; const [r, cor] = !x ? ['Abrir', 'dica'] : x.situacao === 'TRANSMITIDA' && !x.tem_guia && x.erro ? ['Transmitida, sem guia', 'cor-ambar'] : SIT_FECH[x.situacao];
     return `<td><button type="button" class="link-fech ${cor}" data-fech="${c.empresa_id}" title="${esc(x?.erro ?? 'Abrir o fechamento deste cliente')}">${r}${x?.valor != null && x.situacao !== 'ERRO' ? `<br><span class="dica">${brl(x.valor)}</span>` : ''}</button></td>`; };
   const aliq = (d) => (d.faturamento > 0 && d.imposto != null ? `${(d.imposto / d.faturamento * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%` : '—');
   const linha = (c) => {
@@ -4764,6 +4764,7 @@ async function abrirFechamento(empresaId, mes, aoFim) {
     ${d.tem_funcionarios || dc ? `<fieldset class="sub"><legend>DCTFWeb</legend>
       ${dc ? `<p>Situação: <strong class="${dc.situacao === 'TRANSMITIDA' ? 'cor-verde' : 'cor-vermelho'}">${dc.situacao === 'TRANSMITIDA' ? `Transmitida${dc.recibo ? ` (recibo ${esc(dc.recibo)})` : ''}${dc.transmitida_em ? ` em ${dhBr(dc.transmitida_em)}` : ''}` : 'Erro'}</strong>${dc.valor != null ? ` · DARF ${brl(dc.valor)}${dc.vencimento ? `, vence ${dataBr(dc.vencimento)}` : ''}` : ''}${dc.erro ? `<br><span class="dica ${dc.situacao === 'ERRO' ? 'cor-vermelho' : ''}">${esc(dc.erro)}</span>` : ''}</p>` : '<p class="dica">A declaração em andamento vem do fechamento da folha no eSocial (e da EFD-Reinf). O Kontor assina com o certificado do escritório, transmite e gera o DARF.</p>'}
       <p class="dica">Declaração já transmitida? <button type="button" id="fc-dc-buscar">Buscar recibo e DARF já transmitidos</button></p>
+      <label>Data de pagamento do DARF <input type="date" id="fc-dc-data"><span class="dica">Em branco = hoje. Para DARF em atraso, juros e multa são calculados até esta data.</span></label>
       <div class="acoes"><button type="button" class="primario" id="fc-dctf">${dc?.situacao === 'TRANSMITIDA' ? 'Gerar o DARF de novo' : 'Transmitir e gerar o DARF'}</button>${dc?.tem_guia ? arq('DCTFWEB', 'guia', 'DARF (PDF)') : ''}${dc?.tem_recibo ? arq('DCTFWEB', 'recibo', 'Recibo') : ''}</div>
     </fieldset>` : ''}
     <fieldset class="sub"><legend>Enviar ao cliente</legend>
@@ -4801,9 +4802,10 @@ async function abrirFechamento(empresaId, mes, aoFim) {
         catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DAS'; erro(e); }
       };
     }
+    const dataDarf = () => dlg.querySelector('#fc-dc-data')?.value || undefined;
     const buscar = (sel, url, rotulo, msg) => { const b = dlg.querySelector(sel); if (b) b.onclick = async () => {
       b.disabled = true; b.textContent = 'Buscando na Receita…';
-      try { const r = await api('POST', url, { mes }); aviso(msg(r)); recarregar(); }
+      try { const r = await api('POST', url, { mes, dataPagamento: dataDarf() }); aviso(msg(r)); recarregar(); }
       catch (e) { b.disabled = false; b.textContent = rotulo; erro(e); }
     }; };
     buscar('#fc-pg-buscar', `/api/escritorio/fechamento/${empresaId}/pgdas/buscar`, 'Buscar declaração e DAS já transmitidos',
@@ -4814,7 +4816,7 @@ async function abrirFechamento(empresaId, mes, aoFim) {
     if (bd) bd.onclick = async (ev) => {
       if (!confirm(`${dc?.situacao === 'TRANSMITIDA' ? 'Gerar de novo o DARF' : 'Transmitir a DCTFWeb'} de ${rotuloMes(mes)} de ${d.cliente}?`)) return;
       ev.target.disabled = true; ev.target.textContent = 'Falando com a Receita…';
-      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/dctfweb`, { mes }); aviso(`DCTFWeb ${r.jaTransmitida ? 'já estava transmitida' : 'transmitida'}${r.valor != null ? `: DARF ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`); recarregar(); }
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/dctfweb${dc?.situacao === 'TRANSMITIDA' ? '/buscar' : ''}`, { mes, dataPagamento: dataDarf() }); aviso(`DCTFWeb ${r.jaTransmitida ? 'já estava transmitida' : 'transmitida'}${r.valor != null ? `: DARF ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`); recarregar(); }
       catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DARF'; erro(e); }
     };
     dlg.querySelector('#fc-email').onclick = async (ev) => {

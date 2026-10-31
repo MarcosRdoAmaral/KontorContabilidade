@@ -50,6 +50,9 @@ function checar(req: FastifyRequest, empresaId: number) {
   if (!e || e.escritorio_id !== u(req).escritorio_id || (lista && !lista.includes(empresaId))) throw new ErroNegocio('Cliente não encontrado.', 404);
 }
 
+/** Data de pagamento escolhida para a guia (AAAA-MM-DD), se houver. */
+const dataPag = (req: FastifyRequest) => { const d = (req.body as any)?.dataPagamento; return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null; };
+
 export async function rotasEscritorio(app: FastifyInstance) {
   app.register(async (api) => {
     api.addHook('preHandler', exigirLogin);
@@ -333,8 +336,8 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/fechamento', async (req) => ({ resumo: resumoFechamentos(u(req).escritorio_id, mesQ(req)), atividades: ATIVIDADES_PGDAS, tributos: TRIBUTOS_SN }));
     api.get('/api/escritorio/fechamento/:id', async (req) => { checar(req, id(req)); return { ...fechamentoDoCliente(u(req).escritorio_id, id(req), mesQ(req)), mensagem: mensagemFechamento(u(req).escritorio_id, id(req), mesQ(req)).linhas }; });
     api.put('/api/escritorio/fechamento/:id/atividades', async (req) => { checar(req, id(req)); return salvarAtividades(u(req).escritorio_id, id(req), AtividadesCliente.parse((req.body as any)?.ids)); });
-    api.post('/api/escritorio/fechamento/:id/dctfweb', async (req) => { checar(req, id(req)); return transmitirDctfweb(u(req).escritorio_id, u(req).id, id(req), mesQ(req)); });
-    api.post('/api/escritorio/fechamento/:id/dctfweb/buscar', async (req) => { checar(req, id(req)); return transmitirDctfweb(u(req).escritorio_id, u(req).id, id(req), mesQ(req), undefined, true); });
+    api.post('/api/escritorio/fechamento/:id/dctfweb', async (req) => { checar(req, id(req)); return transmitirDctfweb(u(req).escritorio_id, u(req).id, id(req), mesQ(req), undefined, false, dataPag(req)); });
+    api.post('/api/escritorio/fechamento/:id/dctfweb/buscar', async (req) => { checar(req, id(req)); return transmitirDctfweb(u(req).escritorio_id, u(req).id, id(req), mesQ(req), undefined, true, dataPag(req)); });
     api.post('/api/escritorio/fechamento/:id/pgdas/buscar', async (req) => { checar(req, id(req)); return buscarPgdas(u(req).escritorio_id, u(req).id, id(req), mesQ(req)); });
     api.post('/api/escritorio/fechamento/:id/pgdas/calcular', async (req) => { checar(req, id(req)); return calcularPgdas(u(req).escritorio_id, u(req).id, id(req), mesQ(req), EntradaPgdas.parse(req.body)); });
     api.post('/api/escritorio/fechamento/:id/pgdas/transmitir', async (req) => { checar(req, id(req)); return transmitirPgdas(u(req).escritorio_id, u(req).id, id(req), mesQ(req), EntradaPgdas.parse(req.body)); });
