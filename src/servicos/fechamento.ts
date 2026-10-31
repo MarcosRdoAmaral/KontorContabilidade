@@ -129,16 +129,67 @@ const dadosControle = (empresaId: number, mes: string, area: 'FISCAL' | 'DP') =>
   return r ? JSON.parse(r.dados_json) : {};
 };
 
-/** Faturamento (receita bruta do PA) lido do PDF da declaração do PGDAS-D. */
-export async function faturamentoDaDeclaracao(pdf: Buffer): Promise<number | null> {
+/**
+ * Receitas lidas do PDF da declaração do PGDAS-D: do mês (RPA), dos 12 meses anteriores (RBT12), acumulada no ano antes
+ * do mês (RBA) e do ano anterior (RBAA). Cada linha traz mercado interno, externo e total; vale o total.
+ */
+export async function lerDeclaracaoPgdas(pdf: Buffer): Promise<{ rpa: number | null; rbt12: number | null; rba: number | null; rbaa: number | null }> {
   let t = '';
-  try { t = (await textoDoPdf(pdf)).replace(/\s+/g, ' '); } catch { return null; }
+  try { t = (await textoDoPdf(pdf)).replace(/\s+/g, ' '); } catch { return { rpa: null, rbt12: null, rba: null, rbaa: null }; }
   const moeda = (x: string) => Number(x.replace(/\./g, '').replace(',', '.'));
-  // "Receita Bruta do PA (RPA) - Competência  <mercado interno> <mercado externo> <total>"
-  const m = /Receita\s+Bruta\s+do\s+PA\s*\(RPA\)\s*-?\s*Compet[êe]ncia\s*((?:\d{1,3}(?:\.\d{3})*,\d{2}\s*){1,3})/i.exec(t);
-  if (!m) return null;
-  const v = m[1].trim().split(/\s+/).map(moeda);
-  return v.length >= 3 ? v[2] : v[0];
+  const valor = (rotulo: RegExp) => {
+    const m = new RegExp(rotulo.source + '[^\\d]{0,40}?((?:\\d{1,3}(?:\\.\\d{3})*,\\d{2}\\s*){1,3})', 'i').exec(t);
+    if (!m) return null;
+    const v = m[1].trim().split(/\s+/).map(moeda);
+    return v.length >= 3 ? v[2] : v[0];
+  };
+  return {
+    rpa: valor(/Receita\s+Bruta\s+do\s+PA\s*\(RPA\)\s*-?\s*Compet[êe]ncia/),
+    rbt12: valor(/\(RBT12\)/),
+    rba: valor(/\(RBA\)/),
+    rbaa: valor(/\(RBAA\)/),
+  };
+}
+/** Faturamento (receita bruta do PA) lido do PDF da declaração do PGDAS-D. */
+export async function faturamentoDaDeclaracao(pdf: Buffer): Promise<number | null> { return (await lerDeclaracaoPgdas(pdf)).rpa; }
+
+/** Guarda as receitas da declaração (para o faturamento acumulado e o sublimite) e devolve o faturamento do mês. */
+export async function registrarReceitas(empresaId: number, mes: string, pdf: Buffer | null) {
+  if (!pdf) return null;
+  const r = await lerDeclaracaoPgdas(pdf);
+  db.prepare(`INSERT INTO pgdas_receitas (empresa_id, competencia, rpa, rbt12, rba, rbaa) VALUES (?,?,?,?,?,?)
+    ON CONFLICT(empresa_id, competencia) DO UPDATE SET rpa = excluded.rpa, rbt12 = excluded.rbt12, rba = excluded.rba, rbaa = excluded.rbaa, lido_em = datetime('now')`)
+    .run(empresaId, mes, r.rpa, r.rbt12, r.rba, r.rbaa);
+  return r.rpa;
+}
+
+/** Lê as declarações guardadas que ainda não foram lidas (antes de mostrar o Monitor). */
+export async function atualizarReceitas(escritorioId: number) {
+  const l = db.prepare(`SELECT f.empresa_id, f.competencia, f.declaracao_pdf FROM fechamentos f JOIN empresas e ON e.id = f.empresa_id
+    WHERE e.escritorio_id = ? AND f.tipo = 'PGDASD' AND f.declaracao_pdf IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM pgdas_receitas r WHERE r.empresa_id = f.empresa_id AND r.competencia = f.competencia)`).all(escritorioId) as any[];
+  for (const f of l) await registrarReceitas(f.empresa_id, f.competencia, Buffer.from(f.declaracao_pdf));
+}
+
+/**
+ * Só a declaração do PGDAS-D (sem gerar DAS): uma chamada. Guarda declaração e recibo, as receitas e o faturamento
+ * do mês no controle. Para o faturamento acumulado do Monitor.
+ */
+export async function consultarDeclaracaoPgdas(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, transporte?: Transporte) {
+  const mes = MES.parse(mesBr);
+  semDemonstracao(escritorioId, transporte);
+  const e = empresaDoEscritorio(escritorioId, empresaId);
+  const r = await Integra.para(escritorioId, transporte).consultar(e.documento, 'PGDASD', 'CONSULTIMADECREC14', { periodoApuracao: mes.replace('-', '') }, 'Consultar');
+  if (!r.ok) erroIntegra(r, 'PGDAS-D (consulta da declaração)');
+  const d = Array.isArray(r.dados) ? r.dados[0] : r.dados;
+  if (!d?.numeroDeclaracao) throw new ErroNegocio('Não há PGDAS-D transmitido para este período.');
+  const pdfDe = (o: any) => (typeof o?.pdf === 'string' && o.pdf ? Buffer.from(o.pdf, 'base64') : null);
+  const decl = pdfDe(d.declaracao);
+  gravar(empresaId, mes, 'PGDASD', usuarioId, { situacao: 'TRANSMITIDA', recibo: String(d.numeroDeclaracao), declaracao_pdf: decl, recibo_pdf: pdfDe(d.recibo) });
+  const faturamento = await registrarReceitas(empresaId, mes, decl);
+  lancarNoControle(empresaId, mes, 'FISCAL', 'faturamento', faturamento, usuarioId, true);
+  const rec = db.prepare('SELECT rbt12, rba FROM pgdas_receitas WHERE empresa_id = ? AND competencia = ?').get(empresaId, mes) as any;
+  return { recibo: String(d.numeroDeclaracao), faturamento, rbt12: rec?.rbt12 ?? null, rba: rec?.rba ?? null };
 }
 
 const JA_TRANSMITIDA = /Ja_Transmitida|j[áa] (foi )?transmitida|j[áa] existe declara/i;
@@ -315,8 +366,7 @@ export async function buscarPgdas(escritorioId: number, usuarioId: number, empre
     declaracao_pdf: pdfDe(d?.declaracao), recibo_pdf: pdfDe(d?.recibo), guia_pdf: das ? Buffer.from(das, 'base64') : null, erro: aviso,
   });
   marcarTarefa(empresaId, mes, 'DAS', usuarioId, numero, 'PGDAS-D transmitido por outro sistema; declaração e DAS buscados pelo Kontor.');
-  const declPdf = pdfDe(d?.declaracao);
-  const faturamento = declPdf ? await faturamentoDaDeclaracao(declPdf) : null;
+  const faturamento = await registrarReceitas(empresaId, mes, pdfDe(d?.declaracao));
   lancarNoControle(empresaId, mes, 'FISCAL', 'faturamento', faturamento, usuarioId, true);
   lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', lida.valor ?? (faturamento === 0 ? 0 : null), usuarioId, true);
   return { recibo: numero, faturamento, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!das, aviso, maed: !!d?.maed };
@@ -347,6 +397,7 @@ export async function transmitirPgdasZerado(escritorioId: number, usuarioId: num
       declaracao_pdf: t?.declaracao ? Buffer.from(t.declaracao, 'base64') : null, recibo_pdf: t?.recibo ? Buffer.from(t.recibo, 'base64') : null, guia_pdf: null, erro: null,
     });
     marcarTarefa(empresaId, mes, 'DAS', usuarioId, recibo, 'PGDAS-D sem faturamento transmitido pelo Kontor (Integra Contador).');
+    await registrarReceitas(empresaId, mes, t?.declaracao ? Buffer.from(t.declaracao, 'base64') : null);
     lancarNoControle(empresaId, mes, 'FISCAL', 'faturamento', 0, usuarioId, true);
     lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', 0, usuarioId, true);
     lancarNoControle(empresaId, mes, 'FISCAL', 'sem_movimento', true, usuarioId, true);

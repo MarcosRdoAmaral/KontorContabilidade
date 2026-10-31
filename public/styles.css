@@ -406,7 +406,7 @@ input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); 
 .selo-estado { display: inline-flex; align-items: center; gap: 5px; font-size: .75rem; white-space: nowrap; }
 .selo-estado::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .mon-sub { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-.mon-sub-linha { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 170px; gap: 12px; align-items: center; }
+.mon-sub-linha { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 210px; gap: 12px; align-items: center; }
 .mon-sub-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mon-sub-trilho { position: relative; height: 14px; background: var(--cinza-fundo); border-radius: 4px; }
 .mon-sub-trilho span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
@@ -433,3 +433,5 @@ input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); 
 .fc-zerado { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--borda-tracejada); border-radius: var(--raio); }
 .fc-zerado .acoes { margin-top: 8px; align-items: center; }
 .av-fechar { display: inline-flex; align-items: center; gap: 6px; margin: 0 6px; white-space: nowrap; }
+.topo-cartao { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.mon-sub-linha .dica { display: block; margin-top: 4px; }

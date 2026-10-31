@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.22.0';
+export const MANUAL_VERSAO = '1.23.0';
 
 export const MANUAL = [
   {
@@ -148,7 +148,7 @@ export const MANUAL = [
         <li><strong>Visão geral dos clientes:</strong> cada cliente entra na pior situação entre os processos: <em>Atenção</em> (algo vencido, em aberto ou com erro), <em>Pendentes</em> (algo a fazer ou conferir), <em>Processando</em>, <em>Em dia</em> ou <em>Sem informação</em>.</li>
         <li><strong>Por processo:</strong> PGDAS-D e PGMEI (obrigações DAS e DAS do MEI e o fechamento), DCTFWeb (DCTFWeb e DARF previdenciário), FGTS Digital (última consulta), Situação fiscal (último relatório da Receita/PGFN), Parcelamentos e Caixa postal (última consulta), Certificados (A1 e procurações vencidos ou vencendo em 30 dias) e Demais obrigações. Clique no nome do processo, num pedaço da barra ou numa situação para listar os clientes.</li>
         <li><strong>Notificações:</strong> o que pede ação, do mais grave ao mais recente, com busca por cliente, processo ou assunto.</li>
-        <li><strong>Sublimites do Simples:</strong> RBT12 dos 10 maiores clientes do Simples (12 meses antes do mês atual), comparado ao sublimite de R$ 3,6 milhões e ao limite de R$ 4,8 milhões. Usa o faturamento do Controle mensal quando preenchido e, nos outros meses, as notas capturadas.</li>
+        <li><strong>Faturamento acumulado:</strong> o faturamento do ano de cada cliente do Simples, lido da declaração do PGDAS-D mais recente buscada no Kontor (receita acumulada no ano até o mês da declaração), com o RBT12 e a projeção até dezembro no ritmo do ano. Fica em <em>Atenção</em> quem passou do sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS; acima de 20% do sublimite, já no mês seguinte) ou do limite de R$ 4,8 milhões, e em <em>Perto do sublimite</em> quem já usou 80% ou, no ritmo do ano, passa dele até dezembro. Esses avisos também vão para as notificações. O botão <em>Buscar declarações</em> traz a declaração do mês passado de todos os clientes do Simples (uma chamada por cliente, sem gerar DAS); o <em>Buscar DAS já transmitidos</em> do Controle mensal também alimenta esse quadro.</li>
       </ul>
       <h3>Parcelamentos e caixa postal</h3>
       <p>Os botões <em>Consultar parcelamentos</em> e <em>Consultar caixa postal</em> (para quem tem acesso à Situação fiscal) buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Cada chamada é cobrada pelo SERPRO e nada roda sozinho.</p>

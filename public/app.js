@@ -5259,6 +5259,7 @@ const legendaSeries = (series) => `<div class="legenda">${series.map((s) => `<sp
 // ---------------------------------------------------------------------------
 // Monitor fiscal
 // ---------------------------------------------------------------------------
+const MES_DECL = (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(); // declaração do mês passado
 async function telaMonitor() {
   const d = await api('GET', '/api/escritorio/monitor');
   const f = telaMonitor.filtro ??= { estado: null, processo: null, q: '' };
@@ -5287,14 +5288,17 @@ async function telaMonitor() {
       </section>
     </div>
     <section class="cartao">
-      <h2>Sublimites do Simples</h2>
-      <p class="sutil">RBT12 (${nomeMes(d.sublimites.periodo.de)} a ${nomeMes(d.sublimites.periodo.ate)}) dos 10 maiores clientes do Simples. Usa o faturamento do Controle mensal quando preenchido; nos outros meses, as notas de venda e de serviço capturadas.</p>
+      <div class="topo-cartao"><div><h2>Faturamento acumulado</h2>
+        <p class="sutil">Faturamento do ano de cada cliente do Simples, lido da declaração do PGDAS-D mais recente buscada no Kontor, comparado ao sublimite de R$ 3,6 milhões (acima dele, ICMS e ISS saem do DAS) e ao limite de R$ 4,8 milhões do Simples. Quem passou ou está perto do sublimite aparece primeiro, em Atenção.</p></div>
+        ${estado.usuario.modulos.includes('controle') ? `<button id="mon-decl" title="Uma chamada ao Integra Contador por cliente">Buscar declarações de ${rotuloMes(MES_DECL)}</button>` : ''}</div>
       ${d.sublimites.clientes.length ? `<div class="mon-sub">${d.sublimites.clientes.map((c) => {
-        const pct = c.rbt12 / d.sublimites.limite; const cor = c.rbt12 > d.sublimites.sublimite ? 'var(--g-atencao)' : c.rbt12 > d.sublimites.sublimite * 0.8 ? 'var(--g-pend)' : 'var(--g-s1)';
-        return `<div class="mon-sub-linha"><span class="mon-sub-nome">${esc(c.cliente)}</span><div class="mon-sub-trilho"><span style="width:${Math.min(pct, 1) * 100}%;background:${cor}" title="${brl(c.rbt12)}"></span><i class="marca-sub" style="left:${(d.sublimites.sublimite / d.sublimites.limite) * 100}%" title="Sublimite R$ 3,6 mi"></i></div>
-          <span class="num">${brl(c.rbt12)}<br><span class="dica">${Math.round((c.rbt12 / d.sublimites.sublimite) * 100)}% do sublimite${c.meses_do_controle ? '' : ' · só notas'}</span></span></div>`; }).join('')}
-        <p class="dica">Traço vertical: sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS acima dele). A barra vai até o limite de R$ 4,8 milhões do Simples. Âmbar a partir de 80% do sublimite; vermelho acima dele.</p></div>`
-        : '<div class="vazio">Sem faturamento dos clientes do Simples nos últimos 12 meses (preencha o Controle mensal ou capture as notas).</div>'}
+        const cor = c.situacao === 'ATENCAO' ? 'var(--g-atencao)' : c.situacao === 'PENDENTE' ? 'var(--g-pend)' : 'var(--g-s2)';
+        return `<div class="mon-sub-linha"><span class="mon-sub-nome"><strong>${esc(c.cliente)}</strong><br><span class="selo-estado" style="--c:${COR_ESTADO[c.situacao]}">${c.situacao === 'ATENCAO' ? 'Atenção' : c.situacao === 'PENDENTE' ? 'Perto do sublimite' : 'Dentro do sublimite'}</span></span>
+          <div><div class="mon-sub-trilho"><span style="width:${Math.min(c.acumulado / d.sublimites.limite, 1) * 100}%;background:${cor}" title="${brl(c.acumulado)}"></span><i class="marca-sub" style="left:${(d.sublimites.sublimite / d.sublimites.limite) * 100}%" title="Sublimite R$ 3,6 mi"></i></div>
+            <span class="dica">${esc(c.motivo)}${c.projecao != null ? ` Projeção para o ano: ${brl(c.projecao)}.` : ''}${c.rbt12 != null ? ` RBT12: ${brl(c.rbt12)}.` : ''}</span></div>
+          <span class="num">${brl(c.acumulado)}<br><span class="dica">${c.do_ano ? '' : 'ano anterior · '}até ${c.competencia.slice(5)}/${c.competencia.slice(0, 4)} · ${Math.round((c.acumulado / d.sublimites.sublimite) * 100)}% do sublimite</span></span></div>`; }).join('')}
+        <p class="dica">Traço vertical: sublimite de R$ 3,6 milhões. A barra vai até o limite de R$ 4,8 milhões. Acumulado = receita do ano até o mês da última declaração buscada.${d.sublimites.sem_declaracao ? ` ${d.sublimites.sem_declaracao} cliente(s) do Simples ainda sem declaração buscada.` : ''}</p></div>`
+        : `<div class="vazio">Nenhuma declaração do PGDAS-D buscada ainda${d.sublimites.sem_declaracao ? ` (${d.sublimites.sem_declaracao} cliente(s) do Simples)` : ''}. Use o botão acima ou "Buscar DAS já transmitidos" no Controle mensal.</div>`}
     </section>
     <section class="cartao"><h2 id="mon-tit-clientes">Clientes</h2><div id="mon-clientes"></div></section>`;
 
@@ -5321,6 +5325,9 @@ async function telaMonitor() {
   };
   $('#mon-busca').oninput = (e) => { f.q = e.target.value; pintarNotif(); };
   $('#mon-atualizar').onclick = () => telaMonitor();
+  $('#mon-decl') && ($('#mon-decl').onclick = () => loteFechamento(`Buscar as declarações do Simples de ${rotuloMes(MES_DECL)}`, d.clientes.filter((c) => c.regime === 'SIMPLES'),
+    'Para cada cliente do Simples, o Kontor busca a declaração do PGDAS-D já transmitida (sem gerar DAS) e lê o faturamento do mês, o acumulado do ano e o RBT12. O faturamento do mês também vai para o Controle mensal. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
+    (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/declaracao`, { mes: MES_DECL }).then((r) => `${r.faturamento != null ? `faturamento do mês ${brl(r.faturamento)}` : 'declaração encontrada'}${r.rba != null ? ` · acumulado ${brl(r.rba + (r.faturamento ?? 0))}` : ''}`), telaMonitor));
   $('#mon-parc') && ($('#mon-parc').onclick = () => loteFechamento('Consultar parcelamentos', d.clientes.filter((c) => c.regime === 'SIMPLES' || c.regime === 'MEI'),
     'Para cada cliente do Simples ou MEI, o Kontor consulta na Receita os pedidos de parcelamento (normal, especial, Pert e Relp) e, havendo parcelamento ativo, as parcelas em aberto. São de 4 a 8 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO. O cliente precisa ter dado procuração ao escritório.',
     (c) => api('POST', `/api/escritorio/parcelamentos/${c.empresa_id}/consultar`).then((r) => ({ SEM_PARCELAMENTO: 'sem parcelamento', EM_DIA: `${r.ativos} parcelamento(s) em dia`, EM_ATRASO: `${r.atrasadas} parcela(s) em atraso`, SEM_PROCURACAO: 'sem procuração', ERRO: `erro: ${r.erro}` }[r.situacao] + (r.erro && r.situacao !== 'ERRO' ? ` (${r.erro})` : ''))), telaMonitor));

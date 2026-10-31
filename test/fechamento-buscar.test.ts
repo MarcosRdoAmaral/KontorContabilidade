@@ -114,6 +114,8 @@ test('PGDAS-D: faturamento lido da declaração; transmissão só zerada', async
   const decl = await pdfCom('2.1) Discriminativo de receitas Receita Bruta do PA (RPA) - Competência 14.500,00 0,00 14.500,00 Receita bruta acumulada 120.000,00');
   assert.equal(await F.faturamentoDaDeclaracao(decl), 14500);
   assert.equal(await F.faturamentoDaDeclaracao(await pdfCom('outra coisa')), null);
+  const decl2 = await pdfCom('Receita bruta acumulada nos doze meses anteriores ao PA (RBT12) 1.100.000,00 0,00 1.100.000,00 Receita bruta acumulada no ano-calendário corrente (RBA) 820.000,00 0,00 820.000,00 Receita bruta acumulada no ano-calendário anterior (RBAA) 1.000.000,00 0,00 1.000.000,00 Receita Bruta do PA (RPA) - Competência 95.000,00 0,00 95.000,00');
+  assert.deepEqual(await F.lerDeclaracaoPgdas(decl2), { rpa: 95000, rbt12: 1100000, rba: 820000, rbaa: 1000000 });
   const a = (db.prepare("SELECT id FROM empresas WHERE razao_social = 'Alfa'").get() as any).id;
   const ok = (dados: any) => ({ status: 200, corpo: { status: 200, mensagens: [], dados: JSON.stringify(dados) } });
   const corpos: any[] = [];

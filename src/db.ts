@@ -1074,6 +1074,17 @@ const migracoes: string[] = [
   // 40: assinatura (imagem) no fim dos e-mails do escritório
   `ALTER TABLE escritorios ADD COLUMN assinatura_img BLOB;
   ALTER TABLE escritorios ADD COLUMN assinatura_mime TEXT;`,
+  // 41: receitas lidas da declaração do PGDAS-D (faturamento acumulado e sublimite)
+  `CREATE TABLE pgdas_receitas (
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    competencia TEXT NOT NULL,          -- AAAA-MM (PA da declaração)
+    rpa REAL,                           -- receita bruta do PA (o mês)
+    rbt12 REAL,                         -- 12 meses anteriores ao PA
+    rba REAL,                           -- acumulada no ano-calendário, antes do PA
+    rbaa REAL,                          -- ano-calendário anterior
+    lido_em TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (empresa_id, competencia)
+  );`,
 ];
 
 export function migrar(): void {

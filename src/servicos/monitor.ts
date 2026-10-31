@@ -107,6 +107,10 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
   /** null = sem informação (processo que não se aplica ao cliente ou nunca consultado). */
   const contar = (l: (Estado | null)[]) => ({
     ...Object.fromEntries((['EM_DIA', 'PENDENTE', 'ATENCAO', 'PROCESSANDO'] as Estado[]).map((e) => [e, l.filter((x) => x === e).length])), SEM_DADOS: l.filter((x) => !x).length });
+  const subl = sublimites(ids);
+  for (const x of subl.clientes) if (x.situacao !== 'EM_DIA')
+    notificacoes.push({ nivel: x.situacao, processo: 'PGDAS', empresa_id: x.empresa_id, cliente: x.cliente, titulo: x.situacao === 'ATENCAO' ? 'Sublimite do Simples ultrapassado' : 'Perto do sublimite do Simples',
+      texto: `Faturamento acumulado em ${x.competencia.slice(0, 4)}: ${x.acumulado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (até ${x.competencia.slice(5)}/${x.competencia.slice(0, 4)}). ${x.motivo}`, data: hoje });
   notificacoes.sort((a, b) => PESO[b.nivel] - PESO[a.nivel] || b.data.localeCompare(a.data));
   return {
     atualizado_em: new Date().toISOString(),
@@ -115,7 +119,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
     processos: PROCESSOS.map((p) => ({ ...p, contagem: contar(linhas.map((l) => l.processos[p.id])) })),
     clientes: linhas,
     notificacoes: notificacoes.slice(0, 300),
-    sublimites: sublimites(escritorioId, mes, ids),
+    sublimites: subl,
   };
 }
 
@@ -164,22 +168,35 @@ export function movimentoMensal(escritorioId: number, empresaId: number, de: str
   return [...r.values()].map((m) => ({ ...m, receita_nfe: r2(m.receita_nfe), receita_nfse: r2(m.receita_nfse), custo_nfe: r2(m.custo_nfe), custo_nfse: r2(m.custo_nfse) }));
 }
 
-/** RBT12 dos clientes do Simples: faturamento do controle mensal quando preenchido; senão, as notas capturadas. */
-function sublimites(escritorioId: number, mes: string, ids: number[]) {
-  const de = mesesAntes(mes, 12), ate = mesesAntes(mes, 1);
+/**
+ * Faturamento acumulado dos clientes do Simples, pelas declarações do PGDAS-D guardadas no Kontor (a mais recente de
+ * cada cliente): acumulado no ano (RBA + receita do mês da declaração), RBT12 e a projeção até dezembro no ritmo do ano.
+ * Sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS) e limite de R$ 4,8 milhões do Simples.
+ */
+export const SUBLIMITE = 3_600_000, LIMITE_SN = 4_800_000;
+function sublimites(ids: number[]) {
+  const ano = hojeBr().slice(0, 4);
   const simples = ids.length ? (db.prepare(`SELECT id, COALESCE(nome_fantasia, razao_social) AS cliente FROM empresas WHERE id IN (${ids.join(',')}) AND regime = 'SIMPLES'`).all() as any[]) : [];
-  const lista = simples.map((c) => {
-    const controle = new Map((db.prepare(`SELECT competencia, dados_json FROM controle_mensal WHERE empresa_id = ? AND area = 'FISCAL' AND competencia BETWEEN ? AND ?`).all(c.id, de, ate) as any[])
-      .map((l) => [l.competencia, JSON.parse(l.dados_json)]));
-    let rbt12 = 0, doControle = 0;
-    for (const m of movimentoMensal(escritorioId, c.id, de, ate)) {
-      const d = controle.get(m.mes);
-      if (d?.faturamento != null) { rbt12 += d.faturamento; doControle++; }
-      else if (!d?.sem_movimento) rbt12 += m.receita_nfe + m.receita_nfse;
-    }
-    return { empresa_id: c.id, cliente: c.cliente, rbt12: Math.round(rbt12 * 100) / 100, meses_do_controle: doControle };
-  });
-  return { periodo: { de, ate }, sublimite: 3_600_000, limite: 4_800_000, clientes: lista.filter((l) => l.rbt12 > 0).sort((a, b) => b.rbt12 - a.rbt12).slice(0, 10) };
+  const clientes: any[] = [];
+  let semDeclaracao = 0;
+  for (const c of simples) {
+    const r = db.prepare('SELECT competencia, rpa, rbt12, rba FROM pgdas_receitas WHERE empresa_id = ? AND (rpa IS NOT NULL OR rba IS NOT NULL) ORDER BY competencia DESC LIMIT 1').get(c.id) as any;
+    if (!r) { semDeclaracao++; continue; }
+    const doAno = r.competencia.slice(0, 4) === ano;
+    const acumulado = Math.round(((r.rba ?? 0) + (r.rpa ?? 0)) * 100) / 100;
+    const meses = Number(r.competencia.slice(5));
+    const projecao = doAno && meses ? Math.round((acumulado / meses) * 12 * 100) / 100 : null;
+    let situacao: Estado = 'EM_DIA', motivo = 'Dentro do sublimite.';
+    if (acumulado > LIMITE_SN) { situacao = 'ATENCAO'; motivo = 'Passou do limite de R$ 4,8 milhões do Simples Nacional.'; }
+    else if (acumulado > SUBLIMITE * 1.2) { situacao = 'ATENCAO'; motivo = 'Passou do sublimite em mais de 20%: ICMS e ISS fora do DAS já a partir do mês seguinte.'; }
+    else if (acumulado > SUBLIMITE) { situacao = 'ATENCAO'; motivo = 'Passou do sublimite: ICMS e ISS fora do DAS a partir de janeiro do ano que vem.'; }
+    else if (acumulado >= SUBLIMITE * 0.8) { situacao = 'PENDENTE'; motivo = `Já usou ${Math.round((acumulado / SUBLIMITE) * 100)}% do sublimite no ano.`; }
+    else if (projecao != null && projecao > SUBLIMITE) { situacao = 'PENDENTE'; motivo = 'No ritmo do ano, passa do sublimite até dezembro.'; }
+    clientes.push({ empresa_id: c.id, cliente: c.cliente, competencia: r.competencia, do_ano: doAno, acumulado, rbt12: r.rbt12, rpa: r.rpa, projecao, situacao, motivo });
+  }
+  const ordem: Record<string, number> = { ATENCAO: 0, PENDENTE: 1, EM_DIA: 2 };
+  clientes.sort((a, b) => ordem[a.situacao] - ordem[b.situacao] || b.acumulado - a.acumulado);
+  return { ano, sublimite: SUBLIMITE, limite: LIMITE_SN, clientes, sem_declaracao: semDeclaracao };
 }
 
 /** Resumo financeiro de um cliente: o mês escolhido e os 12 meses até ele. */

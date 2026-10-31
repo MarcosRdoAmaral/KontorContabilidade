@@ -56,8 +56,20 @@ test('monitor fiscal e resumo financeiro pelos XML', async () => {
     assert.equal(r.kpis.fora, 1, 'remessa fora da receita');
     assert.equal(r.kpis.xmls, 6);
     assert.equal(r.serie.length, 12);
-    const m2 = (await call('GET', '/api/escritorio/monitor', undefined, t)).json;
-    assert.equal(m2.sublimites.clientes[0].rbt12, 50000, 'RBT12 pelo controle mensal (mês atual fica fora)');
+    // faturamento acumulado pelas declarações do PGDAS-D guardadas
+    const ano = mes.slice(0, 4);
+    db.prepare("INSERT INTO pgdas_receitas (empresa_id, competencia, rpa, rbt12, rba) VALUES (?, ?, 400000, 3500000, 2700000)").run(a, `${ano}-09`);
+    let m2 = (await call('GET', '/api/escritorio/monitor', undefined, t)).json;
+    let sl = m2.sublimites.clientes.find((x: any) => x.empresa_id === a);
+    assert.equal(sl.acumulado, 3100000);
+    assert.equal(sl.situacao, 'PENDENTE', '86% do sublimite');
+    assert.ok(m2.notificacoes.some((n: any) => n.titulo.includes('sublimite') && n.empresa_id === a));
+    db.prepare("UPDATE pgdas_receitas SET rba = 3400000 WHERE empresa_id = ?").run(a);
+    sl = (await call('GET', '/api/escritorio/monitor', undefined, t)).json.sublimites.clientes.find((x: any) => x.empresa_id === a);
+    assert.equal(sl.situacao, 'ATENCAO'); assert.match(sl.motivo, /janeiro/);
+    db.prepare("UPDATE pgdas_receitas SET rba = 900000, rpa = 100000 WHERE empresa_id = ?").run(a);
+    sl = (await call('GET', '/api/escritorio/monitor', undefined, t)).json.sublimites.clientes.find((x: any) => x.empresa_id === a);
+    assert.equal(sl.situacao, 'EM_DIA'); assert.equal(sl.projecao, 1333333.33);
 
     await call('POST', '/api/usuarios', { login: 'caio', nome: 'Caio', senha: 'senha-segura-4', tipo: 'normal', permissoes: ['carteira'] }, t);
     db.prepare("UPDATE usuarios SET trocar_senha = 0 WHERE login = 'CAIO'").run();
