@@ -389,7 +389,7 @@ async function iniciar() {
   $('#login').hidden = true;
   $('#app').hidden = false;
   $('#nome-usuario').textContent = `${estado.usuario.nome} (${estado.usuario.login})`;
-  document.querySelectorAll('[data-modulo]').forEach((a) => (a.hidden = !estado.usuario.modulos.includes(a.dataset.modulo)));
+  document.querySelectorAll('[data-modulo]').forEach((a) => (a.hidden = !a.dataset.modulo.split(' ').some((m) => estado.usuario.modulos.includes(m))));
   // grupos do menu: somem se nenhum item é permitido; a abertura de cada um fica guardada neste navegador
   document.querySelectorAll('#menu details.grupo').forEach((g) => {
     g.hidden = ![...g.querySelectorAll('a')].some((a) => !a.hidden);
@@ -420,6 +420,7 @@ function primeiraTelaDoMenu() {
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
 function telaPermitida(nome) {
   const modulo = { monitor: 'visao', resumo: 'captura', controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
+  if (nome === 'monitor' || nome === 'situacao') return estado.usuario.modulos.includes('visao') || estado.usuario.modulos.includes('situacao');
   return nome === 'config' || nome === 'inicio' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
@@ -3705,7 +3706,7 @@ async function telaEscritorio() {
       <a class="cartao link-cartao ${t.atrasadas ? 'alerta-cartao' : ''}" href="#/obrigacoes"><div class="sutil">Atrasadas</div><div class="valor" style="color:${t.atrasadas ? COR.vermelho : COR.verde}">${t.atrasadas}</div><div class="dica">inclui meses anteriores</div></a>
       <a class="cartao link-cartao" href="#/certificados"><div class="sutil">Certificados e procurações</div><div class="valor" style="color:${c.vencidos + c.vence7 ? COR.vermelho : c.vence30 ? COR.laranja : COR.verde}">${c.vencidos + c.vence7 + c.vence30}</div>
         <div class="dica">${c.vencidos} vencido(s) · ${c.vence7} em 7 dias · ${c.vence30} em 30 dias</div></a>
-      ${v.situacaoFiscal ? `<a class="cartao link-cartao ${v.situacaoFiscal.comPendencias ? 'alerta-cartao' : ''}" href="#/situacao"><div class="sutil">Pendências fiscais</div><div class="valor" style="color:${v.situacaoFiscal.comPendencias ? COR.vermelho : COR.verde}">${v.situacaoFiscal.comPendencias}</div>
+      ${v.situacaoFiscal ? `<a class="cartao link-cartao ${v.situacaoFiscal.comPendencias ? 'alerta-cartao' : ''}" href="#/monitor"><div class="sutil">Pendências fiscais</div><div class="valor" style="color:${v.situacaoFiscal.comPendencias ? COR.vermelho : COR.verde}">${v.situacaoFiscal.comPendencias}</div>
         <div class="dica">${v.situacaoFiscal.comPendencias ? `cliente(s) · ${brl(v.situacaoFiscal.totalAberto)} em aberto` : 'nenhum cliente com pendência'}${v.situacaoFiscal.naoConsultados ? ` · ${v.situacaoFiscal.naoConsultados} não consultado(s)` : ''}</div></a>` : ''}
       <a class="cartao link-cartao" href="#/honorarios"><div class="sutil">Honorários mensais</div><div class="valor">${brl(h.total)}</div>
         <div class="dica">${h.contratos} contrato(s) assinado(s)${h.vencidos.n ? ` · <span class="cor-vermelho">${brl(h.vencidos.total)} vencido(s)</span>` : ''}</div></a>
@@ -3822,7 +3823,7 @@ function maisAcoesCliente(c) {
     pode('honorarios') && !c.eh_escritorio && ['#/honorarios', 'Contrato e honorários'],
     pode('certificados') && ['#/certificados', 'Certificados'],
     pode('captura') && ['#/captura', 'Captura de documentos'],
-    pode('situacao') && ['#/situacao', 'Situação fiscal'],
+    (pode('situacao') || pode('visao')) && ['#/monitor', 'Monitor fiscal'],
   ].filter(Boolean);
   abrirDialogo(`<h2>${esc(c.nome_fantasia || c.razao_social)}</h2>
     <dl class="dados"><dt>CNPJ/CPF</dt><dd>${fmtDoc(c.documento)}</dd><dt>Contato</dt><dd>${esc(c.contato_nome ?? '—')}${c.contato_fone ? ' · ' + esc(c.contato_fone) : ''}</dd>
@@ -4773,7 +4774,7 @@ async function consultarFgtsDigital(clientes, selecionados) {
         const n = (s) => r.resultados.filter((x) => x.situacao === s).length;
         prog.innerHTML = `<div class="banner"><strong>${r.resultados.length} cliente(s) consultado(s):</strong> ${n('EM_ABERTO')} com competência em aberto, ${n('EM_DIA')} em dia, ${n('SEM_PROCURACAO')} sem procuração${n('ERRO') ? `, ${n('ERRO')} com erro` : ''}.</div>
           ${r.resultados.filter((x) => x.situacao === 'ERRO').map((x) => `<p class="dica cor-vermelho">${esc(alvo.find((a) => a.id === x.empresa_id)?.nome ?? '')}: ${esc(x.mensagem ?? '')}</p>`).join('')}`;
-        telaSituacao();
+        if (location.hash.startsWith('#/monitor')) telaMonitor();
       } catch (e) { prog.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; }
     };
   });
@@ -5124,21 +5125,15 @@ function formAcesso(c) {
   });
 }
 
-async function telaSituacao() {
-  const [d, ag] = await Promise.all([api('GET', '/api/escritorio/situacao-fiscal'), api('GET', '/api/escritorio/situacao-fiscal/agenda')]);
+/** A Situação fiscal agora fica dentro do Monitor fiscal (endereço antigo continua funcionando). */
+async function telaSituacao() { location.hash = '#/monitor'; }
+
+/** Consulta automática da situação fiscal: cartão recolhível dentro do Monitor fiscal. */
+function agendaSituacaoHtml(ag) {
   const adm = estado.usuario.tipo === 'adm';
   const opDia = (sel, vazio) => (vazio ? `<option value="">— só uma vez por mês</option>` : '') + Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}" ${sel === i + 1 ? 'selected' : ''}>dia ${i + 1}</option>`).join('');
-  const r = d.resumo;
-  const f = telaSituacao.filtro ??= { q: '', sit: '' };
-  conteudo.innerHTML = `
-    <div class="topo"><div><h1>Situação fiscal</h1><p class="sutil">O relatório de situação fiscal da Receita Federal e da PGFN (o mesmo do e-CAC), consultado pelo Integra Contador, com o que está em aberto em cada cliente.</p></div></div>
-    ${!d.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador (Configurações &gt; Integra Contador).'}</div>` : ''}
-    <div class="resumo">
-      <div class="cartao ${r.comPendencias ? 'alerta-cartao' : ''}"><div class="sutil">Com pendências</div><div class="valor" style="color:${r.comPendencias ? COR.vermelho : COR.verde}">${r.comPendencias}</div><div class="dica">${brl(r.totalAberto)} em aberto</div></div>
-      <div class="cartao"><div class="sutil">Regulares</div><div class="valor" style="color:${COR.verde}">${r.regulares}</div></div>
-      <div class="cartao"><div class="sutil">Ainda não consultados</div><div class="valor">${r.naoConsultados}</div></div>
-    </div>
-    <details class="cartao agenda-sf" ${ag.ativo ? '' : 'open'}><summary><strong>Consulta automática</strong> — ${ag.ativo ? `ligada, ${ag.dias.map((x) => `dia ${x}`).join(' e ')} de cada mês · próxima em ${dataBr(ag.proxima)}` : 'desligada'}</summary>
+  return `
+    <details class="cartao agenda-sf"><summary><strong>Consulta automática da situação fiscal</strong> — ${ag.ativo ? `ligada, ${ag.dias.map((x) => `dia ${x}`).join(' e ')} de cada mês · próxima em ${dataBr(ag.proxima)}` : 'desligada'}</summary>
       <p class="sutil">Nos dias escolhidos (a partir das 7h, com o programa aberto), o sistema consulta todos os clientes ativos e manda um e-mail com quem tem pendência, destacando as novas. Se o computador estiver desligado no dia, roda na próxima abertura.</p>
       ${adm ? `<form id="form-agsf" class="grade">
         <label class="largo"><span><input type="checkbox" name="ativo" ${ag.ativo ? 'checked' : ''}> Consultar automaticamente</span></label>
@@ -5151,16 +5146,9 @@ async function telaSituacao() {
         <div class="acoes largo"><button class="primario" type="submit">Salvar</button></div></form>` : '<p class="dica">Só um administrador altera a consulta automática.</p>'}
       ${ag.ultimaExecucao ? `<p class="dica">Última rodada automática: ${dhBr(ag.ultimaExecucao)} — ${esc(ag.ultimoResultado ?? '')}</p>` : ''}
     </details>
-    <div class="filtros" style="margin:16px 0 10px">
-      <label style="flex:1 1 240px">Buscar <input type="search" id="sf-q" value="${esc(f.q)}" placeholder="Nome ou CNPJ/CPF"></label>
-      <label>Situação <select id="sf-sit"><option value="">Todas</option><option value="PENDENCIAS">Com pendências</option><option value="REGULAR">Regulares</option><option value="NUNCA">Não consultados</option></select></label>
-      <div class="acoes" style="margin:0"><button class="primario" id="sf-consultar" disabled>Consultar selecionados</button><button id="sf-fgts" title="Entra no FGTS Digital com o certificado do escritório e lê as competências em aberto de cada cliente">Consultar FGTS Digital</button></div>
-    </div>
-    <p class="dica">Cada consulta usa duas chamadas ao Integra Contador (pedido do relatório e emissão), cobradas pelo SERPRO conforme o contrato. A Receita leva alguns segundos para gerar cada relatório.</p>
-    <div id="sf-res"></div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="sf-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>Responsável</th><th>Situação</th><th class="num">Pendências</th><th class="num">Em aberto</th><th>Consultado em</th><th>FGTS Digital</th><th title="Recebe por e-mail o aviso de débitos em aberto">Avisar</th><th></th></tr></thead><tbody id="sf-lista"></tbody></table></div>
-    <p class="dica">Marque em “Avisar” só os clientes que devem receber o aviso de débitos em aberto (quem já sabe e não paga normalmente pode ficar desmarcado).</p>`;
-  $('#sf-sit').value = f.sit;
+`;
+}
+function ligarAgendaSituacao(ag, recarregar) {
   const fa = $('#form-agsf');
   if (fa) {
     const conta = () => { const n = 1 + (fa.dia2.value && fa.dia2.value !== fa.dia1.value ? 1 : 0); $('#agsf-chamadas').textContent = ag.clientes * 2 * n; };
@@ -5170,47 +5158,10 @@ async function telaSituacao() {
       const dias = [Number(fa.dia1.value), fa.dia2.value ? Number(fa.dia2.value) : null].filter(Boolean);
       try {
         await api('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: fa.ativo.checked, dias, emails: fa.emails.value.split(/[,;\s]+/).filter(Boolean), avisarClientes: fa.avisarClientes.checked });
-        aviso('Consulta automática salva.'); telaSituacao();
+        aviso('Consulta automática salva.'); recarregar();
       } catch (er) { $('#erro-agsf').textContent = mensagemErro(er); }
     };
   }
-  const pintar = () => {
-    const q = norm(f.q), qd = f.q.replace(/\D/g, '');
-    const vis = d.clientes.filter((c) => (!f.sit || (f.sit === 'NUNCA' ? !c.id : c.situacao === f.sit)) && (!q || norm(c.cliente).includes(q) || (qd && c.documento.includes(qd))));
-    $('#sf-lista').innerHTML = vis.length ? vis.map((c) => `<tr>
-      <td><input type="checkbox" data-sel="${c.empresa_id}" aria-label="Selecionar"></td>
-      <td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span></td>
-      <td>${esc(c.responsavel ?? '—')}</td>
-      <td>${!c.id ? '<span class="dica">não consultado</span>' : c.status === 'ERRO' ? `<span class="cor-vermelho">Erro</span><br><span class="dica">${esc(c.erro ?? '')}</span>` : c.status === 'SOLICITADA' ? '<span class="cor-ambar">Aguardando a Receita</span>' : selo(SIT_FISCAL[c.situacao] ?? [c.situacao, ''])}</td>
-      <td class="num">${c.status === 'PRONTA' ? c.qtd_pendencias ?? 0 : '—'}</td>
-      <td class="num ${c.situacao === 'PENDENCIAS' ? 'cor-vermelho' : ''}">${c.status === 'PRONTA' && c.situacao === 'PENDENCIAS' ? brl(c.total_aberto) : '—'}</td>
-      <td>${c.concluida_em ? dhBr(c.concluida_em) : c.solicitada_em ? `<span class="dica">pedido em ${dhBr(c.solicitada_em)}</span>` : '—'}</td>
-      <td>${celulaFgts(c)}</td>
-      <td><input type="checkbox" data-avisar="${c.empresa_id}" ${c.avisar_debitos ? 'checked' : ''} aria-label="Avisar este cliente" title="${c.email ? `Avisar ${esc(c.email)}` : 'Sem e-mail no cadastro'}">${c.ultimo_aviso ? `<br><span class="dica">avisado ${dataBr(c.ultimo_aviso)}</span>` : ''}</td>
-      <td class="acoes-linha">${c.status === 'PRONTA' ? `<button data-det="${c.id}">Detalhes</button> ${c.tem_pdf ? `<button data-pdf="${c.id}">PDF</button>` : ''}` : ''}${c.status === 'SOLICITADA' ? `<button data-at="${c.empresa_id}">Atualizar</button>` : ''}</td></tr>`).join('')
-      : '<tr><td colspan="10"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>';
-    conteudo.querySelectorAll('[data-fgts]').forEach((b) => (b.onclick = (ev) => { ev.preventDefault(); detalheFgtsCliente(Number(b.dataset.fgts)); }));
-    conteudo.querySelectorAll('[data-avisar]').forEach((cb) => (cb.onchange = async () => {
-      const c = d.clientes.find((x) => x.empresa_id === Number(cb.dataset.avisar));
-      try { await api('PUT', '/api/escritorio/situacao-fiscal/marcar-aviso', { ids: [c.empresa_id], avisar: cb.checked }); c.avisar_debitos = cb.checked; aviso(cb.checked ? `${c.cliente} será avisado dos débitos em aberto.${c.email ? '' : ' Atenção: sem e-mail no cadastro.'}` : `${c.cliente} não será mais avisado.`); }
-      catch (e) { cb.checked = !cb.checked; aviso(mensagemErro(e)); }
-    }));
-    const sel = () => { const n = conteudo.querySelectorAll('[data-sel]:checked').length; const b = $('#sf-consultar'); b.disabled = !n || !d.configurado; b.textContent = n ? `Consultar ${n} cliente(s)` : 'Consultar selecionados'; };
-    conteudo.querySelectorAll('[data-sel]').forEach((c) => (c.onchange = sel)); sel();
-    conteudo.querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheSituacaoFiscal(Number(b.dataset.det))));
-    conteudo.querySelectorAll('[data-pdf]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/situacao-fiscal/${b.dataset.pdf}/pdf`, 'situacao-fiscal.pdf', true)));
-    conteudo.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => consultarSituacoes([Number(b.dataset.at)], b)));
-  };
-  $('#sf-fgts').onclick = () => consultarFgtsDigital(d.clientes, [...conteudo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel)));
-  $('#sf-todos').onchange = (ev) => { conteudo.querySelectorAll('[data-sel]').forEach((c) => (c.checked = ev.target.checked)); conteudo.querySelector('[data-sel]')?.onchange(); };
-  $('#sf-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
-  $('#sf-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
-  $('#sf-consultar').onclick = (ev) => {
-    const ids = [...conteudo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel));
-    if (!confirm(`Consultar a situação fiscal de ${ids.length} cliente(s)?\nSerão cerca de ${ids.length * 2} chamadas ao Integra Contador, cobradas pelo SERPRO. Pode levar alguns segundos por cliente.`)) return;
-    consultarSituacoes(ids, ev.target);
-  };
-  pintar();
 }
 
 async function consultarSituacoes(ids, botao) {
@@ -5218,7 +5169,8 @@ async function consultarSituacoes(ids, botao) {
   botao.disabled = true; botao.textContent = 'Consultando a Receita…';
   try {
     const r = await api('POST', '/api/escritorio/situacao-fiscal/consultar', { ids });
-    await telaSituacao();
+    await telaMonitor();
+    $('#sf-res')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     $('#sf-res').innerHTML = `<div class="cartao" style="margin-bottom:12px"><strong>${r.prontos} relatório(s) recebido(s)${r.comPendencias ? `, ${r.comPendencias} com pendências` : ''}${r.aguardando ? `, ${r.aguardando} ainda em geração (use Atualizar)` : ''}${r.erros ? `, ${r.erros} com erro` : ''}.</strong>
       <ul class="dicas">${r.resultados.map((x) => `<li class="${x.status === 'ERRO' ? 'cor-vermelho' : ''}">${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul></div>`;
   } catch (e) { aviso(mensagemErro(e)); botao.disabled = false; botao.textContent = texto; }
@@ -5408,14 +5360,34 @@ const legendaSeries = (series) => `<div class="legenda">${series.map((s) => `<sp
 // Monitor fiscal
 // ---------------------------------------------------------------------------
 const MES_DECL = (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(); // declaração do mês passado
+/** Célula "Em aberto na Receita" do Monitor: resultado da última consulta da situação fiscal. */
+function celulaSf(x) {
+  if (!x?.id) return '';
+  if (x.status === 'ERRO') return `<span class="cor-vermelho" title="${esc(x.erro ?? '')}">Erro na consulta</span>`;
+  if (x.status === 'SOLICITADA') return `<span class="cor-ambar">Aguardando a Receita</span><br><button type="button" class="me-mini" data-at="${x.empresa_id}">Atualizar</button>`;
+  if (x.situacao === 'PENDENCIAS') return `<a href="#" data-sfdet="${x.id}" class="cor-vermelho" title="${x.qtd_pendencias ?? 0} pendência(s), consultado em ${dataBr(x.concluida_em)}"><strong>${brl(x.total_aberto)}</strong></a>`;
+  if (x.situacao === 'REGULAR') return `<a href="#" data-sfdet="${x.id}" class="dica" title="Consultado em ${dataBr(x.concluida_em)}">relatório</a>`;
+  return `<a href="#" data-sfdet="${x.id}" class="cor-ambar">conferir o PDF</a>`;
+}
+
 async function telaMonitor() {
-  const d = await api('GET', '/api/escritorio/monitor');
-  const f = telaMonitor.filtro ??= { estado: null, processo: null, q: '' };
+  const podeSf = estado.usuario.modulos.includes('situacao');
+  const [d, sf, ag] = await Promise.all([api('GET', '/api/escritorio/monitor'),
+    podeSf ? api('GET', '/api/escritorio/situacao-fiscal') : null, podeSf ? api('GET', '/api/escritorio/situacao-fiscal/agenda') : null]);
+  const f = telaMonitor.filtro ??= { estado: null, processo: null, q: '', qc: '', sit: '' };
+  const sfDe = telaMonitor.sf = new Map((sf?.clientes ?? []).map((c) => [c.empresa_id, c]));
+  const fgtsAberto = (sf?.clientes ?? []).filter((c) => c.fgts?.situacao === 'EM_ABERTO');
   const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
-      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-atualizar">Atualizar</button>
-        ${estado.usuario.modulos.includes('situacao') ? '<button id="mon-parc" title="Parcelamentos do Simples e do MEI, pelo Integra Contador">Consultar parcelamentos</button> <button id="mon-caixa" title="Lista de mensagens da caixa postal do e-CAC, pelo Integra Contador">Consultar caixa postal</button>' : ''}</div></div>
+      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-atualizar">Atualizar</button></div></div>
+    ${sf && !sf.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado: as consultas à Receita (situação fiscal, parcelamentos e caixa postal) não funcionam. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador.'}</div>` : ''}
+    ${sf ? `<div class="mon-kpis sf-kpis">
+      <button type="button" class="cartao kpi ${sf.resumo.comPendencias ? 'kpi-alerta' : ''}" data-sit="PENDENCIAS"><span class="dica">Débitos na Receita e PGFN</span><strong class="${sf.resumo.comPendencias ? 'cor-vermelho' : 'cor-verde'}">${sf.resumo.comPendencias} ${sf.resumo.comPendencias === 1 ? 'cliente' : 'clientes'}</strong><span class="dica">${brl(sf.resumo.totalAberto)} em aberto na Receita</span></button>
+      <button type="button" class="cartao kpi" data-sit="REGULAR"><span class="dica">Situação fiscal regular</span><strong class="cor-verde">${sf.resumo.regulares}</strong><span class="dica">sem pendências na última consulta</span></button>
+      <button type="button" class="cartao kpi" data-sit="NUNCA"><span class="dica">Situação fiscal não consultada</span><strong>${sf.resumo.naoConsultados}</strong><span class="dica">ainda sem relatório da Receita</span></button>
+      <button type="button" class="cartao kpi ${fgtsAberto.length ? 'kpi-alerta' : ''}" data-sit="FGTS"><span class="dica">FGTS Digital em aberto</span><strong class="${fgtsAberto.length ? 'cor-vermelho' : ''}">${fgtsAberto.length} ${fgtsAberto.length === 1 ? 'cliente' : 'clientes'}</strong><span class="dica">${brl(fgtsAberto.reduce((t, c) => t + (c.fgts.total ?? 0), 0))} na última consulta</span></button>
+    </div>` : ''}
     <div class="mon-grade">
       <section class="cartao mon-pend">
         <h2>Pendências fiscais</h2><p class="sutil">Clique numa situação ou num processo para ver os clientes.</p>
@@ -5448,7 +5420,21 @@ async function telaMonitor() {
         <p class="dica">Traço vertical: sublimite de R$ 3,6 milhões. A barra vai até o limite de R$ 4,8 milhões. Acumulado = receita do ano até o mês da última declaração buscada.${d.sublimites.sem_declaracao ? ` ${d.sublimites.sem_declaracao} cliente(s) do Simples ainda sem declaração buscada.` : ''}</p></div>`
         : `<div class="vazio">Nenhuma declaração do PGDAS-D buscada ainda${d.sublimites.sem_declaracao ? ` (${d.sublimites.sem_declaracao} cliente(s) do Simples)` : ''}. Use o botão acima ou "Buscar DAS já transmitidos" no Controle mensal.</div>`}
     </section>
-    <section class="cartao"><h2 id="mon-tit-clientes">Clientes</h2><div id="mon-clientes"></div></section>`;
+    <section class="cartao" id="mon-sec-clientes"><h2 id="mon-tit-clientes">Clientes</h2>
+      <div class="filtros mon-cli-filtros">
+        <label style="flex:1 1 240px">Buscar <input type="search" id="mon-qc" value="${esc(f.qc)}" placeholder="Nome ou CNPJ/CPF"></label>
+        ${sf ? `<label>Situação fiscal <select id="mon-sit"><option value="">Todas</option><option value="PENDENCIAS">Com débitos</option><option value="REGULAR">Regulares</option><option value="NUNCA">Não consultados</option><option value="FGTS">FGTS em aberto</option></select></label>` : ''}
+      </div>
+      ${sf ? `<div class="mon-lote"><span id="mon-sel-txt" class="dica">Marque clientes na lista para consultar só eles; sem marcação, a consulta vale para todos os da lista.</span>
+        <div class="acoes"><button id="mon-sf" class="primario" ${sf.configurado ? '' : 'disabled'} title="Relatório de situação fiscal da Receita e da PGFN (o mesmo do e-CAC)">Consultar situação fiscal</button>
+          <button id="mon-parc" ${sf.configurado ? '' : 'disabled'} title="Parcelamentos do Simples e do MEI">Consultar parcelamentos</button>
+          <button id="mon-caixa" ${sf.configurado ? '' : 'disabled'} title="Lista de mensagens da caixa postal do e-CAC">Consultar caixa postal</button>
+          <button id="mon-fgts" title="Entra no FGTS Digital com o certificado do escritório">Consultar FGTS Digital</button></div></div>
+        <div id="sf-res"></div>` : ''}
+      <div id="mon-clientes"></div>
+      ${sf ? `<p class="dica">Coluna “Avisar”: marque só os clientes que devem receber o aviso de débitos em aberto por e-mail (quem já sabe e não paga normalmente pode ficar desmarcado). Cada consulta à situação fiscal usa duas chamadas ao Integra Contador, cobradas pelo SERPRO.</p>` : ''}
+    </section>
+    ${ag ? agendaSituacaoHtml(ag) : ''}`;
 
   const pintarNotif = () => {
     const q = norm(f.q);
@@ -5458,28 +5444,65 @@ async function telaMonitor() {
       <p>${esc(n.cliente)}${n.texto ? ` — ${esc(n.texto)}` : ''}</p><span class="dica">${dataBr(n.data)}</span></article>`).join('')
       : `<div class="vazio">${d.notificacoes.length ? 'Nada encontrado.' : 'Nenhuma notificação: tudo em dia no que o Kontor acompanha.'}</div>`;
   };
+  const sfSit = (c) => { const x = sfDe.get(c.empresa_id); return !x?.id ? 'NUNCA' : x.situacao; };
   const pintarClientes = () => {
     let l = d.clientes;
+    const q = norm(f.qc), qd = f.qc.replace(/\D/g, '');
+    if (q) l = l.filter((c) => norm(c.cliente).includes(q) || (qd && c.documento.includes(qd)));
+    if (f.sit) l = l.filter((c) => (f.sit === 'FGTS' ? sfDe.get(c.empresa_id)?.fgts?.situacao === 'EM_ABERTO' : sfSit(c) === f.sit));
+    telaMonitor.visiveis = l;
     if (f.processo) l = l.filter((c) => (f.estado ? (c.processos[f.processo] ?? 'SEM_DADOS') === f.estado : c.processos[f.processo] && c.processos[f.processo] !== 'EM_DIA'));
     else if (f.estado) l = l.filter((c) => (c.geral ?? 'SEM_DADOS') === f.estado);
     const nomeP = d.processos.find((p) => p.id === f.processo)?.nome;
     $('#mon-tit-clientes').textContent = `Clientes${nomeP ? ` — ${nomeP}` : ''}${f.estado ? ` — ${ROTULO_ESTADO[f.estado]}` : f.processo ? ' — com pendência' : ''} (${l.length})`;
     const chip = (e) => `<span class="selo-estado" style="--c:${COR_ESTADO[e ?? 'SEM_DADOS']}">${e ? ROTULO_ESTADO[e] : '—'}</span>`;
-    $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>Geral</th>${d.processos.map((p) => `<th>${esc(p.nome)}</th>`).join('')}</tr></thead><tbody>
-      ${l.map((c) => `<tr><td class="mon-cli-nome"><button type="button" class="link-fech" data-det="${c.empresa_id}" title="Ver parcelamentos e caixa postal"><strong>${esc(c.cliente)}</strong></button><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => `<td>${chip(c.processos[p.id])}</td>`).join('')}</tr>`).join('')}
+    $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela mon-tab"><thead><tr>${sf ? '<th><input type="checkbox" id="mon-todos" aria-label="Selecionar todos"></th>' : ''}<th>Cliente</th><th>Geral</th>${d.processos.map((p) => `<th>${esc(p.nome)}</th>`).join('')}${sf ? '<th title="Avisar o cliente por e-mail dos débitos em aberto">Avisar</th>' : ''}</tr></thead><tbody>
+      ${l.map((c) => { const x = sfDe.get(c.empresa_id); return `<tr>${sf ? `<td><input type="checkbox" data-sel="${c.empresa_id}" aria-label="Selecionar ${esc(c.cliente)}"></td>` : ''}<td class="mon-cli-nome"><button type="button" class="link-fech" data-det="${c.empresa_id}" title="Situação fiscal, parcelamentos e caixa postal"><strong>${esc(c.cliente)}</strong></button><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => `<td>${chip(c.processos[p.id])}${sf && p.id === 'SITFIS' ? `<div class="mon-extra">${celulaSf(x)}</div>` : sf && p.id === 'FGTS' && x?.fgts ? `<div class="mon-extra">${celulaFgts(x)}</div>` : ''}</td>`).join('')}
+        ${sf ? `<td>${x ? `<input type="checkbox" data-avisar="${c.empresa_id}" ${x.avisar_debitos ? 'checked' : ''} aria-label="Avisar este cliente" title="${x.email ? `Avisar ${esc(x.email)}` : 'Sem e-mail no cadastro'}">${x.ultimo_aviso ? `<br><span class="dica">avisado ${dataBr(x.ultimo_aviso)}</span>` : ''}` : ''}</td>` : ''}</tr>`; }).join('')}
       </tbody></table></div>` : '<div class="vazio">Nenhum cliente nesta situação.</div>');
     $('#mon-limpar') && ($('#mon-limpar').onclick = () => { f.estado = null; f.processo = null; telaMonitor(); });
     $('#mon-clientes').querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheMonitor(Number(b.dataset.det))));
+    if (!sf) return;
+    const box = $('#mon-clientes');
+    box.querySelectorAll('[data-fgts]').forEach((b) => (b.onclick = (ev) => { ev.preventDefault(); detalheFgtsCliente(Number(b.dataset.fgts)); }));
+    box.querySelectorAll('[data-sfdet]').forEach((b) => (b.onclick = (ev) => { ev.preventDefault(); detalheSituacaoFiscal(Number(b.dataset.sfdet)); }));
+    box.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => consultarSituacoes([Number(b.dataset.at)], b)));
+    box.querySelectorAll('[data-avisar]').forEach((cb) => (cb.onchange = async () => {
+      const x = sfDe.get(Number(cb.dataset.avisar));
+      try { await api('PUT', '/api/escritorio/situacao-fiscal/marcar-aviso', { ids: [x.empresa_id], avisar: cb.checked }); x.avisar_debitos = cb.checked; aviso(cb.checked ? `${x.cliente} será avisado dos débitos em aberto.${x.email ? '' : ' Atenção: sem e-mail no cadastro.'}` : `${x.cliente} não será mais avisado.`); }
+      catch (e) { cb.checked = !cb.checked; aviso(mensagemErro(e)); }
+    }));
+    const sel = () => { const n = selecionados().length; $('#mon-sel-txt').innerHTML = n ? `<strong>${n} cliente(s) marcado(s)</strong>: as consultas abaixo valem só para eles.` : 'Marque clientes na lista para consultar só eles; sem marcação, a consulta vale para todos os da lista.'; };
+    box.querySelectorAll('[data-sel]').forEach((c) => (c.onchange = sel));
+    $('#mon-todos') && ($('#mon-todos').onchange = (ev) => { box.querySelectorAll('[data-sel]').forEach((c) => (c.checked = ev.target.checked)); sel(); });
+    sel();
   };
+  const selecionados = () => [...conteudo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel));
+  /** Clientes alvo de uma consulta: os marcados ou, sem marcação, todos os da lista (com o filtro do regime, se houver). */
+  const alvo = (filtro = () => true) => { const ids = selecionados(); return (ids.length ? d.clientes.filter((c) => ids.includes(c.empresa_id)) : telaMonitor.visiveis ?? d.clientes).filter(filtro); };
   $('#mon-busca').oninput = (e) => { f.q = e.target.value; pintarNotif(); };
+  $('#mon-qc').oninput = (e) => { f.qc = e.target.value; pintarClientes(); };
+  if (sf) {
+    $('#mon-sit').value = f.sit;
+    $('#mon-sit').onchange = (e) => { f.sit = e.target.value; pintarClientes(); };
+    conteudo.querySelectorAll('.sf-kpis [data-sit]').forEach((b) => (b.onclick = () => { f.sit = f.sit === b.dataset.sit ? '' : b.dataset.sit; $('#mon-sit').value = f.sit; pintarClientes(); $('#mon-sec-clientes').scrollIntoView({ behavior: 'smooth' }); }));
+    $('#mon-sf').onclick = (ev) => {
+      const ids = alvo().map((c) => c.empresa_id);
+      if (!ids.length) return aviso('Nenhum cliente na lista.');
+      if (!confirm(`Consultar a situação fiscal de ${ids.length} cliente(s)?\nSerão cerca de ${ids.length * 2} chamadas ao Integra Contador, cobradas pelo SERPRO. Pode levar alguns segundos por cliente.`)) return;
+      consultarSituacoes(ids, ev.target);
+    };
+    $('#mon-fgts').onclick = () => consultarFgtsDigital(sf.clientes, selecionados());
+    ligarAgendaSituacao(ag, telaMonitor);
+  }
   $('#mon-atualizar').onclick = () => telaMonitor();
   $('#mon-decl') && ($('#mon-decl').onclick = () => loteFechamento(`Buscar as declarações do Simples de ${rotuloMes(MES_DECL)}`, d.clientes.filter((c) => c.regime === 'SIMPLES'),
     'Para cada cliente do Simples, o Kontor busca a declaração do PGDAS-D já transmitida (sem gerar DAS) e lê o faturamento do mês, o acumulado do ano e o RBT12. O faturamento do mês também vai para o Controle mensal. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
     (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/declaracao`, { mes: MES_DECL }).then((r) => `${r.faturamento != null ? `faturamento do mês ${brl(r.faturamento)}` : 'declaração encontrada'}${r.rba != null ? ` · acumulado ${brl(r.rba + (r.faturamento ?? 0))}` : ''}`), telaMonitor));
-  $('#mon-parc') && ($('#mon-parc').onclick = () => loteFechamento('Consultar parcelamentos', d.clientes.filter((c) => c.regime === 'SIMPLES' || c.regime === 'MEI'),
+  $('#mon-parc') && ($('#mon-parc').onclick = () => loteFechamento('Consultar parcelamentos', alvo((c) => c.regime === 'SIMPLES' || c.regime === 'MEI'),
     'Para cada cliente do Simples ou MEI, o Kontor consulta na Receita os pedidos de parcelamento (normal, especial, Pert e Relp) e, havendo parcelamento ativo, as parcelas em aberto. São de 4 a 8 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO. O cliente precisa ter dado procuração ao escritório.',
     (c) => api('POST', `/api/escritorio/parcelamentos/${c.empresa_id}/consultar`).then((r) => ({ SEM_PARCELAMENTO: 'sem parcelamento', EM_DIA: `${r.ativos} parcelamento(s) em dia`, EM_ATRASO: `${r.atrasadas} parcela(s) em atraso`, SEM_PROCURACAO: 'sem procuração', ERRO: `erro: ${r.erro}` }[r.situacao] + (r.erro && r.situacao !== 'ERRO' ? ` (${r.erro})` : ''))), telaMonitor));
-  $('#mon-caixa') && ($('#mon-caixa').onclick = () => loteFechamento('Consultar a caixa postal do e-CAC', d.clientes,
+  $('#mon-caixa') && ($('#mon-caixa').onclick = () => loteFechamento('Consultar a caixa postal do e-CAC', alvo(),
     'Para cada cliente, o Kontor busca a lista das mensagens mais recentes da caixa postal (assunto, data, se foi lida e se a Receita marcou como relevante). O conteúdo das mensagens NÃO é aberto: isso só acontece quando você pede, mensagem a mensagem. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
     (c) => api('POST', `/api/escritorio/caixa-postal/${c.empresa_id}/consultar`).then((r) => (r.situacao === 'OK' ? `${r.nao_lidas} não lida(s)${r.relevantes ? `, ${r.relevantes} relevante(s)` : ''}` : r.erro)), telaMonitor));
   conteudo.querySelectorAll('[data-estado], [data-processo]').forEach((el) => (el.onclick = () => {
@@ -5569,6 +5592,12 @@ async function detalheMonitor(empresaId) {
       ${s.parcelas.length ? `<table class="tabela"><thead><tr><th>Parcela</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>${s.parcelas.map((x) => `<tr><td>${mesBr(x.parcela)}</td><td class="num">${brl(x.valor)}</td>
         <td>${x.atrasada ? '<span class="selo-estado" style="--c:var(--g-atencao)">Em atraso</span>' : '<span class="selo-estado" style="--c:var(--g-pend)">Em aberto</span>'}</td>
         <td>${pode ? `<button type="button" data-das="${esc(s.sistema)}:${esc(x.parcela)}">Gerar DAS</button>` : ''}</td></tr>`).join('')}</tbody></table>` : ''}`).join('') || '<p class="dica">Nenhum pedido de parcelamento do Simples/MEI encontrado.</p>'}`;
+  const sfx = telaMonitor.sf?.get(empresaId);
+  const SIT_SF = { PENDENCIAS: ['Com débitos', 'ATENCAO'], REGULAR: ['Regular', 'EM_DIA'], VERIFICAR: ['Conferir o PDF', 'PENDENTE'] };
+  const sfHtml = !sfx?.id ? '<p class="dica">Ainda não consultada.</p>' : sfx.status === 'ERRO' ? `<p class="cor-vermelho">Erro na última consulta: ${esc(sfx.erro ?? '')}</p>`
+    : sfx.status === 'SOLICITADA' ? '<p class="cor-ambar">A Receita ainda está gerando o relatório. Use “Consultar agora” em instantes.</p>'
+    : `<p><span class="selo-estado" style="--c:${COR_ESTADO[(SIT_SF[sfx.situacao] ?? ['', 'PENDENTE'])[1]]}">${(SIT_SF[sfx.situacao] ?? [sfx.situacao])[0]}</span> <span class="dica">consultado em ${dhBr(sfx.concluida_em)}</span></p>
+      ${sfx.situacao === 'PENDENCIAS' ? `<p><strong class="cor-vermelho">${brl(sfx.total_aberto)}</strong> em aberto na Receita · ${sfx.qtd_pendencias ?? 0} pendência(s)${sfx.avisar_debitos ? ' · cliente marcado para aviso' : ''}</p>` : ''}`;
   const msgs = cx?.mensagens ?? [];
   const caixaHtml = !cx ? '<p class="dica">Ainda não consultada.</p>' : `<p><span class="dica">Consultada em ${dhBr(cx.consultado_em)} · ${cx.nao_lidas} não lida(s)${cx.relevantes ? `, ${cx.relevantes} relevante(s)` : ''}</span></p>${cx.erro ? `<p class="dica cor-ambar">${esc(cx.erro)}</p>` : ''}
     ${msgs.length ? `<div class="rolagem" style="max-height:300px"><table class="tabela"><thead><tr><th>Enviada</th><th>Assunto</th><th>Situação</th><th></th></tr></thead><tbody>${msgs.map((m) => `<tr><td>${m.enviada_em ? dataBr(m.enviada_em) : '—'}</td>
@@ -5576,6 +5605,8 @@ async function detalheMonitor(empresaId) {
       <td>${m.lida ? `<span class="dica">Lida${m.aberta_no_kontor ? ' (pelo Kontor)' : ''}</span>` : `<span class="selo-estado" style="--c:${m.relevante ? 'var(--g-atencao)' : 'var(--g-pend)'}">Não lida${m.relevante ? ' · relevante' : ''}</span>`}</td>
       <td>${pode ? `<button type="button" data-msg="${esc(m.isn)}">Abrir</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="dica">Nenhuma mensagem.</p>'}`;
   abrirDialogo(`<div class="dlg-largo"><h2>${esc(d.cliente)}</h2><p class="sutil">${fmtDoc(d.documento)} · cada consulta é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
+    ${pode ? `<fieldset class="sub"><legend>Situação fiscal (Receita Federal e PGFN)</legend>${sfHtml}<div class="acoes">${sfx?.id && sfx.status === 'PRONTA' ? `<button type="button" id="dm-sf-rel" class="primario">Ver débitos, guias e aviso ao cliente</button>` : ''}<button type="button" id="dm-sf">Consultar agora</button></div></fieldset>
+    <fieldset class="sub"><legend>FGTS Digital</legend>${sfx ? celulaFgts(sfx).replace('data-fgts', 'id="dm-fgts" data-fgts') : '<p class="dica">—</p>'}</fieldset>` : ''}
     <fieldset class="sub"><legend>Parcelamentos do Simples / MEI</legend>${d.regime === 'SIMPLES' || d.regime === 'MEI' ? parcHtml + (pode ? '<div class="acoes"><button type="button" id="dm-parc">Consultar agora</button></div>' : '') : '<p class="dica">Cliente fora do Simples e do MEI. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</p>'}</fieldset>
     <fieldset class="sub"><legend>Caixa postal do e-CAC</legend>${caixaHtml}${pode ? '<div class="acoes"><button type="button" id="dm-caixa">Consultar agora</button></div>' : ''}</fieldset>
     <p class="erro" id="dm-erro"></p><div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
@@ -5583,6 +5614,13 @@ async function detalheMonitor(empresaId) {
     const botao = (sel, url) => { const b = dlg.querySelector(sel); if (b) b.onclick = async () => { b.disabled = true; b.textContent = 'Consultando…'; try { await api('POST', url); detalheMonitor(empresaId); } catch (e) { b.disabled = false; b.textContent = 'Consultar agora'; erro(e); } }; };
     botao('#dm-parc', `/api/escritorio/parcelamentos/${empresaId}/consultar`);
     botao('#dm-caixa', `/api/escritorio/caixa-postal/${empresaId}/consultar`);
+    dlg.querySelector('#dm-sf-rel') && (dlg.querySelector('#dm-sf-rel').onclick = () => detalheSituacaoFiscal(sfx.id));
+    dlg.querySelector('#dm-fgts') && (dlg.querySelector('#dm-fgts').onclick = (ev) => { ev.preventDefault(); detalheFgtsCliente(empresaId); });
+    dlg.querySelector('#dm-sf') && (dlg.querySelector('#dm-sf').onclick = async (ev) => {
+      const b = ev.target; b.disabled = true; b.textContent = 'Consultando a Receita…';
+      try { await api('POST', '/api/escritorio/situacao-fiscal/consultar', { ids: [empresaId] }); await telaMonitor(); detalheMonitor(empresaId); }
+      catch (e) { b.disabled = false; b.textContent = 'Consultar agora'; erro(e); }
+    });
     dlg.querySelectorAll('[data-das]').forEach((b) => (b.onclick = async () => {
       const [sistema, parcela] = b.dataset.das.split(':');
       b.disabled = true; b.textContent = 'Gerando…';

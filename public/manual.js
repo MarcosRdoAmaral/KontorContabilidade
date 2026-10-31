@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.25.2';
+export const MANUAL_VERSAO = '1.26.0';
 
 export const MANUAL = [
   {
@@ -160,7 +160,8 @@ export const MANUAL = [
         <li><strong>Faturamento acumulado:</strong> o faturamento do ano de cada cliente do Simples, lido da declaração do PGDAS-D mais recente buscada no Kontor (receita acumulada no ano até o mês da declaração), com o RBT12 e a projeção até dezembro no ritmo do ano. Fica em <em>Atenção</em> quem passou do sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS; acima de 20% do sublimite, já no mês seguinte) ou do limite de R$ 4,8 milhões, e em <em>Perto do sublimite</em> quem já usou 80% ou, no ritmo do ano, passa dele até dezembro. Esses avisos também vão para as notificações. O botão <em>Buscar declarações</em> traz a declaração do mês passado de todos os clientes do Simples (uma chamada por cliente, sem gerar DAS); o <em>Buscar DAS já transmitidos</em> do Controle mensal também alimenta esse quadro.</li>
       </ul>
       <h3>Parcelamentos e caixa postal</h3>
-      <p>Os botões <em>Consultar parcelamentos</em> e <em>Consultar caixa postal</em> (para quem tem acesso à Situação fiscal) buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Cada chamada é cobrada pelo SERPRO e nada roda sozinho.</p>
+      <p>A situação fiscal, os parcelamentos, a caixa postal e o FGTS Digital ficam todos no Monitor fiscal. No alto, os cartões mostram os clientes com débitos na Receita e PGFN (com o total em aberto), os regulares, os ainda não consultados e quem tem FGTS em aberto; clique num cartão para filtrar a lista. Na lista de clientes, a coluna Situação fiscal traz o valor em aberto (clique para ver os débitos, recalcular guias e avisar o cliente), a coluna FGTS Digital traz o valor da última consulta e a coluna <em>Avisar</em> marca quem recebe o aviso de débitos. Clicando no nome do cliente, abre tudo dele num lugar só.</p>
+      <p>Os botões acima da lista (<em>Consultar situação fiscal</em>, <em>Consultar parcelamentos</em>, <em>Consultar caixa postal</em> e <em>Consultar FGTS Digital</em>, para quem tem acesso à Situação fiscal) valem para os clientes marcados ou, sem marcação, para todos os da lista (respeitando a busca e o filtro). As consultas à Receita buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Cada chamada é cobrada pelo SERPRO e nada roda sozinho.</p>
       <ul>
         <li><strong>Parcelamentos:</strong> para clientes do Simples e MEI, os pedidos do parcelamento normal, especial, Pert e Relp e, havendo parcelamento ativo, as parcelas em aberto (de 4 a 8 chamadas por cliente). Parcela de mês anterior ainda em aberto conta como em atraso. Clique no nome do cliente na lista para ver as parcelas e gerar o DAS de cada uma; o DAS fica guardado com as guias do cliente. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</li>
         <li><strong>Caixa postal:</strong> a lista das mensagens mais recentes do e-CAC (assunto, data, se foi lida e se a Receita marcou como relevante), uma chamada por cliente. O conteúdo não é aberto na consulta. Para ler uma mensagem, clique no cliente e em <em>Abrir</em>: o Kontor avisa antes, porque abrir pode registrar a leitura no e-CAC e, numa intimação, contar como ciência e começar o prazo.</li>
@@ -204,16 +205,16 @@ export const MANUAL = [
     corpo: `
       <p>Consulta, pelo Integra Contador, o <strong>Relatório de Situação Fiscal</strong> da Receita Federal e da Procuradoria-Geral da Fazenda Nacional (o mesmo do e-CAC) e mostra o que está em aberto: débitos, omissões de declaração e inscrições em dívida ativa, com o saldo de cada um. O PDF original fica guardado.</p>
       <h3>Consultar</h3>
-      <p>Em Escritório &gt; Situação fiscal, marque os clientes e clique em <em>Consultar selecionados</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador.</p>
+      <p>A Situação fiscal fica no <strong>Monitor fiscal</strong> (Escritório &gt; Monitor fiscal). Marque os clientes na lista e clique em <em>Consultar situação fiscal</em> (sem marcação, consulta todos os da lista). A consulta automática fica no fim da tela, em <em>Consulta automática da situação fiscal</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador.</p>
       <h3>Resultado</h3>
       <ul>
-        <li><strong>Com pendências:</strong> o botão <em>Detalhes</em> mostra o total dos débitos na Receita Federal (saldo com multa e juros), os <strong>impostos em aberto agrupados por tributo</strong>, a lista completa dos débitos (com período, vencimento e número da notificação, no caso das multas por atraso) e as inscrições em dívida ativa na PGFN, com a situação (ajuizada ou a ser cobrada). O relatório não traz o valor das inscrições: consulte no Regularize. Débitos e parcelamentos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão. A última certidão aparece com a validade, em vermelho se estiver vencida.</li>
+        <li><strong>Com pendências:</strong> o valor em aberto aparece na coluna Situação fiscal; clicando nele abre o detalhe, que mostra o total dos débitos na Receita Federal (saldo com multa e juros), os <strong>impostos em aberto agrupados por tributo</strong>, a lista completa dos débitos (com período, vencimento e número da notificação, no caso das multas por atraso) e as inscrições em dívida ativa na PGFN, com a situação (ajuizada ou a ser cobrada). O relatório não traz o valor das inscrições: consulte no Regularize. Débitos e parcelamentos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão. A última certidão aparece com a validade, em vermelho se estiver vencida.</li>
         <li><strong>Regular:</strong> o relatório não trouxe pendências.</li>
         <li><strong>Conferir o PDF:</strong> o relatório veio num formato que o sistema não conseguiu ler; abra o PDF.</li>
       </ul>
       <p>Clientes com pendência aparecem primeiro na lista e na Visão geral. Os valores são lidos do relatório: em caso de dúvida, vale o PDF.</p>
       <h3>Recalcular guias</h3>
-      <p>Em <em>Detalhes</em>, cada débito da Receita tem o botão <strong>Recalcular</strong>: confira os dados, informe a data de pagamento e clique em <em>Gerar guia (PDF)</em>. Sai um PDF por guia, que também fica guardado em <em>Guias recalculadas</em>. O sistema escolhe o tipo de guia, e dá para trocar:</p>
+      <p>No detalhe da situação fiscal (clique no valor em aberto), cada débito da Receita tem o botão <strong>Recalcular</strong>: confira os dados, informe a data de pagamento e clique em <em>Gerar guia (PDF)</em>. Sai um PDF por guia, que também fica guardado em <em>Guias recalculadas</em>. O sistema escolhe o tipo de guia, e dá para trocar:</p>
       <ul>
         <li><strong>DARF (Sicalc):</strong> débitos da Receita e multas por atraso de declaração (MAED, com o número da notificação). Multa e juros até a data de pagamento.</li>
         <li><strong>DAS de cobrança:</strong> Simples Nacional, com o valor em cobrança na Receita (já descontando pagamentos parciais e parcelas) e a validade definida pela Receita.</li>
