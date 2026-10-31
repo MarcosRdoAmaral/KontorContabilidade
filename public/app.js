@@ -1237,17 +1237,17 @@ async function telaBanco() {
 }
 
 // ---------------------------------------------------------------------------
-// Tributação: apuração assistida, tributações e impostos
+// Tributação: tributações e impostos
 // ---------------------------------------------------------------------------
 async function telaTributacao(aba) {
-  const abas = [['apuracao', 'Apuração assistida'], ['perfis', 'Tributações'], ['impostos', 'Impostos']];
+  const abas = [['perfis', 'Tributações'], ['impostos', 'Impostos']];
   if (aba === 'tipos') aba = 'perfis';
-  if (!abas.some((a) => a[0] === aba)) aba = 'apuracao';
+  if (!abas.some((a) => a[0] === aba)) aba = 'perfis';
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Tributação</h1><p class="sutil">Cadastre os impostos uma vez, monte cada tributação (alíquotas, retenções e dados da nota) e vincule serviços e compras a ela. A apuração assistida compara o que a tributação calcula com o que as notas declaram.</p></div></div>
+    <div class="topo"><div><h1>Tributação</h1><p class="sutil">Cadastre os impostos uma vez, monte cada tributação (alíquotas, retenções e dados da nota) e vincule serviços e compras a ela.</p></div></div>
     <nav class="abas" aria-label="Tributação">${abas.map(([k, n]) => `<a href="#/tributacao/${k}" class="${k === aba ? 'ativo' : ''}">${n}</a>`).join('')}</nav>
     <div id="trib-corpo"></div>`;
-  await { apuracao: abaApuracao, perfis: abaPerfis, impostos: abaImpostos }[aba]();
+  await { perfis: abaPerfis, impostos: abaImpostos }[aba]();
 }
 
 const base_trib = () => `/api/empresas/${estado.empresaId}/tributacao`;
@@ -1255,27 +1255,6 @@ const NOME_NATUREZA_SENTIDO = { SAIDA: 'Saída', ENTRADA: 'Entrada' };
 const MODELOS = { NFSE: 'NFS-e', NFE: 'NF-e (compra)', MANUAL: 'Lançamento manual' };
 const NATUREZAS = ['Serviço', 'Mercadoria para revenda', 'Insumo', 'Uso e consumo', 'Ativo imobilizado', 'Devolução', 'Outra'];
 const DESTINOS = { RECEITA: 'Receita', DESPESA: 'Despesa', NENHUM: 'Nenhum' };
-
-async function abaApuracao() {
-  const mes = abaApuracao.mes ?? mesAtual();
-  const d = await api('GET', `${base_trib()}/apuracao?mes=${mes}`);
-  const v = (n) => (n ? brl(n) : '<span class="dica">—</span>');
-  const dif = (a, b) => Math.abs(a - b) > 0.05;
-  $('#trib-corpo').innerHTML = `
-    <div class="topo"><div><h2 style="margin-top:0">Apuração de ${nomeMes(mes)}</h2><p class="sutil">${d.documentos.notas} nota(s) de serviço e ${d.documentos.compras} compra(s) na competência. <strong>Calculado</strong> = o tributação aplicada ao valor; <strong>XML</strong> = o que a nota declarou.</p></div>
-      <div><label>Mês <input type="month" id="mes-ap" value="${mes}"></label> <button id="recalc" title="Refaz o cálculo com os perfis atuais">Recalcular</button></div></div>
-    ${d.semTipo.notas || d.semTipo.compras ? `<div class="banner teste">${d.semTipo.notas ? `${d.semTipo.notas} nota(s) ` : ''}${d.semTipo.notas && d.semTipo.compras ? 'e ' : ''}${d.semTipo.compras ? `${d.semTipo.compras} compra(s) ` : ''}sem perfil de tributação: ligue o serviço (ou a compra) a uma tributação, ou marque uma como padrão, para entrarem no cálculo.</div>` : ''}
-    ${d.resumo.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Imposto</th><th class="num">Débitos (calc.)</th><th class="num">Débitos (XML)</th><th class="num">Créditos (calc.)</th><th class="num">Créditos (XML)</th><th class="num">Saldo (calc.)</th><th class="num">Saldo (XML)</th><th class="num">Retido (calc./XML)</th></tr></thead><tbody>
-      ${d.resumo.map((r) => `<tr><td>${esc(r.nome)}</td><td class="num">${v(r.debito_calc)}</td><td class="num ${dif(r.debito_calc, r.debito_xml) ? 'cor-ambar' : ''}">${v(r.debito_xml)}</td><td class="num">${v(r.credito_calc)}</td><td class="num ${dif(r.credito_calc, r.credito_xml) ? 'cor-ambar' : ''}">${v(r.credito_xml)}</td>
-        <td class="num"><strong>${v(r.saldo_calc)}</strong></td><td class="num">${v(r.saldo_xml)}</td><td class="num">${r.retido_calc || r.retido_xml ? brl(r.retido_calc) + ' / ' + brl(r.retido_xml) : '<span class="dica">—</span>'}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nada para apurar neste mês. Notas autorizadas e compras da competência entram aqui quando o serviço (ou a compra) está ligado a uma tributação ou existe uma tributação padrão.</div>'}
-    <h3>Divergências a conferir</h3>
-    ${d.divergencias.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Documento</th><th>Imposto</th><th class="num">Calculado</th><th class="num">XML</th><th class="num">Diferença</th><th>Situação</th></tr></thead><tbody>
-      ${d.divergencias.map((x) => `<tr><td>${esc(x.documento)}</td><td>${esc(x.imposto)}</td><td class="num">${x.calculado == null ? '—' : brl(x.calculado)}</td><td class="num">${x.declarado == null ? '—' : brl(x.declarado)}</td><td class="num">${brl(x.diferenca)}</td><td>${esc(x.situacao)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sutil">Nenhuma divergência: o que o perfil calcula confere com o que os XML declaram.</p>'}
-    <p class="dica">Conferência assistida, não é a apuração oficial: valide sempre com o contador. Os valores calculados dependem dos perfis e das vigências que você cadastrou.</p>`;
-  $('#mes-ap').onchange = (e) => { abaApuracao.mes = e.target.value; abaApuracao(); };
-  $('#recalc').onclick = async (e) => { e.target.disabled = true; try { await api('GET', `${base_trib()}/apuracao?mes=${mes}&recalcular=1`); aviso('Cálculo refeito.'); } catch (er) { aviso(mensagemErro(er)); } abaApuracao(); };
-}
 
 async function abaPerfis() {
   const [perfis, impostos] = await Promise.all([api('GET', `${base_trib()}/perfis`), api('GET', '/api/tributacao/impostos')]);
@@ -1346,7 +1325,7 @@ async function abaPerfis() {
           municipio_prestacao: f.municipio_prestacao.value.trim() || null, info_complementar: f.info_complementar.value.trim() || null,
           sentido: f.sentido.value, natureza: f.natureza.value || null, codigo: f.codigo.value.trim() || null, ind_op: f.ind_op.value.trim() || null,
           ind_final: Number(f.ind_final.value), ind_dest: Number(f.ind_dest.value), destino: f.destino.value, gera_credito: f.gera_credito.checked, padrao: f.padrao.checked };
-        try { p.id ? await api('PUT', `${base_trib()}/perfis/${p.id}`, dados) : await api('POST', `${base_trib()}/perfis`, dados); dlg.close(); aviso('Tributação salva. Use "Recalcular" na apuração para refazer meses já calculados.'); abaPerfis(); }
+        try { p.id ? await api('PUT', `${base_trib()}/perfis/${p.id}`, dados) : await api('POST', `${base_trib()}/perfis`, dados); dlg.close(); aviso('Tributação salva.'); abaPerfis(); }
         catch (e) { $('#erro-perfil').textContent = mensagemErro(e); }
       };
     });

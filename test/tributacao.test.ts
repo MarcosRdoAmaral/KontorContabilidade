@@ -21,7 +21,7 @@ const nfe = `<?xml version="1.0" encoding="UTF-8"?>
 <IBSCBSTot><gIBS><gIBSUF><vIBSUF>0.26</vIBSUF></gIBSUF><gIBSMun><vIBSMun>0.00</vIBSMun></gIBSMun></gIBS><gCBS><vCBS>2.34</vCBS></gCBS></IBSCBSTot></total>
 </infNFe></NFe><protNFe versao="4.00"><infProt><chNFe>${chave}</chNFe><cStat>100</cStat></infProt></protNFe></nfeProc>`;
 
-test('tributação: perfis, tipos de documento, retenções do perfil e apuração assistida', async () => {
+test('tributação: perfis, tipos de documento, retenções do perfil', async () => {
   const { migrar, db } = await import('../src/db.js');
   migrar();
   const T = await import('../src/servicos/tributacao.js');
@@ -79,29 +79,6 @@ test('tributação: perfis, tipos de documento, retenções do perfil e apuraç�
     VALUES (1, ?, 2, '1', 1, 'DPS1', 'AUTORIZADA', '2026-10-01', 1000, 'x', '{}', '77', 'Cliente X')`).run(sv);
   const comp = importarCompraXml(1, 1, { xml: nfe, gerarDespesas: false, categoria: 'x' });
   assert.equal(db.prepare('SELECT tipo_documento_id AS t FROM compras WHERE id = ?').get(comp.id)!.t, tEntrada.id, 'usa o tipo padrão de entrada');
-
-  const a = T.apuracaoAssistida(1, '2026-10');
-  const iss = a.resumo.find((r) => r.imposto === 'ISS')!;
-  assert.equal(iss.debito_calc, 50);
-  assert.equal(a.resumo.find((r) => r.imposto === 'PIS')!.retido_calc, 6.5, 'PIS retido não é débito');
-  assert.equal(a.resumo.find((r) => r.imposto === 'PIS')!.debito_calc, 0);
-  const icms = a.resumo.find((r) => r.imposto === 'ICMS')!;
-  assert.equal(icms.credito_calc, 46.8, 'base 260 × 18%');
-  assert.equal(icms.credito_xml, 18);
-  const cbs = a.resumo.find((r) => r.imposto === 'CBS')!;
-  assert.equal(cbs.debito_calc, 9);
-  assert.equal(cbs.credito_calc, 2.34);
-  assert.equal(cbs.credito_xml, 2.34);
-  assert.equal(cbs.saldo_calc, 6.66);
-  const dv = a.divergencias as any[];
-  assert.ok(dv.some((d) => d.imposto === 'ICMS' && d.situacao === 'Diverge do XML' && d.diferenca === 28.8));
-  assert.ok(!dv.some((d) => d.imposto === 'CBS' && d.origem === 'COMPRA'), 'CBS da compra confere com o XML');
-  assert.equal(a.documentos.notas, 1);
-
-  // mudar o perfil e recalcular
-  T.editarPerfil(1, pe.id, { nome: 'Compra com ICMS', itens: [{ imposto_codigo: 'ICMS', aliquota: 6.92, reducao_base: 0, retido: false }] });
-  assert.equal(T.apuracaoAssistida(1, '2026-10').resumo.find((r) => r.imposto === 'ICMS')!.credito_calc, 46.8, 'sem recalcular mantém a foto');
-  assert.equal(T.apuracaoAssistida(1, '2026-10', true).resumo.find((r) => r.imposto === 'ICMS')!.credito_calc, 17.99);
 
   // gerar perfis a partir de serviços já cadastrados
   const sv2 = Number(db.prepare(`INSERT INTO servicos (empresa_id, nome, descricao, c_trib_nac, aliquota, tributacao_json) VALUES (1,'Antigo','x','171901',3,'{"pPis":0.65,"pCofins":3,"issRetido":2}')`).run().lastInsertRowid);

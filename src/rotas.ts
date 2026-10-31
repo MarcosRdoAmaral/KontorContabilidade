@@ -17,7 +17,7 @@ import { ClassificacaoCartao, classificarCartao, excluirFatura, faturasDoMes, im
 import { Classificacao, balancoExtrato, candidatosBoleto, candidatosDespesa, classificar, conciliar, excluirImportacao, extratoDoMes, importarExtrato, ligarDespesa } from './servicos/extrato.js';
 import { catalogo, gerarRelatorio, relatorioCsv, relatorioPdf } from './servicos/relatorios.js';
 import { configurarAgenda, executarItem, executarProntas, listarAgenda, pularItem, resumoAgenda } from './servicos/agenda.js';
-import { EdicaoImposto, Tributacao, criarTributacao, editarTributacao, excluirTributacao, listarTributacoes, Perfil, TipoDocumento, apuracaoAssistida, conferirTipoDoVinculo, criarPerfil, criarTipo, editarImposto, editarPerfil, editarTipo, excluirPerfil, excluirTipo, gerarPerfisDosServicos, listarImpostos, listarPerfis, listarTipos, tributacaoCompletaDoServico, tributacaoEfetiva, NATUREZAS } from './servicos/tributacao.js';
+import { EdicaoImposto, Tributacao, criarTributacao, editarTributacao, excluirTributacao, listarTributacoes, Perfil, TipoDocumento, conferirTipoDoVinculo, criarPerfil, criarTipo, editarImposto, editarPerfil, editarTipo, excluirPerfil, excluirTipo, gerarPerfisDosServicos, listarImpostos, listarPerfis, listarTipos, tributacaoCompletaDoServico, tributacaoEfetiva, NATUREZAS } from './servicos/tributacao.js';
 import { DescricaoModelo, EntradaDescricao, lerModelo, montarDescricao } from './servicos/descricao.js';
 import { CompraManual, OpcoesImportacao, fornecedoresDaEmpresa, ParcelaEditada, alterarParcelas, previaCompraXml, criarCompraManual, excluirCompra, importarCompraXml, listarCompras, obterCompra, xmlDaCompra } from './servicos/compras.js';
 import { ConfigFechamento, configFechamento, enviarFechamento, mesAnterior, pacoteContabilidade, salvarFechamento } from './servicos/contabilidade.js';
@@ -880,7 +880,7 @@ export async function rotas(app: FastifyInstance) {
       const p = req.params as any; checarEmpresa(req, Number(p.id));
       excluirDespesa(Number(p.id), Number(p.did)); return { ok: true };
     });
-    // ---------- Tributação: impostos, perfis, tipos de documento e apuração assistida ----------
+    // ---------- Tributação: impostos, perfis e tipos de documento ----------
     api.get('/api/tributacao/impostos', async () => listarImpostos());
     api.put('/api/tributacao/impostos/:codigo', async (req) => { editarImposto(String((req.params as any).codigo), EdicaoImposto.parse(req.body)); return { ok: true }; });
     api.get('/api/empresas/:id/tributacao/perfis', async (req) => { const id = Number((req.params as any).id); checarEmpresa(req, id); return listarTributacoes(id); });
@@ -900,11 +900,6 @@ export async function rotas(app: FastifyInstance) {
     api.put('/api/empresas/:id/tributacao/tipos/:tid', async (req) => { const p = req.params as any; checarEmpresa(req, Number(p.id)); editarTipo(Number(p.id), Number(p.tid), TipoDocumento.parse(req.body)); return { ok: true }; });
     api.delete('/api/empresas/:id/tributacao/tipos/:tid', async (req) => { const p = req.params as any; checarEmpresa(req, Number(p.id)); excluirTipo(Number(p.id), Number(p.tid)); return { ok: true }; });
     api.post('/api/empresas/:id/tributacao/gerar-dos-servicos', async (req) => { const id = Number((req.params as any).id); checarEmpresa(req, id); return gerarPerfisDosServicos(id); });
-    api.get('/api/empresas/:id/tributacao/apuracao', async (req) => {
-      const id = Number((req.params as any).id); checarEmpresa(req, id);
-      const q = z.object({ mes: z.string().regex(/^\d{4}-\d{2}$/), recalcular: z.string().optional() }).parse(req.query);
-      return apuracaoAssistida(id, q.mes, q.recalcular === '1');
-    });
 
     // ---------- Compras (NF-e de entrada) ----------
     const compraDoUsuario = (req: FastifyRequest, id: number) => {

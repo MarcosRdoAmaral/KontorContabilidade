@@ -13,7 +13,7 @@ export const MODULOS = {
   honorarios: 'Contratos e honorários', captura: 'Captura de documentos', situacao: 'Situação fiscal',
   controle: 'Controle mensal de entregas', senhas: 'Senhas e acessos dos clientes',
   emitir: 'Emitir nota', notas: 'Notas emitidas', cobrancas: 'Cobranças',
-  banco: 'Dados bancários', despesas: 'Despesas e balanço', tomadores: 'Clientes', servicos: 'Serviços', empresas: 'Empresas', relatorios: 'Relatórios', compras: 'Compras', tributacao: 'Tributação e apuração',
+  banco: 'Dados bancários', despesas: 'Despesas e balanço', tomadores: 'Clientes', servicos: 'Serviços', empresas: 'Empresas', relatorios: 'Relatórios', compras: 'Compras', tributacao: 'Tributação',
   excluir: 'Excluir registros',
 } as const;
 export type Modulo = keyof typeof MODULOS;

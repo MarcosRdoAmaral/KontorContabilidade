@@ -1,7 +1,5 @@
 import { z } from 'zod';
 import { db } from '../db.js';
-import { lerNfe } from '../nfe/leitura.js';
-import { lerNfse } from '../nfse/leitura.js';
 import { ErroNegocio } from './emissao.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -261,109 +259,6 @@ export function migrarServicosLegados() {
     for (const e of db.prepare('SELECT DISTINCT empresa_id FROM servicos WHERE ativo = 1 AND tipo_documento_id IS NULL AND (tributacao_json IS NOT NULL OR ibscbs_json IS NOT NULL)').all() as { empresa_id: number }[]) gerarPerfisDosServicos(e.empresa_id);
   } catch (err) { console.error('Conversão da tributação dos serviços:', err); }
 }
-
-// ---------------------------------------------------------------------------
-// Apuração assistida: o que o perfil calcula × o que as notas/compras declararam
-// ---------------------------------------------------------------------------
-const NOME_IMPOSTO = () => Object.fromEntries(listarImpostos().map((i) => [i.codigo, i]));
-
-function declaradoNota(xml: string) {
-  const n = lerNfse(xml), v = n.valores, ib = n.ibscbs;
-  const ret = String(v.tpRetISSQN ?? '1') !== '1';
-  const out: { imposto: string; valor: number; retido: boolean }[] = [];
-  const put = (imposto: string, valor: number | undefined, retido: boolean) => { if (valor && valor > 0) out.push({ imposto, valor: r2(valor), retido }); };
-  put('ISS', v.vISSQN, ret); put('IRRF', v.vRetIRRF, true); put('INSS', v.vRetCP, true); put('CSLL', v.vRetCSLL, true);
-  const pcRet = String(v.tpRetPisCofins ?? '2') === '1';
-  put('PIS', v.vPis, pcRet); put('COFINS', v.vCofins, pcRet);
-  put('IBS_UF', ib?.vIBSUF, false); put('IBS_MUN', ib?.vIBSMun, false); put('CBS', ib?.vCBS, false);
-  return out;
-}
-function declaradoCompra(xml: string) {
-  const t = lerNfe(xml).totais;
-  return ([['ICMS', t.icms], ['IPI', t.ipi], ['IBS_UF', t.ibsUf], ['IBS_MUN', t.ibsMun], ['CBS', t.cbs]] as [string, number][]).filter(([, v]) => v > 0).map(([imposto, valor]) => ({ imposto, valor: r2(valor), retido: false }));
-}
-
-function gravar(empresaId: number, origem: 'NOTA' | 'COMPRA', docId: number, comp: string, fonte: 'CALCULADO' | 'XML', perfilId: number | null, linhas: { imposto: string; base?: number; aliquota?: number | null; valor: number; retido: boolean }[]) {
-  const ins = db.prepare(`INSERT OR REPLACE INTO documento_tributos (empresa_id, origem, documento_id, competencia, imposto_codigo, base, aliquota, valor, retido, fonte, perfil_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-  for (const l of linhas) ins.run(empresaId, origem, docId, comp, l.imposto, l.base ?? 0, l.aliquota ?? null, l.valor, l.retido ? 1 : 0, fonte, perfilId);
-}
-
-/** Garante os registros (calculado e declarado) de todas as notas e compras da competência. */
-export function prepararCompetencia(empresaId: number, mes: string, recalcular = false) {
-  const padSaida = tipoPadrao(empresaId, 'SAIDA'), padEntrada = tipoPadrao(empresaId, 'ENTRADA');
-  const tem = db.prepare('SELECT 1 FROM documento_tributos WHERE origem = ? AND documento_id = ? AND fonte = ? LIMIT 1');
-  const semTipo = { notas: 0, compras: 0 };
-  db.transaction(() => {
-    if (recalcular) db.prepare("DELETE FROM documento_tributos WHERE empresa_id = ? AND competencia = ?").run(empresaId, mes);
-    const notas = db.prepare(`SELECT n.id, n.competencia, n.valor_servico, n.xml_nfse, COALESCE(n.tipo_documento_id, s.tipo_documento_id) AS tipo_documento_id FROM notas n LEFT JOIN servicos s ON s.id = n.servico_id
-      WHERE n.empresa_id = ? AND n.status = 'AUTORIZADA' AND substr(n.competencia,1,7) = ?`).all(empresaId, mes) as any[];
-    for (const n of notas) {
-      const tipo = n.tipo_documento_id ? (db.prepare('SELECT id, perfil_id FROM tipos_documento WHERE id = ?').get(n.tipo_documento_id) as any) : padSaida;
-      if (!tem.get('NOTA', n.id, 'CALCULADO')) {
-        if (tipo?.perfil_id) gravar(empresaId, 'NOTA', n.id, mes, 'CALCULADO', tipo.perfil_id, calcularPerfil(tipo.perfil_id, n.valor_servico, n.competencia.slice(0, 10)));
-      }
-      if (!tipo?.perfil_id) semTipo.notas++;
-      if (n.xml_nfse && !tem.get('NOTA', n.id, 'XML')) { try { gravar(empresaId, 'NOTA', n.id, mes, 'XML', null, declaradoNota(n.xml_nfse)); } catch { /* XML fora do padrão: sem declarado */ } }
-    }
-    const compras = db.prepare(`SELECT id, emissao, valor_produtos, valor_frete, valor_outras, valor_desconto, valor_icms, valor_ipi, xml, tipo_documento_id FROM compras
-      WHERE empresa_id = ? AND substr(emissao,1,7) = ?`).all(empresaId, mes) as any[];
-    for (const c of compras) {
-      const tipo = c.tipo_documento_id ? (db.prepare('SELECT id, perfil_id FROM tipos_documento WHERE id = ?').get(c.tipo_documento_id) as any) : padEntrada;
-      if (!tem.get('COMPRA', c.id, 'CALCULADO') && tipo?.perfil_id) {
-        gravar(empresaId, 'COMPRA', c.id, mes, 'CALCULADO', tipo.perfil_id, calcularPerfil(tipo.perfil_id, r2(c.valor_produtos + c.valor_frete + c.valor_outras - c.valor_desconto), c.emissao));
-      }
-      if (!tipo?.perfil_id) semTipo.compras++;
-      if (c.xml && !tem.get('COMPRA', c.id, 'XML')) { try { gravar(empresaId, 'COMPRA', c.id, mes, 'XML', null, declaradoCompra(c.xml)); } catch { /* sem declarado */ } }
-    }
-  })();
-  return semTipo;
-}
-
-export function apuracaoAssistida(empresaId: number, mes: string, recalcular = false) {
-  const semTipo = prepararCompetencia(empresaId, mes, recalcular);
-  const imp = NOME_IMPOSTO();
-  const linhas = db.prepare(`SELECT origem, documento_id, imposto_codigo, valor, retido, fonte FROM documento_tributos WHERE empresa_id = ? AND competencia = ?`).all(empresaId, mes) as any[];
-  const nota = (id: number) => db.prepare('SELECT n_nfse, tomador_nome FROM notas WHERE id = ?').get(id) as any;
-  const compra = (id: number) => db.prepare('SELECT numero, fornecedor_nome, tipo_documento_id FROM compras WHERE id = ?').get(id) as any;
-  const credita = (compraId: number) => {
-    const c = compra(compraId); const tipo = c?.tipo_documento_id ? db.prepare('SELECT gera_credito FROM tipos_documento WHERE id = ?').get(c.tipo_documento_id) as any : tipoPadrao(empresaId, 'ENTRADA');
-    return !!tipo?.gera_credito;
-  };
-  const creditaCache = new Map<number, boolean>();
-  const geraCredito = (id: number) => (creditaCache.has(id) ? creditaCache.get(id)! : (creditaCache.set(id, credita(id)), creditaCache.get(id)!));
-
-  type Acc = { calc: number; xml: number };
-  const novo = (): Acc => ({ calc: 0, xml: 0 });
-  const resumo = new Map<string, { debito: Acc; credito: Acc; retido: Acc }>();
-  const get = (cod: string) => resumo.get(cod) ?? (resumo.set(cod, { debito: novo(), credito: novo(), retido: novo() }), resumo.get(cod)!);
-  const porDoc = new Map<string, { origem: string; id: number; imposto: string; calc: number | null; xml: number | null }>();
-  for (const l of linhas) {
-    const k = `${l.origem}:${l.documento_id}:${l.imposto_codigo}`;
-    const d = porDoc.get(k) ?? { origem: l.origem, id: l.documento_id, imposto: l.imposto_codigo, calc: null, xml: null };
-    if (l.fonte === 'CALCULADO') d.calc = l.valor; else d.xml = l.valor;
-    porDoc.set(k, d);
-    const campo = l.fonte === 'CALCULADO' ? 'calc' : 'xml';
-    const a = get(l.imposto_codigo);
-    if (l.origem === 'NOTA') (l.retido ? a.retido : a.debito)[campo] += l.valor;
-    else if (imp[l.imposto_codigo]?.credita && geraCredito(l.documento_id)) a.credito[campo] += l.valor;
-  }
-  const divergencias = [...porDoc.values()].map((d) => {
-    const doc = d.origem === 'NOTA' ? nota(d.id) : compra(d.id);
-    const calc = d.calc ?? 0, xml = d.xml ?? 0;
-    const situacao = d.calc == null ? 'Declarado no XML, mas sem esse imposto no perfil' : d.xml == null ? (calc > TOLERANCIA ? 'Não declarado no XML' : null) : Math.abs(calc - xml) > TOLERANCIA ? 'Diverge do XML' : null;
-    return situacao ? { origem: d.origem, documento_id: d.id, documento: d.origem === 'NOTA' ? `NFS-e ${doc?.n_nfse ?? d.id} — ${doc?.tomador_nome ?? ''}` : `NF ${doc?.numero ?? d.id} — ${doc?.fornecedor_nome ?? ''}`,
-      imposto: d.imposto, calculado: d.calc == null ? null : r2(calc), declarado: d.xml == null ? null : r2(xml), diferenca: r2(calc - xml), situacao } : null;
-  }).filter(Boolean);
-  const resumoLista = [...resumo.entries()].map(([cod, a]) => ({
-    imposto: cod, nome: imp[cod]?.nome ?? cod, grupo: imp[cod]?.grupo,
-    debito_calc: r2(a.debito.calc), debito_xml: r2(a.debito.xml), credito_calc: r2(a.credito.calc), credito_xml: r2(a.credito.xml),
-    saldo_calc: r2(a.debito.calc - a.credito.calc), saldo_xml: r2(a.debito.xml - a.credito.xml), retido_calc: r2(a.retido.calc), retido_xml: r2(a.retido.xml),
-  })).sort((a, b) => (imp[a.imposto]?.ordem ?? 0) - (imp[b.imposto]?.ordem ?? 0));
-  return { mes, resumo: resumoLista, divergencias, semTipo,
-    documentos: { notas: (db.prepare("SELECT COUNT(*) AS n FROM notas WHERE empresa_id = ? AND status = 'AUTORIZADA' AND substr(competencia,1,7) = ?").get(empresaId, mes) as any).n,
-      compras: (db.prepare('SELECT COUNT(*) AS n FROM compras WHERE empresa_id = ? AND substr(emissao,1,7) = ?').get(empresaId, mes) as any).n } };
-}
-
 
 // ---------------------------------------------------------------------------
 // "Tributação" = perfil + o tipo de documento que o acompanha (1:1, mantido automaticamente).

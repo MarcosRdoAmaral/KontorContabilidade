@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.14.0';
+export const MANUAL_VERSAO = '1.15.0';
 
 export const MANUAL = [
   {
@@ -336,7 +336,7 @@ export const MANUAL = [
       <p>Clique na compra para ver itens, totais e parcelas e baixar o XML. <strong>Alterar parcelas</strong> refaz o parcelamento e acerta as despesas geradas (se uma parcela já estiver ligada ao extrato, desfaça o vínculo antes). Cada parcela vira uma despesa; quando o pagamento aparecer no extrato, ligue-o em <em>Extrato e conciliação</em>. <strong>Excluir compra</strong> (permissão <em>Excluir registros</em>) apaga também as despesas que ela gerou. O relatório <em>Compras (NF-e de entrada)</em> está em Relatórios. O acesso a Compras é liberado por usuário em Configurações &gt; Usuários e acessos.</p>`,
   },
   {
-    id: 'tributacao', titulo: 'Tributação e apuração assistida', resumo: 'Impostos, tributações e comparação com o que as notas declaram.',
+    id: 'tributacao', titulo: 'Tributação', resumo: 'Impostos, tributações e o vínculo com serviços e compras.',
     corpo: `
       <p>Em <strong>Tributação</strong> você cadastra os impostos uma vez, monta cada <em>tributação</em> e só então vincula serviços e compras a ela.</p>
       <h3>1. Impostos</h3>
@@ -351,10 +351,7 @@ export const MANUAL = [
         <li><strong>Serviço (saída):</strong> no cadastro do serviço, campo <em>Tributação</em>. As retenções e o ISS retido passam a vir dela, tanto na tela de emissão quanto no XML da DPS.</li>
         <li><strong>Compra (entrada):</strong> ao importar o XML ou lançar manualmente, escolha a tributação (ou deixe a padrão).</li>
       </ul>
-      <h3>5. Apuração assistida</h3>
-      <p>Escolha o mês. Para cada imposto o sistema mostra <strong>débitos</strong> (notas emitidas), <strong>créditos</strong> (compras de tributações que geram crédito) e o saldo, lado a lado em <em>calculado</em> (tributação aplicada ao valor) e <em>XML</em> (o que a nota declarou, inclusive IBS e CBS). Retenções aparecem à parte. A lista de <strong>divergências</strong> aponta, documento a documento, onde o cálculo e o XML diferem em mais de R$ 0,05.</p>
-      <p>O cálculo fica gravado no documento. Mudou uma tributação? Use <strong>Recalcular</strong> para refazer o mês.</p>
-      <p class="dica">É uma conferência assistida, não a apuração oficial: valide sempre com o contador. O acesso é liberado por usuário (permissão <em>Tributação e apuração</em>).</p>`,
+      <p class="dica">O acesso é liberado por usuário (permissão <em>Tributação</em>).</p>`,
   },
   {
     id: 'despesas', titulo: 'Despesas e balanço', resumo: 'Lançar despesas e acompanhar receitas × despesas.',
