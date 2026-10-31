@@ -5602,7 +5602,7 @@ async function telaInicio() {
   conteudo.innerHTML = `
     <div class="inicio">
       <section class="inicio-marca">
-        <img src="/logo.png" alt="Kontor Gestão Contabilidade" class="inicio-logo">
+        <img src="/logo.svg" alt="Kontor Gestão Contabilidade" class="inicio-logo">
         <p class="inicio-saudacao">${saudacao}${nome ? `, ${esc(nome)}` : ''}!</p>
         <p class="sutil inicio-data">${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</p>
       </section>
