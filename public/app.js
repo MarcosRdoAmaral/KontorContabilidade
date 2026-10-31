@@ -430,6 +430,11 @@ const rotas = {
 };
 
 function rotear() {
+  // texto editado e não salvo (ex.: Modelos de e-mail): pergunta antes de sair da tela
+  if (estado.naoSalvo && location.hash !== estado.naoSalvo.hash) {
+    if (!confirm('Há alterações não salvas neste texto. Sair mesmo assim e descartar?')) { history.replaceState(null, '', estado.naoSalvo.hash); return; }
+    estado.naoSalvo = null;
+  }
   const [, nomeHash, param] = location.hash.split('/');
   const nome = nomeHash || telaInicial();
   if ($('#dialogo').open) $('#dialogo').close(); // trocar de tela fecha a janela aberta
@@ -3064,7 +3069,7 @@ const corpoConfig = () => $('#cfg-corpo') ?? conteudo;
 async function telaConfig(aba) {
   const adm = estado.usuario.tipo === 'adm';
   const abas = [
-    ['conta', 'Minha conta', true], ['usuarios', 'Usuários e acessos', adm], ['email', 'E-mail', adm],
+    ['conta', 'Minha conta', true], ['usuarios', 'Usuários e acessos', adm], ['email', 'E-mail', adm], ['modelos', 'Modelos de e-mail', adm],
     ['avisos', 'Avisos de prazos', adm], ['integra', 'Integra Contador', adm], ['aparencia', 'Aparência', true], ['backup', 'Backup', adm], ['contabilidade', 'Contabilidade', adm], ['licenca', 'Licença', true], ['atualizacoes', 'Atualizações', true],
   ].filter((x) => x[2]);
   if (!abas.some((x) => x[0] === aba)) aba = abas[0][0];
@@ -3072,7 +3077,7 @@ async function telaConfig(aba) {
     <div class="topo"><div><h1>Configurações</h1><p class="sutil">Ajustes gerais do sistema${adm ? '' : ' e da sua conta'}.</p></div></div>
     <nav class="abas" aria-label="Configurações">${abas.map(([k, nome]) => `<a href="#/config/${k}" class="${k === aba ? 'ativo' : ''}">${nome}</a>`).join('')}</nav>
     <div id="cfg-corpo"></div>`;
-  const tela = { integra: telaIntegra, avisos: telaAvisos, conta: telaMinhaConta, usuarios: telaUsuarios, email: telaEmail, aparencia: telaAparencia, backup: telaBackup, contabilidade: telaContabilidade, licenca: telaLicenca, atualizacoes: telaAtualizacoes }[aba];
+  const tela = { integra: telaIntegra, avisos: telaAvisos, conta: telaMinhaConta, usuarios: telaUsuarios, email: telaEmail, modelos: telaModelosEmail, aparencia: telaAparencia, backup: telaBackup, contabilidade: telaContabilidade, licenca: telaLicenca, atualizacoes: telaAtualizacoes }[aba];
   await tela();
 }
 
@@ -3390,6 +3395,145 @@ async function telaEmail() {
   };
   $('#ass-remover').onclick = async () => { await api('PUT', '/api/email/assinatura', { imagem: null }); aviso('Assinatura removida.'); previaAss(); };
   previaAss();
+}
+
+// ---------------------------------------------------------------------------
+// Modelos de e-mail: o texto de cada e-mail que vai ao cliente, com campos automáticos e prévia ao vivo
+// ---------------------------------------------------------------------------
+async function telaModelosEmail(chaveInicial) {
+  let modelos;
+  try { modelos = await api('GET', '/api/email/modelos'); } catch (e) { corpoConfig().innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; return; }
+  let atual = modelos.find((m) => m.chave === chaveInicial) ?? modelos[0];
+  const grupos = [...new Set(modelos.map((m) => m.grupo))];
+  corpoConfig().innerHTML = `
+    <div class="me-topo"><div><h2>Modelos de e-mail</h2>
+      <p class="sutil">Escreva cada e-mail do jeito do seu escritório. Os campos entre chaves (como <code>{{cliente}}</code>) são preenchidos sozinhos em cada envio. Enquanto não houver personalização, vale o texto sugerido pelo Kontor.</p></div></div>
+    <div class="me">
+      <aside class="me-lista" aria-label="E-mails do sistema">${grupos.map((g) => `<p class="me-grupo">${esc(g)}</p>${modelos.filter((m) => m.grupo === g).map((m) => `
+        <button type="button" class="me-item" data-chave="${m.chave}"><span class="me-nome">${esc(m.nome)}</span><span class="me-selo ${m.personalizado ? 'pers' : ''}" data-selo>${m.personalizado ? 'Personalizado' : 'Sugerido'}</span></button>`).join('')}`).join('')}
+      </aside>
+      <section class="me-editor" id="me-editor"></section>
+    </div>`;
+  const editor = $('#me-editor');
+  let previaT = 0, sujo = false;
+  const marcar = (v) => { sujo = v; estado.naoSalvo = v ? { hash: location.hash } : null; const s = $('#me-salvar'); if (s) s.disabled = !v; const st = $('#me-estado'); if (st) st.textContent = v ? 'Alterações não salvas' : ''; };
+  const trocar = (m) => {
+    if (m === atual && editor.innerHTML) return;
+    if (sujo && !confirm('Há alterações não salvas neste e-mail. Descartar e abrir outro?')) return;
+    atual = m; marcar(false); abrir();
+  };
+  corpoConfig().querySelectorAll('.me-item').forEach((b) => (b.onclick = () => trocar(modelos.find((m) => m.chave === b.dataset.chave))));
+
+  function abrir() {
+    corpoConfig().querySelectorAll('.me-item').forEach((b) => b.classList.toggle('ativo', b.dataset.chave === atual.chave));
+    editor.innerHTML = `
+      <header class="me-cab"><div><h3>${esc(atual.nome)}</h3><p class="sutil">${esc(atual.descricao)}</p></div>
+        <span class="me-selo grande ${atual.personalizado ? 'pers' : ''}">${atual.personalizado ? 'Texto personalizado' : 'Texto sugerido pelo Kontor'}</span></header>
+      <div class="me-colunas">
+        <div class="me-form">
+          <label>Assunto <input id="me-assunto" maxlength="200" value="${esc(atual.assunto)}"></label>
+          <div class="me-rotulo"><span>Mensagem</span><button type="button" class="me-mini" id="me-negrito" title="Negrito: marque o trecho e clique (fica entre **asteriscos**)"><b>N</b> Negrito</button></div>
+          <textarea id="me-corpo" rows="16" spellcheck="true">${esc(atual.corpo)}</textarea>
+          <div class="me-campos"><p class="me-campos-tit">Campos automáticos <span class="sutil">· clique para inserir onde está o cursor</span></p>
+            <div class="me-chips">${atual.campos.map((c) => `<button type="button" class="me-chip ${c.lista ? 'lista' : ''}" data-campo="${c.nome}" title="${esc(c.descricao)}${c.lista ? ' (deixe sozinho na linha: vira um quadro)' : ''}">{{${c.nome}}}</button>`).join('')}</div>
+            <p class="dica" id="me-desc-campo">Passe o mouse sobre um campo para ver o que ele traz.</p>
+          </div>
+          <details class="me-regras"><summary>Como funciona</summary><ul>
+            <li>Linha em branco separa parágrafos.</li>
+            <li><b>**texto**</b> sai em negrito.</li>
+            <li>Campos com borda tracejada são quadros (guias, documentos, débitos): deixe-os sozinhos na linha.</li>
+            <li>Se um campo estiver vazio em um envio, a linha dele não é enviada. Ex.: sem linha digitável, a frase da linha digitável some.</li>
+            <li>A assinatura cadastrada em <a href="#/config/email">E-mail</a> entra sozinha no fim.</li></ul></details>
+          <p class="erro" id="me-erro"></p>
+          <div class="acoes me-acoes"><button class="primario" type="button" id="me-salvar" disabled>Salvar texto</button>
+            <button type="button" id="me-teste">Enviar teste para mim</button>
+            <button type="button" id="me-restaurar" ${atual.personalizado ? '' : 'hidden'}>Restaurar texto sugerido</button>
+            <span class="me-estado" id="me-estado" aria-live="polite"></span></div>
+        </div>
+        <div class="me-previa"><p class="me-previa-tit">Prévia <span class="sutil">· com dados de exemplo</span></p>
+          <div class="me-caixa"><div class="me-cab-email"><span class="me-lbl">Assunto</span><strong id="me-prev-assunto"></strong></div>
+            <iframe id="me-prev" title="Prévia do e-mail" sandbox=""></iframe></div>
+          <p class="aviso-campo" id="me-desconhecidos" hidden></p></div>
+      </div>`;
+    const ass = $('#me-assunto'), corpo = $('#me-corpo');
+    let foco = corpo;
+    ass.onfocus = () => (foco = ass); corpo.onfocus = () => (foco = corpo);
+    const mudou = () => { marcar(ass.value !== atual.assunto || corpo.value !== atual.corpo); clearTimeout(previaT); previaT = setTimeout(previa, 250); };
+    ass.oninput = mudou; corpo.oninput = mudou;
+    const inserir = (txt, envolver) => {
+      const el = foco, i = el.selectionStart ?? el.value.length, f = el.selectionEnd ?? i;
+      const sel = el.value.slice(i, f);
+      const novo = envolver ? `**${sel || 'texto'}**` : txt;
+      el.value = el.value.slice(0, i) + novo + el.value.slice(f);
+      el.focus(); const pos = envolver && !sel ? i + 2 : i + novo.length; el.setSelectionRange(pos, envolver && !sel ? pos + 5 : pos);
+      mudou();
+    };
+    editor.querySelectorAll('.me-chip').forEach((b) => {
+      const c = atual.campos.find((x) => x.nome === b.dataset.campo);
+      b.onmouseenter = b.onfocus = () => ($('#me-desc-campo').textContent = `{{${c.nome}}}: ${c.descricao}${c.lista ? '. Deixe sozinho na linha: vira um quadro no e-mail.' : '.'}`);
+      b.onmousedown = (ev) => ev.preventDefault(); // não tira o cursor do texto
+      b.onclick = () => inserir(c.lista && foco === corpo ? `\n{{${c.nome}}}\n` : `{{${c.nome}}}`);
+    });
+    $('#me-negrito').onmousedown = (ev) => ev.preventDefault();
+    $('#me-negrito').onclick = () => { foco = corpo; inserir('', true); };
+    const atualizarLista = () => { const b = corpoConfig().querySelector(`.me-item[data-chave="${atual.chave}"] [data-selo]`); b.textContent = atual.personalizado ? 'Personalizado' : 'Sugerido'; b.classList.toggle('pers', atual.personalizado); };
+    $('#me-salvar').onclick = async () => {
+      $('#me-erro').textContent = '';
+      try {
+        await api('PUT', `/api/email/modelos/${atual.chave}`, { assunto: ass.value, corpo: corpo.value });
+        atual.assunto = ass.value; atual.corpo = corpo.value;
+        atual.personalizado = !(ass.value === atual.padrao.assunto && corpo.value === atual.padrao.corpo);
+        marcar(false); atualizarLista(); abrir(); aviso('Texto salvo. Os próximos envios já saem assim.');
+      } catch (e) { $('#me-erro').textContent = mensagemErro(e); }
+    };
+    $('#me-restaurar').onclick = () => abrirDialogo(`<h2>Restaurar texto sugerido?</h2>
+      <p>O assunto e a mensagem de <b>${esc(atual.nome)}</b> voltam para o texto sugerido pelo Kontor. O seu texto atual será descartado.</p>
+      <div class="acoes"><button class="primario" type="button" id="me-ok">Restaurar</button><button type="button" data-fechar>Cancelar</button></div>`, (d) => {
+      $('#me-ok').onclick = async () => {
+        try { await api('DELETE', `/api/email/modelos/${atual.chave}`); } catch (e) { d.close(); return aviso(mensagemErro(e)); }
+        d.close(); Object.assign(atual, atual.padrao, { personalizado: false }); marcar(false); atualizarLista(); abrir(); aviso('Texto sugerido restaurado.');
+      };
+    });
+    $('#me-teste').onclick = () => abrirDialogo(`
+      <form id="form-me-teste"><h2>Enviar teste</h2>
+        <p class="sutil">Envia o texto que está na tela agora (mesmo sem salvar), com dados de exemplo e o assunto começando por [Teste].</p>
+        <label>Enviar para <input name="para" type="email" required value="${esc(estado.usuario.email ?? '')}"></label>
+        <p class="erro" id="erro-me-teste"></p>
+        <div class="acoes"><button class="primario" type="submit">Enviar teste</button><button type="button" data-fechar>Fechar</button></div>
+      </form>`, (d) => {
+      $('#form-me-teste').onsubmit = async (ev) => {
+        ev.preventDefault();
+        const botao = ev.target.querySelector('[type=submit]'); botao.disabled = true; botao.textContent = 'Enviando…';
+        try { await api('POST', `/api/email/modelos/${atual.chave}/teste`, { assunto: ass.value, corpo: corpo.value, para: ev.target.para.value }); d.close(); aviso('Teste enviado. Confira a caixa de entrada (e o spam).'); }
+        catch (e) { $('#erro-me-teste').textContent = mensagemErro(e); botao.disabled = false; botao.textContent = 'Enviar teste'; }
+      };
+    });
+    previa();
+  }
+
+  let assImg;
+  const assinaturaPrevia = async () => {
+    if (assImg !== undefined) return assImg;
+    try {
+      const b = await (await api('GET', '/api/email/assinatura', undefined, { bruto: true })).blob();
+      assImg = await new Promise((ok) => { const l = new FileReader(); l.onload = () => ok(l.result); l.readAsDataURL(b); });
+    } catch { assImg = null; }
+    return assImg;
+  };
+  async function previa() {
+    const ass = $('#me-assunto'), corpo = $('#me-corpo');
+    if (!ass) return;
+    try {
+      const r = await api('POST', `/api/email/modelos/${atual.chave}/previa`, { assunto: ass.value, corpo: corpo.value });
+      $('#me-prev-assunto').textContent = r.assunto || '(sem assunto)';
+      const img = await assinaturaPrevia();
+      $('#me-prev').srcdoc = `<!doctype html><meta charset="utf-8"><style>body{margin:0}</style>${r.html.replace('<!--assinatura-->', img ? `<p style="margin:20px 0 0"><img src="${img}" alt="Assinatura" style="max-width:480px;width:100%;height:auto;display:block;border:0"></p>` : '')}`;
+      const aviso2 = $('#me-desconhecidos');
+      aviso2.hidden = !r.desconhecidos.length;
+      aviso2.textContent = r.desconhecidos.length ? `Campo que não existe neste e-mail: ${r.desconhecidos.map((n) => `{{${n}}}`).join(', ')}. Confira a grafia ou use os campos da lista.` : '';
+    } catch { /* a prévia não interrompe a edição */ }
+  }
+  abrir();
 }
 
 async function telaBackup() {

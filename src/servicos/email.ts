@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { cifrarTexto, decifrarTexto } from '../cofre.js';
+import { camposCliente, camposMes, renderizar, type ItemLista, type Variaveis } from './modelos-email.js';
 import { ErroNegocio, danfse } from './emissao.js';
 
 export const ConfigSmtp = z.object({
@@ -86,7 +87,7 @@ function assinar<T extends { text?: string; html?: string; attachments?: any[] }
   const a = assinaturaDoEscritorio(escritorioId);
   if (!a) return m;
   const img = `<p style="margin:20px 0 0"><img src="cid:assinatura@kontor" alt="Assinatura" style="max-width:480px;width:100%;height:auto;display:block;border:0"></p>`;
-  const html = m.html ? m.html.replace(/<\/div>\s*$/, `${img}</div>`) : `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${String(m.text ?? '').split('\n').map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}${img}</div>`;
+  const html = m.html?.includes('<!--assinatura-->') ? m.html.replace('<!--assinatura-->', img) : m.html ? m.html.replace(/<\/div>\s*$/, `${img}</div>`) : `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${String(m.text ?? '').split('\n').map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}${img}</div>`;
   return { ...m, html: html.includes('cid:assinatura@kontor') ? html : html + img,
     attachments: [...(m.attachments ?? []), { filename: `assinatura.${a.mime.split('/')[1].replace('jpeg', 'jpg')}`, content: a.img, contentType: a.mime, cid: 'assinatura@kontor', contentDisposition: 'inline' }] };
 }
@@ -95,7 +96,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /** Envia a NFS-e (DANFSe em PDF + XML) para os destinatários e registra o resultado. */
-export async function enviarNotaPorEmail(notaId: number, escritorioId: number, para: string[], usuarioId: number, tipo: 'emissao' | 'cancelamento' = 'emissao', adicional: { extras?: { filename: string; content: Buffer; contentType: string }[]; linhasExtras?: string[] } = {}) {
+export async function enviarNotaPorEmail(notaId: number, escritorioId: number, para: string[], usuarioId: number, tipo: 'emissao' | 'cancelamento' = 'emissao', adicional: { extras?: { filename: string; content: Buffer; contentType: string }[]; boletos?: ItemLista[] } = {}) {
   const nota = db.prepare(`SELECT n.*, e.razao_social, e.nome_fantasia, e.email AS empresa_email, e.escritorio_id
     FROM notas n JOIN empresas e ON e.id = n.empresa_id WHERE n.id = ?`).get(notaId) as any;
   if (!nota || nota.escritorio_id !== escritorioId) throw new ErroNegocio('Nota não encontrada.', 404);
@@ -109,26 +110,12 @@ export async function enviarNotaPorEmail(notaId: number, escritorioId: number, p
     ? (db.prepare(`SELECT motivo, xml_pedido FROM eventos WHERE nota_id = ? AND tipo = 'CANCELAMENTO' AND status NOT IN ('REJEITADO') ORDER BY id DESC LIMIT 1`).get(notaId) as { motivo: string | null; xml_pedido: string | null } | undefined)
     : undefined;
   const pdf = await danfse(notaId);
-  const empresa = nota.nome_fantasia || nota.razao_social;
-  const assunto = tipo === 'cancelamento' ? `NFS-e nº ${nota.n_nfse} CANCELADA — ${empresa}` : `NFS-e nº ${nota.n_nfse} — ${empresa}`;
-  const linhas = tipo === 'cancelamento' ? [
-    `Olá${nota.tomador_nome ? ', ' + nota.tomador_nome : ''}!`, '',
-    `Informamos que a NFS-e nº ${nota.n_nfse}, emitida por ${nota.razao_social}, foi CANCELADA e não tem mais validade fiscal.`, '',
-    `Valor da nota: ${brl(nota.valor_servico)}`, `Competência: ${nota.competencia.split('-').reverse().join('/')}`,
-    ...(ev?.motivo ? [`Motivo: ${ev.motivo}`] : []),
-    `Chave de acesso: ${nota.chave_acesso}`, '',
-    'Em anexo: o PDF (DANFSe, marcado como cancelado) e os XMLs da nota e do cancelamento.',
-    'Desconsidere o documento anterior. Se uma nova nota for emitida, você a receberá em seguida.',
-    `Consulta: https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${nota.chave_acesso}`,
-  ] : [
-    `Olá${nota.tomador_nome ? ', ' + nota.tomador_nome : ''}!`, '',
-    `Segue a Nota Fiscal de Serviço eletrônica (NFS-e) nº ${nota.n_nfse}, emitida por ${nota.razao_social}.`, '',
-    `Valor do serviço: ${brl(nota.valor_servico)}`, `Competência: ${nota.competencia.split('-').reverse().join('/')}`,
-    `Chave de acesso: ${nota.chave_acesso}`, '',
-    'Em anexo: o PDF (DANFSe) e o arquivo XML da nota.',
-    `Você também pode consultar a nota em https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${nota.chave_acesso}`,
-    ...(adicional.linhasExtras ?? []),
-  ];
+  const vars: Variaveis = {
+    contato: String(nota.tomador_nome ?? '').trim(), cliente: nota.tomador_nome ?? '', razao_social: nota.tomador_nome ?? '', cnpj: nota.tomador_documento ?? '',
+    numero: String(nota.n_nfse), emitente: nota.razao_social, valor: brl(nota.valor_servico), competencia: nota.competencia.split('-').reverse().join('/'),
+    chave: nota.chave_acesso, link: `https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${nota.chave_acesso}`, motivo: ev?.motivo ?? '', boletos: adicional.boletos ?? [],
+  };
+  const r = renderizar(escritorioId, tipo === 'cancelamento' ? 'nota_cancelada' : 'nota', vars);
   const destino = para.join(', ');
   const registrar = (status: 'ENVIADO' | 'ERRO', erro?: string) =>
     db.prepare('INSERT INTO emails_enviados (nota_id, para, status, erro, enviado_por) VALUES (?,?,?,?,?)').run(notaId, destino, status, erro ?? null, usuarioId);
@@ -137,9 +124,9 @@ export async function enviarNotaPorEmail(notaId: number, escritorioId: number, p
       from: `"${c.remetente_nome}" <${c.remetente_email}>`,
       to: destino,
       ...(nota.empresa_email ? { replyTo: nota.empresa_email } : {}),
-      subject: assunto,
-      text: linhas.join('\n'),
-      html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
+      subject: r.assunto,
+      text: r.linhas.join('\n'),
+      html: r.html,
       attachments: [
         { filename: `DANFSe_${nota.n_nfse}.pdf`, content: pdf, contentType: 'application/pdf' },
         { filename: `NFSe_${nota.n_nfse}.xml`, content: nota.xml_nfse, contentType: 'application/xml; charset=utf-8' },
@@ -178,39 +165,18 @@ export async function enviarMensagemBoleto(escritorioId: number, para: string[],
   const c = lerConfig(escritorioId);
   if (!c) throw new ErroNegocio('Configure o e-mail do escritório em E-mail antes de enviar.');
   const emp = db.prepare('SELECT e.razao_social, e.nome_fantasia, e.email FROM empresas e WHERE e.id = ?').get(cob.empresa_id) as any;
-  const linhas = [
-    `Olá${tomador?.nome ? ', ' + tomador.nome : ''}!`, '',
-    `Segue o boleto de cobrança emitido por ${emp.razao_social}.`, '',
-    `Vencimento: ${cob.vencimento.split('-').reverse().join('/')}`, `Valor: ${brl(cob.valor)}`, `Linha digitável: ${cob.linha_digitavel}`, '',
-    'O boleto segue em anexo (PDF).',
-  ];
-  try {
-    await fabrica(c).sendMail(assinar(escritorioId, {
-      from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para.join(', '), ...(emp.email ? { replyTo: emp.email } : {}),
-      subject: `Boleto com vencimento em ${cob.vencimento.split('-').reverse().join('/')} — ${emp.nome_fantasia || emp.razao_social}`,
-      text: linhas.join('\n'),
-      html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
-      attachments: anexos,
-    }));
-  } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
+  const nome = String(tomador?.nome ?? '').trim();
+  await enviarComModelo(escritorioId, 'boleto', { contato: nome, cliente: nome, razao_social: nome, cnpj: tomador?.documento ?? '', emitente: emp.razao_social,
+    valor: brl(cob.valor), vencimento: cob.vencimento.split('-').reverse().join('/'), linha_digitavel: cob.linha_digitavel ?? '' }, para, { anexos, replyTo: emp.email });
 }
 
 /** Fechamento mensal para a contabilidade: o pacote ZIP segue em anexo. */
-export async function enviarPacoteContabilidade(escritorioId: number, para: string[], empresa: { razao_social: string; nome_fantasia?: string | null; documento: string; email?: string | null }, rotuloMes: string, zip: Buffer, nomeZip: string, resumo: string[]) {
+export async function enviarPacoteContabilidade(escritorioId: number, para: string[], empresa: { id: number; email?: string | null }, mes: string, zip: Buffer, nomeZip: string, resumo: ItemLista[]) {
   const c = lerConfig(escritorioId);
   if (!c) throw new ErroNegocio('Configure o e-mail do escritório em E-mail antes de enviar o fechamento.');
   if (zip.length > 20 * 1024 * 1024) throw new ErroNegocio(`O pacote tem ${(zip.length / 1048576).toFixed(1)} MB, acima do que o e-mail aceita. Baixe pelo sistema e envie por outro meio.`);
-  const nome = empresa.nome_fantasia || empresa.razao_social;
-  const linhas = ['Olá!', '', `Segue o fechamento de ${rotuloMes} de ${empresa.razao_social} (${empresa.documento}).`, '', ...resumo, '', 'O pacote vai em anexo (ZIP). Gerado automaticamente pelo Kontor Gestão Contabilidade.'];
-  try {
-    await fabrica(c).sendMail(assinar(escritorioId, {
-      from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para.join(', '), ...(empresa.email ? { replyTo: empresa.email } : {}),
-      subject: `Fechamento ${rotuloMes} — ${nome}`,
-      text: linhas.join('\n'),
-      html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
-      attachments: [{ filename: nomeZip, content: zip, contentType: 'application/zip' }],
-    }));
-  } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
+  await enviarComModelo(escritorioId, 'pacote', { ...camposCliente(empresa.id), ...camposMes(mes), resumo }, para,
+    { anexos: [{ filename: nomeZip, content: zip, contentType: 'application/zip' }], replyTo: empresa.email });
 }
 
 /** E-mail de texto simples do escritório (avisos de prazos, contratos). Devolve false se o SMTP não estiver configurado. */
@@ -223,6 +189,24 @@ export async function enviarEmailSimples(escritorioId: number, para: string[], a
       text: linhas.join('\n'),
       html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">${linhas.map((l) => (l ? `<p style="margin:0 0 8px">${esc(l)}</p>` : '')).join('')}</div>`,
       attachments: anexos,
+    }));
+    return true;
+  } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }
+}
+
+type Anexo = { filename: string; content: Buffer | string; contentType: string };
+/**
+ * Envia um e-mail a partir de um modelo (Configurações > Modelos de e-mail): o texto do escritório, ou o sugerido.
+ * Devolve false se o SMTP não estiver configurado; erro de envio vira ErroNegocio com a explicação.
+ */
+export async function enviarComModelo(escritorioId: number, chave: string, vars: Variaveis, para: string[], opc: { anexos?: Anexo[]; replyTo?: string | null; editado?: { assunto: string; corpo: string } } = {}): Promise<boolean> {
+  const c = lerConfig(escritorioId);
+  if (!c) return false;
+  const r = renderizar(escritorioId, chave, vars, opc.editado);
+  try {
+    await fabrica(c).sendMail(assinar(escritorioId, {
+      from: `"${c.remetente_nome}" <${c.remetente_email}>`, to: para.join(', '), ...(opc.replyTo ? { replyTo: opc.replyTo } : {}),
+      subject: r.assunto, text: r.linhas.join('\n'), html: r.html, attachments: opc.anexos ?? [],
     }));
     return true;
   } catch (e) { throw new ErroNegocio(traduzirErro(e), 502); }

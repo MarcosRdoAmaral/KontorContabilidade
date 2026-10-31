@@ -456,3 +456,46 @@ input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); 
 /* Tema claro: logo com texto escuro, sem a placa preta */
 :root[data-tema="branco-laranja"] .marca img, :root[data-tema="branco-laranja"] .inicio-logo, :root[data-tema="branco-laranja"] .login-caixa .logo { content: url(/logo-claro.svg); background: none; padding: 0; }
 :root[data-tema="branco-laranja"] .marca { background: none; }
+
+/* Modelos de e-mail (Configurações) */
+.me-topo h2 { margin-top: .4rem; }
+.me { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 8px; }
+.me-lista { position: sticky; top: 12px; background: var(--superficie); border: 1px solid var(--borda-leve); border-radius: 12px; padding: 8px; display: grid; gap: 2px; }
+.me-grupo { margin: 10px 10px 4px; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); }
+.me-grupo:first-child { margin-top: 4px; }
+.me-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; padding: 8px 10px; border-radius: 8px; }
+.me-item:hover { background: var(--superficie-2); border-color: transparent; }
+.me-item.ativo { background: var(--laranja-fundo); border-color: var(--laranja-forte); }
+.me-nome { font-size: .9rem; line-height: 1.3; }
+.me-selo { flex: none; font-size: .68rem; padding: 2px 7px; border-radius: 99px; color: var(--tinta-2); border: 1px solid var(--borda-botao); }
+.me-selo.pers { color: var(--laranja); border-color: var(--laranja-forte); background: var(--laranja-fundo); }
+.me-selo.grande { font-size: .75rem; padding: 4px 10px; }
+.me-editor { background: var(--superficie); border: 1px solid var(--borda-leve); border-radius: 12px; padding: 20px 22px; min-width: 0; }
+.me-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--borda-leve); margin-bottom: 16px; }
+.me-cab h3 { margin: 0 0 2px; font-size: 1.1rem; }
+.me-cab p { margin: 0; }
+.me-colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }
+.me-form { display: grid; gap: 12px; align-content: start; }
+.me-rotulo { display: flex; justify-content: space-between; align-items: center; margin-bottom: -6px; }
+.me-mini { padding: 3px 9px; font-size: .8rem; }
+#me-corpo { font-family: inherit; line-height: 1.55; resize: vertical; min-height: 300px; }
+.me-campos-tit { margin: 0 0 6px; font-size: .85rem; font-weight: 600; }
+.me-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.me-chip { font-family: ui-monospace, Consolas, monospace; font-size: .78rem; padding: 3px 8px; border-radius: 6px; background: var(--superficie-2); border: 1px solid var(--borda-botao); color: var(--tinta); }
+.me-chip:hover { border-color: var(--laranja); color: var(--laranja); }
+.me-chip.lista { border-style: dashed; }
+.me-campos .dica { margin: 6px 0 0; min-height: 1.4em; }
+.me-regras { font-size: .86rem; color: var(--tinta-2); }
+.me-regras summary { cursor: pointer; color: var(--tinta); }
+.me-regras ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
+.me-acoes { align-items: center; flex-wrap: wrap; }
+.me-estado { font-size: .82rem; color: var(--ambar); }
+.me-previa { min-width: 0; position: sticky; top: 12px; align-self: start; }
+.me-previa-tit { margin: 0 0 6px; font-size: .85rem; font-weight: 600; }
+.me-caixa { border: 1px solid var(--borda-botao); border-radius: 10px; overflow: hidden; background: #f3f4f6; }
+.me-cab-email { display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; background: #fff; color: #111827; border-bottom: 1px solid #e5e7eb; font-size: .9rem; }
+.me-lbl { color: #6b7280; font-size: .78rem; }
+#me-prev { display: block; width: 100%; height: 560px; border: 0; background: #f3f4f6; }
+.aviso-campo { margin: 8px 0 0; font-size: .85rem; color: var(--ambar); background: var(--ambar-fundo); border: 1px solid var(--ambar-borda); border-radius: 8px; padding: 8px 10px; }
+@media (max-width: 1280px) { .me-colunas { grid-template-columns: 1fr; } .me-previa { position: static; } }
+@media (max-width: 860px) { .me { grid-template-columns: 1fr; } .me-lista { position: static; } }

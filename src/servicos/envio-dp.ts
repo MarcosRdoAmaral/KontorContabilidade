@@ -3,7 +3,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
-import { enviarEmailSimples } from './email.js';
+import { enviarComModelo } from './email.js';
+import { camposCliente, camposMes, type Variaveis } from './modelos-email.js';
 import { lerGuia } from './fechamento.js';
 import { lancarNoControle } from './controle-mensal.js';
 import { norm, porNome } from './importar-controle.js';
@@ -166,15 +167,11 @@ export async function varrerPastaDp(escritorioId: number, enviar: boolean): Prom
 }
 
 async function enviarConjunto(escritorioId: number, e: any, comp: string, arqs: ArqDp[], complemento: boolean, emails: string[]) {
-  const esc = db.prepare('SELECT COALESCE(nome_fantasia, razao_social) AS nome FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
-  const linhas = [
-    `Olá! ${complemento ? 'Segue um documento do departamento pessoal que ficou pronto depois' : 'Seguem os documentos do departamento pessoal'} da competência ${rotulo(comp)} da ${e.cliente}:`, '',
-    ...arqs.map((a) => `• ${TIPOS_DP[a.tipo]}${a.valor != null ? `: ${brl(a.valor)}` : ''}${a.vencimento ? `, vencimento ${dataBr(a.vencimento)}` : ''}`),
-    '', 'Os arquivos estão em anexo. Qualquer dúvida, estamos à disposição.', '', esc?.nome ?? '',
-  ];
+  const vars: Variaveis = { ...camposCliente(e.id), ...camposMes(comp),
+    documentos: arqs.map((a) => ({ rotulo: TIPOS_DP[a.tipo], valor: a.valor != null ? brl(a.valor) : null, detalhe: a.vencimento ? `Vencimento ${dataBr(a.vencimento)}` : null })) };
   try {
     const anexos = arqs.map((a) => ({ filename: path.basename(a.caminho), content: fs.readFileSync(a.caminho), contentType: 'application/pdf' }));
-    const ok = await enviarEmailSimples(escritorioId, emails, `Departamento pessoal ${rotulo(comp)}${complemento ? ' (complemento)' : ''} — ${e.cliente}`, linhas, anexos);
+    const ok = await enviarComModelo(escritorioId, complemento ? 'dp_complemento' : 'dp', vars, emails, { anexos });
     if (!ok) throw new ErroNegocio('Configure o servidor de e-mail em Configurações > E-mail.');
   } catch (err: any) {
     const erro = String(err?.message ?? err);

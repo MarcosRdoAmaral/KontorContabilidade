@@ -77,7 +77,7 @@ test('envio automático do DP pela pasta do escritório', async () => {
     r = await D.varrerPastaDp(1, true);
     assert.equal(r[0].situacao, 'COMPLEMENTO');
     assert.deepEqual(enviados[1].attachments.map((a: any) => a.filename), ['E0003_Espelhoeresumodafolhadepagamento.pdf']);
-    assert.match(enviados[1].subject, /complemento/);
+    assert.match(enviados[1].subject, /complemento/i);
     // DARF substituído (outro conteúdo): vai de novo como complemento
     poe('10-2026', 'Darf Previdenciária.pdf', '%PDF-1.4 retificado');
     r = await D.varrerPastaDp(1, true);

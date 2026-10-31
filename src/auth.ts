@@ -80,7 +80,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/consulta\/cnpj\//, mod: 'livre' },
   { m: 'GET', r: /^\/api\/empresas$/, mod: 'livre' },
   { r: /^\/api\/empresas\/\d+\/contabilidade(\/|$)/, mod: 'adm' },
-  { r: /^\/api\/(usuarios|email\/config|email\/testar|email\/assinatura|backup|tabelas|licenca|contabilidade)(\/|$)/, mod: 'adm' },
+  { r: /^\/api\/(usuarios|email\/config|email\/testar|email\/assinatura|email\/modelos|backup|tabelas|licenca|contabilidade)(\/|$)/, mod: 'adm' },
   { m: 'POST', r: /^\/api\/empresas\/\d+\/certificado$/, mod: ['empresas', 'certificados'] }, // A1 do cliente, também por Escritório > Certificados
   { r: /^\/api\/empresas(\/\d+)?$|^\/api\/empresas\/\d+\/(certificado|logo|ativo)$/, mod: ['empresas'] },
   { m: 'POST', r: /^\/api\/tomadores\/\d+\/descricao$/, mod: ['emitir', 'tomadores'] },

@@ -239,7 +239,7 @@ test('fluxo completo: cadastro, emissão, rejeição, queda de rede, DANFSe e ca
   bancoEmail.prepare('UPDATE notas SET ambiente = 1 WHERE id = ?').run(nota1);
   assert.equal((await call('POST', `/api/notas/${nota1}/email`, { para: ['cliente@x.com'], tipo: 'cancelamento' }, token)).status, 200);
   const canc = enviadosEmail.at(-1);
-  assert.match(canc.subject, /CANCELADA/);
+  assert.match(canc.subject, /cancelada/i);
   assert.match(canc.text, /Erro no valor do serviço informado/);
   assert.ok(canc.attachments.some((a: any) => /^Cancelamento_NFSe_.*\.xml$/.test(a.filename)));
   bancoEmail.prepare('UPDATE notas SET ambiente = 2 WHERE id = ?').run(nota1);

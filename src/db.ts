@@ -1085,6 +1085,15 @@ const migracoes: string[] = [
     lido_em TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (empresa_id, competencia)
   );`,
+  // 42: textos dos e-mails personalizados pelo escritório (sem linha = texto sugerido pelo Kontor)
+  `CREATE TABLE email_modelos (
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id) ON DELETE CASCADE,
+    chave TEXT NOT NULL,
+    assunto TEXT NOT NULL,
+    corpo TEXT NOT NULL,
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (escritorio_id, chave)
+  );`,
 ];
 
 export function migrar(): void {

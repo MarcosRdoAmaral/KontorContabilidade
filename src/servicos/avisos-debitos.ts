@@ -1,6 +1,7 @@
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
-import { enviarEmailSimples } from './email.js';
+import { enviarComModelo } from './email.js';
+import { camposCliente, renderizar, type ItemLista, type Variaveis } from './modelos-email.js';
 import type { RelatorioLido } from './situacao-fiscal.js';
 
 /**
@@ -10,7 +11,6 @@ import type { RelatorioLido } from './situacao-fiscal.js';
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataBr = (s?: string | null) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '');
-const fmtDoc = (d: string) => (d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4'));
 
 export function marcarAviso(escritorioId: number, empresaIds: number[], avisar: boolean) {
   const up = db.prepare('UPDATE empresas SET avisar_debitos = ? WHERE id = ? AND escritorio_id = ?');
@@ -29,8 +29,6 @@ export function textoDoAviso(escritorioId: number, empresaId: number) {
   const s = ultimaConsulta(empresaId);
   if (!s || s.situacao !== 'PENDENCIAS' || !s.resumo_json) throw new ErroNegocio('A última consulta deste cliente não tem débitos em aberto para avisar.');
   const r = JSON.parse(s.resumo_json) as RelatorioLido;
-  const esc = db.prepare('SELECT razao_social, nome_fantasia, email FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
-  const escNome = esc?.nome_fantasia || esc?.razao_social || 'Escritório de contabilidade';
   const debitos = r.secoes.filter((x) => x.tipo === 'PENDENCIA' && x.orgao === 'RFB').flatMap((x) => x.itens).filter((i) => i.tipo === 'DEBITO');
   const inscricoes = r.secoes.filter((x) => x.tipo === 'PENDENCIA' && x.orgao === 'PGFN').flatMap((x) => x.itens).filter((i) => i.tipo === 'INSCRICAO');
   const porTributo = new Map<string, { nome: string; periodos: string[]; total: number }>();
@@ -39,33 +37,24 @@ export function textoDoAviso(escritorioId: number, empresaId: number) {
     const g = porTributo.get(k) ?? { nome: i.descricao || i.receita || 'Débito', periodos: [], total: 0 };
     if (i.periodo) g.periodos.push(i.periodo); g.total += i.saldo ?? 0; porTributo.set(k, g);
   }
-  const linhas = [`Olá${e.contato_nome ? `, ${e.contato_nome}` : ''}!`, '',
-    `Na consulta à situação fiscal de ${e.nome_fantasia || e.razao_social} (${fmtDoc(e.documento)}) feita em ${dataBr(s.concluida_em ?? s.solicitada_em)}, constam os seguintes débitos em aberto:`, ''];
-  if (porTributo.size) {
-    linhas.push('NA RECEITA FEDERAL');
-    for (const g of [...porTributo.values()].sort((a, b) => b.total - a.total)) {
-      linhas.push(`• ${g.nome}${g.periodos.length ? ` — período(s) ${g.periodos.slice(0, 6).join(', ')}${g.periodos.length > 6 ? ` e mais ${g.periodos.length - 6}` : ''}` : ''}: ${brl(g.total)}`);
-    }
-    linhas.push(`Total aproximado, com multa e juros até a data da consulta: ${brl(r.totalAberto)}`, '');
+  const lista: ItemLista[] = [];
+  for (const g of [...porTributo.values()].sort((a, b) => b.total - a.total)) {
+    lista.push({ rotulo: `${g.nome}${g.periodos.length ? ` — período(s) ${g.periodos.slice(0, 6).join(', ')}${g.periodos.length > 6 ? ` e mais ${g.periodos.length - 6}` : ''}` : ''}`, valor: brl(g.total), detalhe: 'Receita Federal' });
   }
-  if (inscricoes.length) {
-    linhas.push('EM DÍVIDA ATIVA (PROCURADORIA-GERAL DA FAZENDA NACIONAL)');
-    // agrupadas por tributo: a lista inteira (às vezes dezenas de inscrições) fica no relatório
-    const grupos = new Map<string, { n: number; ajuizadas: number }>();
-    for (const i of inscricoes) { const k = i.descricao || i.receita || 'Outras'; const g = grupos.get(k) ?? { n: 0, ajuizadas: 0 }; g.n++; if (/ajuizad/i.test(i.situacao ?? '')) g.ajuizadas++; grupos.set(k, g); }
-    for (const [k, g] of [...grupos].sort((a, b) => b[1].n - a[1].n)) linhas.push(`• ${k}: ${g.n} inscrição(ões)${g.ajuizadas ? `, ${g.ajuizadas} ajuizada(s)` : ''}`);
-    linhas.push('');
-  }
-  linhas.push('Enquanto houver débitos em aberto, a certidão negativa de débitos fica impedida e os valores continuam corrigindo com multa e juros.',
-    'Quando quiser regularizar, fale com a gente: emitimos as guias atualizadas para a data em que você for pagar, ou vemos um parcelamento.', '', escNome);
-  return { para: e.email as string | null, assunto: `Débitos em aberto — ${e.nome_fantasia || e.razao_social}`, linhas, situacaoId: s.id as number };
+  // inscrições agrupadas por tributo: a lista inteira (às vezes dezenas) fica no relatório
+  const grupos = new Map<string, { n: number; ajuizadas: number }>();
+  for (const i of inscricoes) { const k = i.descricao || i.receita || 'Outras'; const g = grupos.get(k) ?? { n: 0, ajuizadas: 0 }; g.n++; if (/ajuizad/i.test(i.situacao ?? '')) g.ajuizadas++; grupos.set(k, g); }
+  for (const [k, g] of [...grupos].sort((a, b) => b[1].n - a[1].n)) lista.push({ rotulo: `${k}: ${g.n} ${g.n === 1 ? 'inscrição' : 'inscrições'}${g.ajuizadas ? `, ${g.ajuizadas} ajuizada(s)` : ''}`, detalhe: 'Dívida ativa (Procuradoria-Geral da Fazenda Nacional)' });
+  const vars: Variaveis = { ...camposCliente(empresaId), data_consulta: dataBr(s.concluida_em ?? s.solicitada_em), debitos: lista, total: porTributo.size ? brl(r.totalAberto) : '' };
+  const m = renderizar(escritorioId, 'debitos', vars);
+  return { para: e.email as string | null, assunto: m.assunto, linhas: m.linhas, html: m.html, vars, situacaoId: s.id as number };
 }
 
 export async function avisarCliente(escritorioId: number, empresaId: number, usuarioId: number | null, automatico = false) {
   const t = textoDoAviso(escritorioId, empresaId);
   if (!t.para) throw new ErroNegocio('O cliente não tem e-mail no cadastro da Carteira.');
   const emails = t.para.split(/[,;\s]+/).filter(Boolean);
-  const ok = await enviarEmailSimples(escritorioId, emails, t.assunto, t.linhas);
+  const ok = await enviarComModelo(escritorioId, 'debitos', t.vars, emails);
   if (!ok) throw new ErroNegocio('Configure o envio de e-mail (SMTP) em Configurações > E-mail.');
   db.prepare('INSERT INTO avisos_debitos (empresa_id, situacao_fiscal_id, emails, usuario_id, automatico) VALUES (?,?,?,?,?)').run(empresaId, t.situacaoId, emails.join(', '), usuarioId, automatico ? 1 : 0);
   return { enviadoPara: emails };

@@ -95,7 +95,7 @@ test('recalcular guias pelo Integra Contador e avisar só os clientes marcados',
     const prev = (await call('GET', `/api/escritorio/situacao-fiscal/aviso/${pad}`, undefined, t)).json;
     assert.equal(prev.para, 'padaria@x.com');
     const txt = prev.linhas.join('\n');
-    assert.match(txt, /CP-PATRONAL/); assert.match(txt, /SIMPLES\s*NACIONAL: 1 inscrição\(ões\), 1 ajuizada/); assert.match(txt, /fale com a gente/);
+    assert.match(txt, /CP-PATRONAL/); assert.match(txt, /SIMPLES\s*NACIONAL: 1 inscrição, 1 ajuizada/); assert.match(txt, /conte com a gente/);
     // só os marcados, só com a opção ligada, uma vez por consulta
     db.prepare('UPDATE escritorios SET smtp_enc = ? WHERE id = 1').run(cifrarTexto(JSON.stringify({ host: 'x', porta: 587, usuario: 'u', senha: 's', remetente_nome: 'Ciclo', remetente_email: 'ciclo@x.com' })));
     assert.equal((await call('PUT', '/api/escritorio/situacao-fiscal/marcar-aviso', { ids: [pad], avisar: true }, t)).status, 200);

@@ -127,14 +127,14 @@ export async function faturar(u: Usuario, entrada: EntradaFaturamento) {
     else {
       try {
         const extras: { filename: string; content: Buffer; contentType: string }[] = [];
-        const linhasExtras: string[] = temBoleto ? [''] : [];
+        const boletos: { rotulo: string; valor: string; detalhe: string }[] = [];
         for (const c of emitidos) {
           const b = await boletoPdf(c.id);
           extras.push({ filename: b.nome, content: b.pdf, contentType: 'application/pdf' });
-          linhasExtras.push(`Boleto${emitidos.length > 1 ? ` ${emitidos.indexOf(c) + 1}/${emitidos.length}` : ''}: vencimento em ${c.vencimento.split('-').reverse().join('/')}, valor R$ ${c.valor.toFixed(2).replace('.', ',')}.`, `Linha digitável: ${c.linha_digitavel}`);
+          boletos.push({ rotulo: `Boleto${emitidos.length > 1 ? ` ${emitidos.indexOf(c) + 1} de ${emitidos.length}` : ''} (PDF em anexo)`, valor: c.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+            detalhe: `Vencimento ${c.vencimento.split('-').reverse().join('/')} · Linha digitável ${c.linha_digitavel}` });
         }
-        if (temBoleto) linhasExtras.push(emitidos.length > 1 ? 'Os boletos seguem em anexo (PDF).' : 'O boleto segue em anexo (PDF).');
-        if (resultado.nota) await enviarNotaPorEmail(resultado.nota.id, u.escritorio_id, unicos, u.id, 'emissao', { extras, linhasExtras });
+        if (resultado.nota) await enviarNotaPorEmail(resultado.nota.id, u.escritorio_id, unicos, u.id, 'emissao', { extras, boletos });
         else await enviarMensagemBoleto(u.escritorio_id, unicos, cob, tomador, extras);
         for (const c of cobs) registrarEmailCobranca(c.id, 'ENVIADO', unicos.join(', '));
         resultado.email = { status: 'ENVIADO', para: unicos.join(', ') };

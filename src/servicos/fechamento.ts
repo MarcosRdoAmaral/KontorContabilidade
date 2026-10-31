@@ -5,7 +5,8 @@ import { ErroNegocio, certificadoDaEmpresa } from './emissao.js';
 import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from './integra-contador.js';
 import { assinarDctfweb } from '../nfse/assinatura.js';
 import { textoDoPdf } from './situacao-fiscal.js';
-import { enviarEmailSimples } from './email.js';
+import { enviarComModelo } from './email.js';
+import { camposCliente, camposMes, dataBr, moeda, renderizar, type Variaveis } from './modelos-email.js';
 import { lancarNoControle } from './controle-mensal.js';
 
 /**
@@ -491,32 +492,27 @@ export function arquivoFechamento(escritorioId: number, empresaId: number, mes: 
 }
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const dataBr = (s?: string | null) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '');
 const rotuloMes = (mes: string) => `${mes.slice(5)}/${mes.slice(0, 4)}`;
 
 /** Texto do fechamento para o cliente (e-mail ou WhatsApp). */
 export type TipoGuia = 'PGDASD' | 'DCTFWEB';
-const TEXTO_GUIA: Record<TipoGuia, { assunto: string; abertura: string; vazio: string }> = {
-  PGDASD: { assunto: 'DAS do Simples Nacional', abertura: 'segue a guia do Simples Nacional (DAS)', vazio: 'Neste mês não há DAS do Simples Nacional a pagar.' },
-  DCTFWEB: { assunto: 'DARF previdenciário (DCTFWeb)', abertura: 'segue o DARF previdenciário (DCTFWeb)', vazio: 'Neste mês não há DARF da DCTFWeb a pagar.' },
-};
 
 /** Mensagem ao cliente. Com `tipo`, só aquela guia (o DAS vai separado do DARF); sem ele, as duas (como antes). */
 export function mensagemFechamento(escritorioId: number, empresaId: number, mes: string, tipo?: TipoGuia | null) {
   const f = fechamentoDoCliente(escritorioId, empresaId, mes);
-  const esc = db.prepare('SELECT razao_social, nome_fantasia FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
   const guias = [
     f.PGDASD?.tem_guia ? { tipo: 'PGDASD', nome: 'DAS — Simples Nacional', valor: f.PGDASD.valor, venc: f.PGDASD.vencimento } : null,
     f.DCTFWEB?.tem_guia ? { tipo: 'DCTFWEB', nome: 'DARF — DCTFWeb (INSS)', valor: f.DCTFWEB.valor, venc: f.DCTFWEB.vencimento } : null,
   ].filter((g) => g && (!tipo || g.tipo === tipo)) as { tipo: TipoGuia; nome: string; valor: number | null; venc: string | null }[];
-  const linhas = [tipo ? `Olá! Da ${f.cliente}, ${TEXTO_GUIA[tipo].abertura} da competência ${rotuloMes(mes)}:` : `Olá! Segue o fechamento de ${rotuloMes(mes)} da ${f.cliente}:`, ''];
-  for (const g of guias) linhas.push(`• ${g.nome}${g.valor != null ? `: ${brl(g.valor)}` : ''}${g.venc ? `, vencimento ${dataBr(g.venc)}` : ''}`);
-  if (!guias.length) linhas.push(tipo ? TEXTO_GUIA[tipo].vazio : 'Neste mês não há guias a pagar do Simples Nacional nem da DCTFWeb.');
-  const total = guias.reduce((t, g) => t + (g.valor ?? 0), 0);
-  if (guias.length > 1 && total) linhas.push('', `Total: ${brl(total)}`);
-  linhas.push('', guias.length ? 'As guias seguem em anexo. Qualquer dúvida, estamos à disposição.' : 'Qualquer dúvida, estamos à disposição.', '', esc?.nome_fantasia || esc?.razao_social || '');
-  const assunto = tipo ? `${TEXTO_GUIA[tipo].assunto} ${rotuloMes(mes)} — ${f.cliente}` : `Fechamento ${rotuloMes(mes)} — ${f.cliente}`;
-  return { linhas, guias, assunto, cliente: f.cliente, email: f.email, fone: f.fone, canal: f.canal_envio };
+  // Sem tipo (envio antigo, das duas guias juntas) usa o modelo do DAS com as duas guias no quadro.
+  const chave = (tipo === 'DCTFWEB' ? 'darf' : 'das') + (guias.length ? '' : '_zero');
+  const vars: Variaveis = {
+    ...camposCliente(empresaId), ...camposMes(mes),
+    guias: guias.map((g) => ({ rotulo: g.nome, valor: moeda(g.valor), detalhe: g.venc ? `Vencimento ${dataBr(g.venc)}` : null })),
+    valor: guias.length === 1 ? moeda(guias[0].valor) : '', vencimento: guias.length === 1 ? dataBr(guias[0].venc) : '',
+  };
+  const r = renderizar(escritorioId, chave, vars);
+  return { linhas: r.linhas, html: r.html, guias, assunto: r.assunto, chave, vars, cliente: f.cliente, email: f.email, fone: f.fone, canal: f.canal_envio };
 }
 
 /** Envia por e-mail o fechamento ao cliente (com as guias anexas) e registra o envio no Controle mensal. */
@@ -527,7 +523,7 @@ export async function enviarFechamento(escritorioId: number, usuarioId: number, 
   if (canal === 'EMAIL') {
     if (!m.email) throw new ErroNegocio('O cliente não tem e-mail no cadastro da Carteira.');
     const anexos = m.guias.map((g) => { const a = arquivoFechamento(escritorioId, empresaId, mes, g.tipo, 'guia'); return { filename: a.nome, content: a.pdf, contentType: 'application/pdf' }; });
-    const ok = await enviarEmailSimples(escritorioId, m.email.split(/[,;\s]+/).filter(Boolean), m.assunto, m.linhas, anexos);
+    const ok = await enviarComModelo(escritorioId, m.chave, m.vars, m.email.split(/[,;\s]+/).filter(Boolean), { anexos });
     if (!ok) throw new ErroNegocio('Configure o envio de e-mail (SMTP) em Configurações > E-mail.');
     destino = m.email;
   } else destino = m.fone ?? null; // o WhatsApp é aberto na tela com a mensagem; aqui só fica o registro

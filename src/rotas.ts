@@ -8,7 +8,8 @@ import { cifrar, cifrarTexto } from './cofre.js';
 import { MODULOS, conferirSenha, configurarPrimeiroAcesso, empresaPermitida, exigirLogin, exigirPapel, gerarToken, modulosDoUsuario, restritoAEmpresas, sistemaConfigurado, type Usuario } from './auth.js';
 import { EdicaoUsuario, NovoUsuario, confirmarRecuperacao, criarUsuario, editarUsuario, limparFalhas, listarUsuarios, loginBloqueado, redefinirSenha, registrarFalha, solicitarRecuperacao, trocarMinhaSenha } from './servicos/usuarios.js';
 import { config } from './config.js';
-import { ConfigSmtp, ListaEmails, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
+import { camposDesconhecidos, exemplo, listarModelos, ModeloEditado, renderizar, restaurarModelo, salvarModelo } from './servicos/modelos-email.js';
+import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
 import { ativarLicenca, exigirLicenca, statusLicenca } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas } from './servicos/faturamento.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
@@ -509,6 +510,24 @@ export async function rotas(app: FastifyInstance) {
     api.post('/api/email/testar', { preHandler: exigirPapel('admin') }, async (req) => {
       const { para } = z.object({ para: z.string().email('E-mail de destino inválido') }).parse(req.body);
       await testarConfig(u(req).escritorio_id, para);
+      return { ok: true };
+    });
+    // ---------- Modelos de e-mail (textos que vão aos clientes) ----------
+    const adm = { preHandler: exigirPapel('admin') };
+    const chaveP = (req: any) => String(req.params.chave);
+    const Rascunho = z.object({ assunto: z.string().max(200), corpo: z.string().max(8000) });
+    api.get('/api/email/modelos', adm, async (req) => listarModelos(u(req).escritorio_id));
+    api.put('/api/email/modelos/:chave', adm, async (req) => salvarModelo(u(req).escritorio_id, chaveP(req), ModeloEditado.parse(req.body)));
+    api.delete('/api/email/modelos/:chave', adm, async (req) => restaurarModelo(u(req).escritorio_id, chaveP(req)));
+    api.post('/api/email/modelos/:chave/previa', adm, async (req) => {
+      const d = Rascunho.parse(req.body);
+      const r = renderizar(u(req).escritorio_id, chaveP(req), exemplo(chaveP(req)), d);
+      return { ...r, desconhecidos: camposDesconhecidos(chaveP(req), `${d.assunto}\n${d.corpo}`) };
+    });
+    api.post('/api/email/modelos/:chave/teste', adm, async (req) => {
+      const b = Rascunho.extend({ para: z.string().email('E-mail de destino inválido') }).parse(req.body);
+      const ok = await enviarComModelo(u(req).escritorio_id, chaveP(req), exemplo(chaveP(req)), [b.para], { editado: { assunto: `[Teste] ${b.assunto}`, corpo: b.corpo } });
+      if (!ok) throw new ErroNegocio('Configure o servidor de e-mail (SMTP) acima antes de enviar o teste.');
       return { ok: true };
     });
     api.post('/api/notas/:id/email', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {

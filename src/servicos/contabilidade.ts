@@ -167,14 +167,14 @@ export async function enviarFechamento(empresaId: number, mes: string) {
   if (!para.length) throw new ErroNegocio('Informe o e-mail da contabilidade antes de enviar.');
   const [a, m] = mes.split('-').map(Number);
   const de = `${mes}-01`, ate = `${mes}-${String(ultimoDia(a, m)).padStart(2, '0')}`;
-  const rotulo = `${String(m).padStart(2, '0')}/${a}`;
   try {
     const r = await pacoteContabilidade(empresaId, { de, ate, xml: true, pdf: true, ofx: true, entradas: true, sefaz: true });
     const { unzipSync } = await import('fflate');
     const nomes = Object.keys(unzipSync(new Uint8Array(r.zip)));
     const conta = (pref: string) => nomes.filter((n) => n.startsWith(pref) && !n.endsWith('.csv')).length;
-    const resumo = [`Notas de serviço emitidas (XML): ${conta('notas/xml/')}`, `Notas de entrada (XML): ${conta('entradas/xml/')}`, `Extrato/movimentação: ${nomes.some((n) => n.startsWith('extrato/')) ? 'incluído' : 'sem movimentação'}`];
-    await enviarPacoteContabilidade(emp.escritorio_id, para, emp, rotulo, r.zip, r.nome, resumo);
+    const resumo = [{ rotulo: 'Notas de serviço emitidas (XML)', valor: String(conta('notas/xml/')) }, { rotulo: 'Notas de entrada (XML)', valor: String(conta('entradas/xml/')) },
+      { rotulo: 'Extrato / movimentação', valor: nomes.some((n) => n.startsWith('extrato/')) ? 'incluído' : 'sem movimentação' }];
+    await enviarPacoteContabilidade(emp.escritorio_id, para, emp, mes, r.zip, r.nome, resumo);
     db.prepare("UPDATE empresas SET fechamento_ultimo = ?, fechamento_em = datetime('now'), fechamento_resultado = ? WHERE id = ?").run(mes, `Enviado para ${para.join(', ')}`, empresaId);
     return { ok: true, mes, para };
   } catch (e) {
