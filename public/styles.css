@@ -511,3 +511,14 @@ button.kpi:hover { border-color: var(--laranja-forte); }
 .agenda-sf { margin-top: 16px; }
 .mon-extra { margin-top: 3px; font-size: .82rem; line-height: 1.3; white-space: nowrap; }
 .mon-tab th, .mon-tab td { padding: 9px 8px; }
+
+/* Cobranças: carteiras e ações */
+.carteiras .contagem { display: inline-block; min-width: 1.4em; padding: 0 6px; margin-left: 4px; border-radius: 99px; background: var(--superficie-2); font-size: .78rem; text-align: center; }
+.cob-acoes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; min-width: 260px; }
+.cob-acoes > button { padding: 6px 11px; font-size: .86rem; }
+.cob-mais { position: relative; }
+.cob-mais > summary { list-style: none; cursor: pointer; padding: 5px 11px; border: 1px solid var(--borda-botao); border-radius: var(--raio); background: var(--superficie-2); font-weight: 700; line-height: 1.2; }
+.cob-mais > summary::-webkit-details-marker { display: none; }
+.cob-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; min-width: 170px; padding: 6px; background: var(--superficie); border: 1px solid var(--borda-botao); border-radius: 10px; box-shadow: 0 12px 30px var(--sombra); }
+.cob-menu button { text-align: left; border: 0; background: transparent; padding: 8px 10px; }
+.cob-menu button:hover { background: var(--superficie-2); }

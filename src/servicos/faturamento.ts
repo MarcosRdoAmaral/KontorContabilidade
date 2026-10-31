@@ -5,7 +5,7 @@ import { ajustarVencimento } from './diautil.js';
 import { EntradaEmissao, ErroNegocio, comRetencoesDoServico, emitir } from './emissao.js';
 import { enviarMensagemBoleto, enviarNotaPorEmail } from './email.js';
 import { exigirLicenca } from '../licenca.js';
-import { boletoPdf, criarCobranca, listarCobrancas as listar, obterConta, obterCobranca, pendenciasPagador, registrarEmailCobranca } from './cobranca.js';
+import { boletoPdf, criarCobranca, demonstrativoPdf, listarCobrancas as listar, obterConta, obterCobranca, pendenciasPagador, referenciaDa, registrarEmailCobranca } from './cobranca.js';
 
 export type Acao = 'NOTA' | 'NOTA_BOLETO' | 'BOLETO';
 
@@ -18,6 +18,8 @@ export const EntradaFaturamento = EntradaEmissao.extend({
   /** Parcelamento do boleto: um boleto por parcela, com o vencimento de cada uma. A soma deve fechar com o valor do boleto. */
   parcelas: z.array(z.object({ vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), valor: z.number().positive() })).min(1).max(24).nullish(),
   enviarEmail: z.boolean().nullish(),
+  /** Carteira Pix: o código copia e cola gerado no banco para esta cobrança (uma parcela só). */
+  pixCopiaCola: z.string().max(1000).nullish(),
 });
 export type EntradaFaturamento = z.infer<typeof EntradaFaturamento>;
 
@@ -64,7 +66,8 @@ export async function faturar(u: Usuario, entrada: EntradaFaturamento) {
       throw new ErroNegocio(`O desconto cadastrado para ${tomador.nome} (R$ ${tomador.desconto_valor.toFixed(2).replace('.', ',')}) é maior ou igual ao valor do boleto. Ajuste o valor ou o desconto no cadastro do cliente.`);
   }
   // confere o cadastro antes de emitir a nota, para não deixar a nota emitida sem o boleto
-  if (fazBoleto && obterConta(entrada.empresaId)) {
+  const pixCarteira = tomador?.forma_cobranca === 'PIX';
+  if (fazBoleto && !pixCarteira && obterConta(entrada.empresaId)) {
     const falta = pendenciasPagador(tomador);
     if (falta.length) throw new ErroNegocio(`Para gerar o boleto, complete o cadastro de ${tomador.nome}: ${falta.join(', ')}.`);
     const venc = entrada.vencimento ?? calcularVencimento(new Date(Date.now() - 3 * 3600e3), tomador.vencimento_tipo, tomador.vencimento_valor);
@@ -102,11 +105,14 @@ export async function faturar(u: Usuario, entrada: EntradaFaturamento) {
       const ajuste = ajustarVencimento(p.vencimento, dataIso(hoje), feriados);
       if (ajuste.aviso) resultado.avisos.push(parcelas.length > 1 ? `Parcela ${i + 1}: ${ajuste.aviso}` : ajuste.aviso);
       const c = criarCobranca({ empresaId: entrada.empresaId, tomadorId: tomador.id, notaId: resultado.nota?.id ?? null,
-        descricao: parcelas.length > 1 ? `${entrada.descricao} (parcela ${i + 1}/${parcelas.length})`.slice(0, 2000) : entrada.descricao, valor: p.valor, vencimento: ajuste.data, usuarioId: u.id, semDesconto: jaNaNota || i > 0 });
+        descricao: parcelas.length > 1 ? `${entrada.descricao} (parcela ${i + 1}/${parcelas.length})`.slice(0, 2000) : entrada.descricao, valor: p.valor, vencimento: ajuste.data, usuarioId: u.id, semDesconto: jaNaNota || i > 0,
+        pix: parcelas.length === 1 ? entrada.pixCopiaCola : null });
       resultado.cobrancas!.push(c);
     });
     resultado.cobranca = resultado.cobrancas[0];
-    if (resultado.cobrancas.some((c) => c.status === 'AGUARDANDO_BANCO')) {
+    if (pixCarteira) {
+      if (resultado.cobrancas.some((c) => !c.pix_copia_cola)) resultado.avisos.push('Cliente da carteira Pix: informe o Pix copia e cola em Cobranças para gerar o demonstrativo com o QR Code e enviar ao cliente.');
+    } else if (resultado.cobrancas.some((c) => c.status === 'AGUARDANDO_BANCO')) {
       const c0 = resultado.cobrancas.find((c) => c.status === 'AGUARDANDO_BANCO');
       resultado.avisos.push(obterConta(entrada.empresaId)
         ? (c0.observacao_banco ?? 'O boleto ficou pendente.')
@@ -120,20 +126,22 @@ export async function faturar(u: Usuario, entrada: EntradaFaturamento) {
     const unicos = [...new Set(para.map((e) => e.toLowerCase()))].slice(0, 5);
     const cobs = (resultado.cobrancas ?? []).map((c) => obterCobranca(c.id));
     const cob = cobs[0] ?? null;
-    const emitidos = cobs.filter((c) => c?.nosso_numero);
+    const emitidos = cobs.filter((c) => c?.nosso_numero || (c?.forma === 'PIX' && c.pix_copia_cola));
     const temBoleto = emitidos.length > 0;
     if (!unicos.length) resultado.email = { status: 'ERRO', erro: 'O cliente não tem e-mail cadastrado.' };
-    else if (!resultado.nota && !temBoleto) resultado.email = { status: 'NAO_ENVIADO', erro: 'O boleto ainda não foi gerado, então não há o que enviar.' };
+    else if (!resultado.nota && !temBoleto) resultado.email = { status: 'NAO_ENVIADO', erro: pixCarteira ? 'Falta o Pix copia e cola: informe-o em Cobranças e envie de lá.' : 'O boleto ainda não foi gerado, então não há o que enviar.' };
     else {
       try {
         const extras: { filename: string; content: Buffer; contentType: string }[] = [];
         const boletos: { rotulo: string; valor: string; detalhe: string }[] = [];
         for (const c of emitidos) {
-          const b = await boletoPdf(c.id);
-          extras.push({ filename: b.nome, content: b.pdf, contentType: 'application/pdf' });
-          boletos.push({ rotulo: `Boleto${emitidos.length > 1 ? ` ${emitidos.indexOf(c) + 1} de ${emitidos.length}` : ''} (PDF em anexo)`, valor: c.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-            detalhe: `Vencimento ${c.vencimento.split('-').reverse().join('/')} · Linha digitável ${c.linha_digitavel}` });
+          const pix = c.forma === 'PIX';
+          if (!pix) { const b = await boletoPdf(c.id); extras.push({ filename: b.nome, content: b.pdf, contentType: 'application/pdf' }); }
+          const dm = await demonstrativoPdf(c.id); extras.push({ filename: emitidos.length > 1 ? dm.nome.replace('.pdf', `_${emitidos.indexOf(c) + 1}.pdf`) : dm.nome, content: dm.pdf, contentType: 'application/pdf' });
+          boletos.push({ rotulo: `${pix ? 'Pix (demonstrativo com QR Code em anexo)' : 'Boleto (PDF em anexo)'}${emitidos.length > 1 ? ` ${emitidos.indexOf(c) + 1} de ${emitidos.length}` : ''}`, valor: c.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+            detalhe: `Vencimento ${c.vencimento.split('-').reverse().join('/')} · ${pix ? `Pix copia e cola ${c.pix_copia_cola}` : `Linha digitável ${c.linha_digitavel}`}` });
         }
+        if (cob) cob.referencia = referenciaDa(cob);
         if (resultado.nota) await enviarNotaPorEmail(resultado.nota.id, u.escritorio_id, unicos, u.id, 'emissao', { extras, boletos });
         else await enviarMensagemBoleto(u.escritorio_id, unicos, cob, tomador, extras);
         for (const c of cobs) registrarEmailCobranca(c.id, 'ENVIADO', unicos.join(', '));
@@ -154,9 +162,28 @@ export const BoletoAvulso = z.object({
   valor: z.number().positive('O valor precisa ser maior que zero'),
   vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   enviarEmail: z.boolean().nullish(),
+  pixCopiaCola: z.string().max(1000).nullish(),
 });
 export function gerarBoletoAvulso(u: Usuario, empresaId: number, d: z.infer<typeof BoletoAvulso>) {
-  return faturar(u, { acao: 'BOLETO', empresaId, tomadorId: d.tomadorId, descricao: d.descricao, valor: d.valor, vencimento: d.vencimento, enviarEmail: d.enviarEmail } as EntradaFaturamento);
+  return faturar(u, { acao: 'BOLETO', empresaId, tomadorId: d.tomadorId, descricao: d.descricao, valor: d.valor, vencimento: d.vencimento, enviarEmail: d.enviarEmail, pixCopiaCola: d.pixCopiaCola } as EntradaFaturamento);
 }
 
 export const listarCobrancas = listar;
+
+/** Envia (ou reenvia) uma cobrança por e-mail a partir da tela de Cobranças: boleto ou Pix, com o demonstrativo. */
+export async function enviarCobrancaPorEmail(escritorioId: number, cobrancaId: number) {
+  const c = obterCobranca(cobrancaId);
+  if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
+  if (c.status === 'CANCELADO') throw new ErroNegocio('Esta cobrança está cancelada.');
+  if (c.forma === 'PIX' ? !c.pix_copia_cola : !c.nosso_numero) throw new ErroNegocio(c.forma === 'PIX' ? 'Informe o Pix copia e cola antes de enviar.' : (c.observacao_banco ?? 'O boleto ainda não foi gerado.'));
+  const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
+  const para = [...new Set([t.email, ...(t.email_cobranca ?? '').split(/[,;\s]+/)].filter((x: any) => x && /@/.test(x)).map((x: string) => x.toLowerCase()))].slice(0, 5) as string[];
+  if (!para.length) throw new ErroNegocio('O cliente não tem e-mail cadastrado.');
+  const anexos: { filename: string; content: Buffer; contentType: string }[] = [];
+  if (c.forma !== 'PIX') { const b = await boletoPdf(c.id); anexos.push({ filename: b.nome, content: b.pdf, contentType: 'application/pdf' }); }
+  const dm = await demonstrativoPdf(c.id); anexos.push({ filename: dm.nome, content: dm.pdf, contentType: 'application/pdf' });
+  try { await enviarMensagemBoleto(escritorioId, para, { ...c, referencia: referenciaDa(c) }, t, anexos); }
+  catch (e) { registrarEmailCobranca(c.id, 'ERRO', para.join(', ')); throw e; }
+  registrarEmailCobranca(c.id, 'ENVIADO', para.join(', '));
+  return { para: para.join(', ') };
+}

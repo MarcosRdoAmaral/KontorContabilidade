@@ -173,9 +173,27 @@ Um abraço,
     assunto: 'Boleto com vencimento em {{vencimento}} | {{emitente}}',
     corpo: `{{saudacao}}
 
-Segue em anexo o boleto de **{{valor}}**, com vencimento em **{{vencimento}}**, emitido por {{emitente}}.
+Seguem em anexo o boleto de **{{valor}}**, com vencimento em **{{vencimento}}**, e o demonstrativo da cobrança, emitidos por {{emitente}}.
 
 Se preferir, pague pela linha digitável: {{linha_digitavel}}
+
+Se o pagamento já foi feito, desconsidere esta mensagem. Obrigado pela parceria!
+
+Um abraço,
+{{escritorio}}`,
+  },
+  {
+    chave: 'pix', grupo: 'Faturamento', nome: 'Cobrança por Pix', descricao: 'Demonstrativo com QR Code Pix, para os clientes da carteira Pix.',
+    campos: [...COMUNS, { nome: 'emitente', descricao: 'Quem cobra', exemplo: 'Ciclo Assessoria Contábil Ltda' }, { nome: 'descricao', descricao: 'Descrição da cobrança', exemplo: 'Serviços contábeis' },
+      { nome: 'referencia', descricao: 'Mês de referência (MM/AAAA)', exemplo: '10/2026' }, { nome: 'valor', descricao: 'Valor', exemplo: 'R$ 225,00' },
+      { nome: 'vencimento', descricao: 'Vencimento', exemplo: '10/11/2026' }, { nome: 'pix_copia_cola', descricao: 'Código Pix copia e cola', exemplo: '00020126580014br.gov.bcb.pix0136...6304ABCD' }],
+    assunto: 'Cobrança {{referencia}}: {{valor}} com vencimento em {{vencimento}} | {{emitente}}',
+    corpo: `{{saudacao}}
+
+Segue em anexo o demonstrativo da cobrança de **{{referencia}}**, no valor de **{{valor}}**, com vencimento em **{{vencimento}}**.
+
+O pagamento é por Pix: escaneie o QR Code do demonstrativo no aplicativo do seu banco ou use o Pix copia e cola abaixo.
+{{pix_copia_cola}}
 
 Se o pagamento já foi feito, desconsidere esta mensagem. Obrigado pela parceria!
 
@@ -294,9 +312,9 @@ export function renderizar(escritorioId: number, chave: string, vars: Variaveis,
   }
   const negrito = (s: string) => escHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#2563eb;word-break:break-all">$1</a>');
   const corpoHtml = partes.map((p) => p.tipo === 'p'
-    ? `<p style="margin:0 0 16px">${p.linhas.map(negrito).join('<br>')}</p>`
+    ? `<p style="margin:0 0 16px;overflow-wrap:anywhere;word-break:break-word">${p.linhas.map(negrito).join('<br>')}</p>`
     : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;border:1px solid #e5e7eb;border-radius:10px;border-collapse:separate;background:#f9fafb">
-        ${p.itens.map((i, k) => `<tr><td style="padding:12px 16px;${k ? 'border-top:1px solid #e5e7eb;' : ''}vertical-align:top"><div style="font-weight:600;color:#111827">${escHtml(i.rotulo)}</div>${i.detalhe ? `<div style="font-size:13px;color:#6b7280;margin-top:2px">${escHtml(i.detalhe)}</div>` : ''}</td>
+        ${p.itens.map((i, k) => `<tr><td style="padding:12px 16px;${k ? 'border-top:1px solid #e5e7eb;' : ''}vertical-align:top"><div style="font-weight:600;color:#111827">${escHtml(i.rotulo)}</div>${i.detalhe ? `<div style="font-size:13px;color:#6b7280;margin-top:2px;overflow-wrap:anywhere;word-break:break-all">${escHtml(i.detalhe)}</div>` : ''}</td>
           <td style="padding:12px 16px;${k ? 'border-top:1px solid #e5e7eb;' : ''}text-align:right;vertical-align:top;white-space:nowrap;font-weight:700;color:#111827;font-size:16px">${i.valor ? escHtml(i.valor) : ''}</td></tr>`).join('')}
       </table>`).join('');
   const html = `<div style="margin:0;padding:24px 12px;background:#f3f4f6">

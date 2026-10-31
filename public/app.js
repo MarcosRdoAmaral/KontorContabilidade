@@ -557,7 +557,7 @@ async function telaEmitir(notaIdCorrecao) {
       <fieldset id="bloco-cobranca" hidden><legend>O que emitir</legend>
         <div class="grade">
           <label class="largo">Ação
-            <select name="acao"><option value="NOTA">Somente a nota fiscal</option><option value="NOTA_BOLETO">Nota fiscal + boleto</option><option value="BOLETO">Somente o boleto</option></select>
+            <select name="acao"><option value="NOTA">Somente a nota fiscal</option><option value="NOTA_BOLETO">Nota fiscal + cobrança (boleto ou Pix)</option><option value="BOLETO">Somente a cobrança</option></select>
             <span class="dica" id="dica-acao"></span></label>
         </div>
       </fieldset>
@@ -996,6 +996,32 @@ const STATUS_COBRANCA = {
   AGUARDANDO_BANCO: 'Pendente (sem boleto)', A_REMETER: 'Boleto pronto', REMETIDO: 'Enviado ao banco', REGISTRADO: 'Registrado no banco',
   REJEITADO: 'Rejeitado pelo banco', PAGO: 'Pago', CANCELADO: 'Cancelado',
 };
+const STATUS_PIX = { AGUARDANDO_BANCO: 'Falta o Pix copia e cola', REGISTRADO: 'Pix pronto, a receber', PAGO: 'Pago', CANCELADO: 'Cancelado' };
+const situacaoCobranca = (c) => (c.forma === 'PIX' ? STATUS_PIX[c.status] : STATUS_COBRANCA[c.status]) ?? c.status;
+/** Cola o Pix copia e cola de uma cobrança da carteira Pix: confere o código e o valor e mostra o QR Code. */
+function informarPixDialogo(c, aoSalvar) {
+  abrirDialogo(`<form id="form-pix"><h2>Pix da cobrança — ${esc(c.tomador_nome)}</h2>
+    <p class="sutil">${brl(c.valor)} · vencimento ${dataBr(c.vencimento)} · ${esc((c.descricao ?? '').slice(0, 80))}</p>
+    <ol class="dicas"><li>No aplicativo ou internet banking do escritório, gere uma cobrança Pix (QR Code) de <strong>${brl(c.valor)}</strong>.</li>
+      <li>Copie o código <em>Pix copia e cola</em> e cole abaixo.</li></ol>
+    <label>Pix copia e cola <textarea name="codigo" rows="4" required spellcheck="false" style="font-family:ui-monospace,Consolas,monospace;font-size:.82rem">${esc(c.pix_copia_cola ?? '')}</textarea></label>
+    <p class="erro" id="erro-pix"></p>
+    <div class="acoes"><button class="primario" type="submit">Conferir e salvar</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
+    const f = $('#form-pix');
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const b = f.querySelector('[type=submit]'); b.disabled = true; b.textContent = 'Conferindo…';
+      try {
+        const r = await api('POST', `/api/cobrancas/${c.id}/pix`, { codigo: f.codigo.value });
+        const p = r.pix_lido ?? {};
+        d.close();
+        aviso(`Pix conferido${p.recebedor ? `: recebedor ${p.recebedor}` : ''}${p.valor != null ? `, ${brl(p.valor)}` : ' (sem valor fixo no código)'}. O demonstrativo com o QR Code já pode ser enviado.`);
+        aoSalvar?.();
+      } catch (e) { $('#erro-pix').textContent = mensagemErro(e); b.disabled = false; b.textContent = 'Conferir e salvar'; }
+    };
+  });
+}
+
 async function telaCobrancas() {
   const [lista, remessas, conta] = await Promise.all([
     api('GET', `/api/empresas/${estado.empresaId}/cobrancas`),
@@ -1003,26 +1029,81 @@ async function telaCobrancas() {
     api('GET', `/api/empresas/${estado.empresaId}/conta-bancaria`),
   ]);
   const podeEditar = estado.usuario.papel !== 'cliente';
-  const aberto = lista.filter((c) => !['CANCELADO', 'PAGO', 'REJEITADO'].includes(c.status)).reduce((a, c) => a + c.valor, 0);
+  const st = telaCobrancas.estado ??= { carteira: 'BOLETO' };
+  const daCarteira = (k) => lista.filter((c) => (c.forma ?? 'BOLETO') === k);
+  const abertoDe = (l) => l.filter((c) => !['CANCELADO', 'PAGO', 'REJEITADO'].includes(c.status)).reduce((a, c) => a + c.valor, 0);
+  const vis = daCarteira(st.carteira);
+  const pix = st.carteira === 'PIX';
+  const faltaPix = daCarteira('PIX').filter((c) => c.status === 'AGUARDANDO_BANCO').length;
+  const aberto = abertoDe(vis);
   const aRemeter = lista.filter((c) => c.status === 'A_REMETER' || c.baixa_pendente === 1).length;
   const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  const ativo = (c) => !['PAGO', 'CANCELADO'].includes(c.status);
+  const acoes = (c) => {
+    const pronto = c.forma === 'PIX' ? c.pix_copia_cola : c.nosso_numero;
+    const principais = [
+      c.forma === 'PIX' && podeEditar && ativo(c) && !c.pix_copia_cola ? `<button data-pix="${c.id}" class="primario">Informar Pix</button>` : '',
+      pronto && c.status !== 'CANCELADO' ? `<button data-demo="${c.id}">Demonstrativo</button>` : '',
+      c.nosso_numero ? `<button data-boleto="${c.id}">Boleto</button>` : '',
+      podeEditar && ativo(c) && pronto ? `<button data-email="${c.id}">E-mail</button>` : '',
+      ativo(c) ? `<button data-wa="${c.id}">WhatsApp</button>` : '',
+    ].join('');
+    const mais = [
+      c.forma === 'PIX' && podeEditar && ativo(c) && c.pix_copia_cola ? `<button data-pix="${c.id}">Trocar o Pix</button>` : '',
+      podeEditar ? `<button data-reemitir="${c.id}">Reemitir</button>` : '',
+      podeEditar && ativo(c) ? `<button data-pago="${c.id}">Marcar pago</button><button data-cancelar="${c.id}">Cancelar</button>` : '',
+    ].join('');
+    return `<div class="cob-acoes">${principais}${mais ? `<details class="cob-mais"><summary title="Mais ações">⋯</summary><div class="cob-menu">${mais}</div></details>` : ''}</div>`;
+  };
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Cobranças</h1><p class="sutil">${lista.length} registros · ${brl(aberto)} em aberto</p></div>
-      ${podeEditar ? `<div class="acoes"><button id="gerar-remessa" class="primario" ${conta && aRemeter ? '' : 'disabled'}>Gerar remessa${aRemeter ? ` (${aRemeter})` : ''}</button>
-        <button id="novo-boleto" class="primario">Novo boleto</button>
+    <div class="topo"><div><h1>Cobranças</h1><p class="sutil">${lista.length} registros · ${brl(abertoDe(lista))} em aberto</p></div>
+      ${podeEditar ? `<div class="acoes">${pix ? '' : `<button id="gerar-remessa" class="primario" ${conta && aRemeter ? '' : 'disabled'}>Gerar remessa${aRemeter ? ` (${aRemeter})` : ''}</button>`}
+        <button id="novo-boleto" class="primario">Nova cobrança</button>
         <button id="modelo-wa">Mensagem do WhatsApp</button>
-        <button id="ler-retorno" ${conta ? '' : 'disabled'}>Importar retorno</button><input type="file" id="arq-retorno" accept=".ret,.RET,.txt,.TXT,.rem,.REM,*/*" hidden></div>` : ''}</div>
-    ${conta ? '' : `<div class="banner teste">Os dados bancários (Ailos) desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>`}
-    ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Vencimento</th><th>Cliente</th><th>Nota</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
-      ${lista.map((c) => `<tr><td>${dataBr(c.vencimento)}${c.status !== 'PAGO' && c.status !== 'CANCELADO' && c.vencimento < hoje ? ' <span class="dica erro">vencido</span>' : ''}</td>
+        <button id="cfg-demo" title="Texto do rodapé do demonstrativo de cobrança">Demonstrativo</button>
+        ${pix ? '' : `<button id="ler-retorno" ${conta ? '' : 'disabled'}>Importar retorno</button><input type="file" id="arq-retorno" accept=".ret,.RET,.txt,.TXT,.rem,.REM,*/*" hidden>`}</div>` : ''}</div>
+    <nav class="abas carteiras" aria-label="Carteiras de cobrança">
+      <a href="#" data-carteira="BOLETO" class="${pix ? '' : 'ativo'}">Carteira boleto <span class="contagem">${daCarteira('BOLETO').length}</span></a>
+      <a href="#" data-carteira="PIX" class="${pix ? 'ativo' : ''}">Carteira Pix <span class="contagem">${daCarteira('PIX').length}</span>${faltaPix ? ` <span class="selo-estado" style="--c:var(--g-pend)">${faltaPix} sem Pix</span>` : ''}</a>
+    </nav>
+    <p class="sutil">${pix ? `Cobranças dos clientes da carteira Pix: gere a cobrança Pix no aplicativo do banco, clique em <strong>Informar Pix</strong> e cole o código copia e cola. O Kontor confere o código e o valor e monta o demonstrativo com o QR Code. ${brl(aberto)} em aberto.`
+      : `Boletos do convênio Ailos, com remessa e retorno. O demonstrativo de cobrança vai junto no e-mail. ${brl(aberto)} em aberto.`} A carteira de cada cliente fica no cadastro dele (Faturamento e cobrança).</p>
+    ${!pix && !conta ? `<div class="banner teste">Os dados bancários (Ailos) desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
+    ${vis.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Vencimento</th><th>Cliente</th><th>Nota</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${vis.map((c) => `<tr><td>${dataBr(c.vencimento)}${ativo(c) && c.vencimento < hoje ? ' <span class="dica erro">vencido</span>' : ''}</td>
         <td>${esc(c.tomador_nome)}<br><span class="dica">${esc((c.descricao ?? '').slice(0, 60))}</span>${c.desconto > 0 ? `<br><span class="dica">desconto de ${brl(c.desconto)}: ${esc(c.desconto_motivo ?? '')}</span>` : ''}</td>
         <td>${c.nota_id ? `<a href="#/nota/${c.nota_id}">${c.n_nfse ?? '—'}</a>` : '—'}</td><td class="num">${brl(c.valor)}</td>
-        <td>${STATUS_COBRANCA[c.status] ?? c.status}${c.baixa_pendente ? ' <span class="dica">(baixa solicitada)</span>' : ''}${c.pago_em ? `<br><span class="dica">em ${dataBr(c.pago_em)}</span>` : ''}${c.observacao_banco ? `<br><span class="dica erro">${esc(c.observacao_banco)}</span>` : ''}</td>
-        <td class="acoes-linha">${c.nosso_numero ? `<button data-boleto="${c.id}">Boleto</button>` : ''}${c.status !== 'PAGO' && c.status !== 'CANCELADO' ? `<button data-wa="${c.id}">WhatsApp</button>` : ''}${podeEditar ? `<button data-reemitir="${c.id}">Reemitir</button>` : ''}${podeEditar && !['PAGO', 'CANCELADO'].includes(c.status) ? `<button data-pago="${c.id}">Marcar pago</button><button data-cancelar="${c.id}">Cancelar</button>` : ''}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhuma cobrança registrada. Escolha “Nota + boleto” ou “Somente o boleto” ao emitir.</div>'}
-    ${remessas.length ? `<h2>Remessas geradas</h2><div class="rolagem"><table class="tabela"><thead><tr><th>Nº</th><th>Data</th><th>Títulos</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+        <td>${c.forma === 'PIX' && c.status === 'AGUARDANDO_BANCO' ? `<span class="cor-ambar">${situacaoCobranca(c)}</span>` : situacaoCobranca(c)}${c.baixa_pendente ? ' <span class="dica">(baixa solicitada)</span>' : ''}${c.pago_em ? `<br><span class="dica">em ${dataBr(c.pago_em)}</span>` : ''}${c.observacao_banco ? `<br><span class="dica erro">${esc(c.observacao_banco)}</span>` : ''}${c.email_status ? `<br><span class="dica ${c.email_status === 'ERRO' ? 'erro' : ''}">e-mail ${c.email_status === 'ERRO' ? 'com erro' : 'enviado'}</span>` : ''}</td>
+        <td class="acoes-linha">${acoes(c)}</td></tr>`).join('')}
+    </tbody></table></div>` : `<div class="vazio">${pix ? 'Nenhuma cobrança na carteira Pix. Marque “Pix copia e cola” como carteira no cadastro do cliente (Faturamento e cobrança).' : 'Nenhum boleto registrado. Escolha “Nota + cobrança” ou “Somente a cobrança” ao emitir.'}</div>`}
+    ${!pix && remessas.length ? `<h2>Remessas geradas</h2><div class="rolagem"><table class="tabela"><thead><tr><th>Nº</th><th>Data</th><th>Títulos</th><th class="num">Valor</th><th></th></tr></thead><tbody>
       ${remessas.map((r) => `<tr><td>${r.numero}</td><td>${esc(r.criado_em)}</td><td>${r.qtd_titulos}</td><td class="num">${brl(r.valor_total)}</td><td><button data-remessa="${r.id}" data-nome="${esc(r.nome_arquivo)}">Baixar arquivo</button></td></tr>`).join('')}</tbody></table></div>
       <p class="dica">Envie o arquivo no Ailos Conta Online: Cobrança Bancária → Arquivo de Cobrança. O arquivo de retorno fica no mesmo menu; importe-o aqui para dar baixa nos pagamentos.</p>` : ''}`;
+  conteudo.querySelectorAll('[data-carteira]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); st.carteira = a.dataset.carteira; telaCobrancas(); }));
+  conteudo.querySelectorAll('[data-demo]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.demo}/demonstrativo`, `Demonstrativo_${b.dataset.demo}.pdf`, true)));
+  conteudo.querySelectorAll('[data-pix]').forEach((b) => (b.onclick = () => informarPixDialogo(lista.find((x) => x.id === Number(b.dataset.pix)), telaCobrancas)));
+  conteudo.querySelectorAll('[data-email]').forEach((b) => (b.onclick = async () => {
+    const c = lista.find((x) => x.id === Number(b.dataset.email));
+    if (!confirm(`Enviar por e-mail ${c.forma === 'PIX' ? 'o demonstrativo com o Pix' : 'o boleto e o demonstrativo'} de ${brl(c.valor)} para ${c.tomador_nome}?`)) return;
+    b.disabled = true; b.textContent = 'Enviando…';
+    try { const r = await api('POST', `/api/cobrancas/${c.id}/email`, {}); aviso(`E-mail enviado para ${r.para}.`); telaCobrancas(); }
+    catch (e) { aviso(mensagemErro(e)); b.disabled = false; b.textContent = 'E-mail'; }
+  }));
+  const cd = $('#cfg-demo');
+  if (cd) cd.onclick = async () => {
+    const r = await api('GET', `/api/empresas/${estado.empresaId}/demonstrativo`);
+    abrirDialogo(`<form id="form-demo"><h2>Demonstrativo de cobrança</h2>
+      <p class="sutil">O demonstrativo usa a logo, o CNPJ, o endereço, o e-mail e o WhatsApp do cadastro da empresa. Aqui você escolhe a frase do rodapé, que aparece depois do nome do escritório.</p>
+      <label>Frase do rodapé <input name="rodape" maxlength="120" value="${esc(r.rodape)}" placeholder="Transformando contabilidade em decisões estratégicas"></label>
+      <p class="erro" id="erro-demo"></p>
+      <div class="acoes"><button class="primario" type="submit">Salvar</button><button type="button" data-fechar>Fechar</button></div></form>`, (d) => {
+      $('#form-demo').onsubmit = async (ev) => {
+        ev.preventDefault();
+        try { await api('PUT', `/api/empresas/${estado.empresaId}/demonstrativo`, { rodape: ev.target.rodape.value }); d.close(); aviso('Rodapé do demonstrativo salvo.'); }
+        catch (e) { $('#erro-demo').textContent = mensagemErro(e); }
+      };
+    });
+  };
   conteudo.querySelectorAll('[data-boleto]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.boleto}/boleto`, `Boleto_${b.dataset.boleto}.pdf`, true)));
   conteudo.querySelectorAll('[data-remessa]').forEach((b) => (b.onclick = () => baixar(`/api/remessas/${b.dataset.remessa}/arquivo`, b.dataset.nome)));
   conteudo.querySelectorAll('[data-pago]').forEach((b) => (b.onclick = async () => {
@@ -1040,8 +1121,9 @@ async function telaCobrancas() {
       api('GET', `/api/empresas/${estado.empresaId}/tomadores`),
       api('GET', `/api/empresas/${estado.empresaId}/feriados`).then((r) => r.feriados_extra).catch(() => ''),
     ]);
-    if (!clientes.length) { aviso('Cadastre um cliente antes de gerar boletos.'); return; }
-    clientes.sort((a, b) => (b.modo_faturamento === 'BOLETO') - (a.modo_faturamento === 'BOLETO') || a.nome.localeCompare(b.nome, 'pt-BR'));
+    if (!clientes.length) { aviso('Cadastre um cliente antes de gerar cobranças.'); return; }
+    const daAba = (t) => (t.forma_cobranca ?? 'BOLETO') === st.carteira;
+    clientes.sort((a, b) => daAba(b) - daAba(a) || (b.modo_faturamento === 'BOLETO') - (a.modo_faturamento === 'BOLETO') || a.nome.localeCompare(b.nome, 'pt-BR'));
     const vencDe = (t) => {
       const base = new Date(Date.now() - 3 * 3600e3);
       if (t.vencimento_tipo !== 'DIA_FIXO') return new Date(base.getTime() + (t.vencimento_valor ?? 10) * 86400e3).toISOString().slice(0, 10);
@@ -1051,24 +1133,26 @@ async function telaCobrancas() {
       return new Date(Date.UTC(a, m, dia)).toISOString().slice(0, 10);
     };
     abrirDialogo(`
-      <form id="form-nb"><h2>Novo boleto</h2>
-        <p class="sutil">Gera só o boleto, sem emitir nota fiscal. Os clientes marcados como “Somente boleto” aparecem primeiro.</p>
+      <form id="form-nb"><h2>Nova cobrança</h2>
+        <p class="sutil">Gera só a cobrança, sem emitir nota fiscal: boleto ou Pix, conforme a carteira do cliente. Os clientes da carteira aberta aparecem primeiro.</p>
         <div class="grade">
-          <label class="largo">Cliente <select name="tomadorId" required>${clientes.map((t) => `<option value="${t.id}">${esc(t.nome)}${t.modo_faturamento === 'BOLETO' ? ' — somente boleto' : ''}</option>`).join('')}</select></label>
+          <label class="largo">Cliente <select name="tomadorId" required>${clientes.map((t) => `<option value="${t.id}">${esc(t.nome)} — ${t.forma_cobranca === 'PIX' ? 'Pix' : 'boleto'}</option>`).join('')}</select></label>
+          <label class="largo" data-so-pix>Pix copia e cola <textarea name="pix" rows="3" placeholder="Cole aqui o código gerado no aplicativo do banco (pode informar depois)"></textarea><span class="dica">Gere a cobrança Pix no banco com o valor final (já com o desconto do cliente). O Kontor confere o código e monta o demonstrativo com o QR Code.</span></label>
           <label class="largo">Descrição <input name="descricao" required maxlength="2000" placeholder="ex.: Honorários contábeis — outubro/2026"></label>
           <label>Valor antes do desconto (R$) <input name="valor" data-num required inputmode="decimal"><span class="dica" id="dica-desc-nb"></span></label>
           <label>Vencimento <input type="date" name="vencimento" required></label>
-          <label class="largo"><span><input type="checkbox" name="enviarEmail"> Enviar o boleto por e-mail ao cliente</span></label>
+          <label class="largo"><span><input type="checkbox" name="enviarEmail"> Enviar a cobrança por e-mail ao cliente</span><span class="dica" data-so-pix>No Pix, o e-mail só sai se o código já estiver colado.</span></label>
         </div>
         <p class="dica" id="aviso-nb"></p><p class="erro" id="erro-nb"></p>
-        <div class="acoes"><button class="primario" type="submit">Gerar boleto</button><button type="button" data-fechar>Cancelar</button></div>
+        <div class="acoes"><button class="primario" type="submit">Gerar cobrança</button><button type="button" data-fechar>Cancelar</button></div>
       </form>`, (d) => {
       const f = $('#form-nb');
+      const formaPix = () => cliente()?.forma_cobranca === 'PIX';
       const cliente = () => clientes.find((t) => t.id === Number(f.tomadorId.value));
       const ajustar = () => { const r = ajustarVencimento(f.vencimento.value, fer); if (r.aviso) { f.vencimento.value = r.data; $('#aviso-nb').textContent = r.aviso; } else $('#aviso-nb').textContent = ''; };
       const dicaDesc = () => { const t = cliente(); $('#dica-desc-nb').textContent = t.desconto_valor ? `Será abatido o desconto do cliente: ${brl(t.desconto_valor)} (${t.desconto_motivo}).` : ''; };
       f.tomadorId.addEventListener('change', dicaDesc);
-      f.tomadorId.onchange = () => { const t = cliente(); dicaDesc(); f.vencimento.value = vencDe(t); f.enviarEmail.checked = !!t.enviar_email_auto; ajustar(); };
+      f.tomadorId.onchange = () => { const t = cliente(); dicaDesc(); f.vencimento.value = vencDe(t); f.enviarEmail.checked = !!t.enviar_email_auto; ajustar(); f.querySelectorAll('[data-so-pix]').forEach((x) => (x.hidden = !formaPix())); };
       f.vencimento.onchange = ajustar;
       f.tomadorId.onchange();
       f.onsubmit = async (ev) => {
@@ -1076,13 +1160,14 @@ async function telaCobrancas() {
         const v = lerForm(f);
         const botao = f.querySelector('[type=submit]'); botao.disabled = true; botao.textContent = 'Gerando…';
         try {
-          const r = await api('POST', `/api/empresas/${estado.empresaId}/boleto-avulso`, { tomadorId: Number(v.tomadorId), descricao: v.descricao, valor: v.valor, vencimento: v.vencimento, enviarEmail: !!v.enviarEmail });
+          const r = await api('POST', `/api/empresas/${estado.empresaId}/boleto-avulso`, { tomadorId: Number(v.tomadorId), descricao: v.descricao, valor: v.valor, vencimento: v.vencimento, enviarEmail: !!v.enviarEmail, pixCopiaCola: formaPix() ? (f.pix.value.trim() || null) : null });
           d.close();
-          const partes = [`Boleto de ${brl(r.cobranca.valor)} (venc. ${dataBr(r.cobranca.vencimento)})`];
+          st.carteira = r.cobranca.forma ?? 'BOLETO';
+          const partes = [`${r.cobranca.forma === 'PIX' ? 'Cobrança Pix' : 'Boleto'} de ${brl(r.cobranca.valor)} (venc. ${dataBr(r.cobranca.vencimento)})`];
           if (r.email?.status === 'ENVIADO') partes.push(`e-mail enviado para ${r.email.para}`);
           if (r.email?.status === 'ERRO') partes.push(`e-mail não enviado: ${r.email.erro}`);
           aviso(partes.join(' · ') + '.' + (r.avisos?.length ? ' ' + r.avisos.join(' ') : '')); telaCobrancas();
-        } catch (e) { $('#erro-nb').textContent = mensagemErro(e); botao.disabled = false; botao.textContent = 'Gerar boleto'; }
+        } catch (e) { $('#erro-nb').textContent = mensagemErro(e); botao.disabled = false; botao.textContent = 'Gerar cobrança'; }
       };
     });
   };
@@ -1091,7 +1176,8 @@ async function telaCobrancas() {
   const aplicarModelo = (modelo, c) => modelo
     .replace(/\{cliente\}/g, c.tomador_nome).replace(/\{valor\}/g, brl(c.valor)).replace(/\{vencimento\}/g, dataBr(c.vencimento))
     .replace(/\{empresa\}/g, empresa()?.nome_fantasia || empresa()?.razao_social || '')
-    .replace(/\{linha\}/g, c.linha_digitavel ? `\nLinha digitável: ${c.linha_digitavel}` : '');
+    .replace(/\{linha\}/g, c.forma === 'PIX' ? (c.pix_copia_cola ? `\nPix copia e cola: ${c.pix_copia_cola}` : '') : c.linha_digitavel ? `\nLinha digitável: ${c.linha_digitavel}` : '')
+    .replace(/o boleto de /g, c.forma === 'PIX' ? 'a cobrança de ' : 'o boleto de ');
   conteudo.querySelectorAll('[data-wa]').forEach((b) => (b.onclick = async () => {
     const c = lista.find((x) => x.id === Number(b.dataset.wa));
     const m = await api('GET', `/api/empresas/${estado.empresaId}/modelos-whatsapp`);
@@ -1102,9 +1188,10 @@ async function telaCobrancas() {
         <label>WhatsApp do cliente (com DDD) <input name="fone" required value="${esc(c.tomador_fone ?? '')}" placeholder="(47) 99999-9999"></label>
         <label>Mensagem <textarea name="texto" rows="7">${esc(aplicarModelo(atrasado ? m.atraso : m.lembrete, c))}</textarea></label>
         <p class="erro" id="erro-wa"></p>
-        <div class="acoes"><button class="primario" type="submit">Abrir WhatsApp</button>${c.nosso_numero ? '<button type="button" id="wa-pdf">Baixar boleto para anexar</button>' : ''}<button type="button" data-fechar>Fechar</button></div>
+        <div class="acoes"><button class="primario" type="submit">Abrir WhatsApp</button>${c.nosso_numero ? '<button type="button" id="wa-pdf">Baixar boleto para anexar</button>' : ''}${c.forma === 'PIX' && c.pix_copia_cola ? '<button type="button" id="wa-demo">Baixar demonstrativo para anexar</button>' : ''}<button type="button" data-fechar>Fechar</button></div>
       </form>`, () => {
       const pdf = $('#wa-pdf'); if (pdf) pdf.onclick = () => baixar(`/api/cobrancas/${c.id}/boleto`, `Boleto_${c.id}.pdf`);
+      const dm = $('#wa-demo'); if (dm) dm.onclick = () => baixar(`/api/cobrancas/${c.id}/demonstrativo`, `Demonstrativo_${c.id}.pdf`);
       $('#form-wa').onsubmit = (ev) => {
         ev.preventDefault();
         let num = ev.target.fone.value.replace(/\D/g, '');
@@ -2502,7 +2589,7 @@ function ligarConsultaCnpj(form, modo) {
 // Tomadores
 // ---------------------------------------------------------------------------
 
-const NOME_MODO = { NOTA: 'Nota', NOTA_BOLETO: 'Nota + boleto', BOLETO: 'Só boleto' };
+const NOME_MODO = { NOTA: 'Nota', NOTA_BOLETO: 'Nota + cobrança', BOLETO: 'Só cobrança' };
 /** opcoes.daCarteira: aberto pela Carteira, mostra só o faturamento (o cadastro é o da carteira); opcoes.empresaId: empresa do tomador. */
 async function formTomador(t, aoSalvar, opcoes = {}) {
   const empresaId = opcoes.empresaId ?? estado.empresaId, daCarteira = !!opcoes.daCarteira;
@@ -2539,10 +2626,15 @@ async function formTomador(t, aoSalvar, opcoes = {}) {
         <label class="largo">O que emitir para este cliente
           <select name="modo_faturamento">
             <option value="NOTA" ${t.modo_faturamento === 'NOTA' ? 'selected' : ''}>Somente a nota fiscal</option>
-            <option value="NOTA_BOLETO" ${t.modo_faturamento === 'NOTA_BOLETO' ? 'selected' : ''}>Nota fiscal + boleto</option>
-            <option value="BOLETO" ${t.modo_faturamento === 'BOLETO' ? 'selected' : ''}>Somente o boleto</option>
+            <option value="NOTA_BOLETO" ${t.modo_faturamento === 'NOTA_BOLETO' ? 'selected' : ''}>Nota fiscal + cobrança</option>
+            <option value="BOLETO" ${t.modo_faturamento === 'BOLETO' ? 'selected' : ''}>Somente a cobrança</option>
           </select></label>
-        <label data-cobranca>Vencimento do boleto
+        <label class="largo" data-cobranca>Carteira de cobrança
+          <select name="forma_cobranca">
+            <option value="BOLETO" ${t.forma_cobranca !== 'PIX' ? 'selected' : ''}>Boleto bancário (Ailos)</option>
+            <option value="PIX" ${t.forma_cobranca === 'PIX' ? 'selected' : ''}>Pix copia e cola (QR Code no demonstrativo, sem boleto)</option>
+          </select><span class="dica" data-dica-pix>No Pix, o escritório gera a cobrança no banco e cola o código em Cobranças; o Kontor monta o demonstrativo com o QR Code.</span></label>
+        <label data-cobranca>Vencimento da cobrança
           <select name="vencimento_tipo"><option value="PRAZO" ${t.vencimento_tipo === 'PRAZO' ? 'selected' : ''}>Dias após a emissão</option><option value="DIA_FIXO" ${t.vencimento_tipo === 'DIA_FIXO' ? 'selected' : ''}>Dia fixo do mês</option></select></label>
         <label data-cobranca><span data-rotulo-venc>Quantidade de dias</span> <input name="vencimento_valor" data-num type="number" min="0" max="60" value="${t.vencimento_valor ?? 10}"></label>
         <label class="largo" data-cobranca>E-mails extras para cobrança <input name="email_cobranca" placeholder="financeiro@cliente.com, outro@cliente.com" value="${esc(t.email_cobranca ?? '')}"><span class="dica">Separe por vírgula. Recebem junto com o e-mail principal.</span></label>
@@ -2648,10 +2740,11 @@ async function formTomador(t, aoSalvar, opcoes = {}) {
     const ajustar = () => {
       const comBoleto = f.modo_faturamento.value !== 'NOTA';
       f.querySelectorAll('[data-cobranca]').forEach((x) => (x.hidden = !comBoleto));
-      f.querySelector('[data-aviso-banco]').hidden = !comBoleto;
+      f.querySelector('[data-aviso-banco]').hidden = !comBoleto || f.forma_cobranca.value === 'PIX';
+      f.querySelector('[data-dica-pix]').hidden = f.forma_cobranca.value !== 'PIX';
       f.querySelector('[data-rotulo-venc]').textContent = f.vencimento_tipo.value === 'PRAZO' ? 'Quantidade de dias' : 'Dia do mês (1 a 31)';
     };
-    f.modo_faturamento.onchange = f.vencimento_tipo.onchange = ajustar; ajustar();
+    f.modo_faturamento.onchange = f.vencimento_tipo.onchange = f.forma_cobranca.onchange = ajustar; ajustar();
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       try {

@@ -161,13 +161,16 @@ export async function enviarCodigoRecuperacao(escritorioId: number, para: string
 }
 
 /** E-mail só com o boleto (quando o cliente não recebe nota). */
+/** E-mail da cobrança sem nota: boleto (com o demonstrativo) ou Pix (demonstrativo com QR Code e o copia e cola no texto). */
 export async function enviarMensagemBoleto(escritorioId: number, para: string[], cob: any, tomador: any, anexos: { filename: string; content: Buffer; contentType: string }[]) {
   const c = lerConfig(escritorioId);
   if (!c) throw new ErroNegocio('Configure o e-mail do escritório em E-mail antes de enviar.');
   const emp = db.prepare('SELECT e.razao_social, e.nome_fantasia, e.email FROM empresas e WHERE e.id = ?').get(cob.empresa_id) as any;
   const nome = String(tomador?.nome ?? '').trim();
-  await enviarComModelo(escritorioId, 'boleto', { contato: nome, cliente: nome, razao_social: nome, cnpj: tomador?.documento ?? '', emitente: emp.razao_social,
-    valor: brl(cob.valor), vencimento: cob.vencimento.split('-').reverse().join('/'), linha_digitavel: cob.linha_digitavel ?? '' }, para, { anexos, replyTo: emp.email });
+  const pix = cob.forma === 'PIX';
+  await enviarComModelo(escritorioId, pix ? 'pix' : 'boleto', { contato: nome, cliente: nome, razao_social: nome, cnpj: tomador?.documento ?? '', emitente: emp.razao_social,
+    valor: brl(cob.valor), vencimento: cob.vencimento.split('-').reverse().join('/'), linha_digitavel: cob.linha_digitavel ?? '',
+    ...(pix ? { pix_copia_cola: cob.pix_copia_cola ?? '', descricao: cob.descricao ?? '', referencia: cob.referencia ?? '' } : {}) }, para, { anexos, replyTo: emp.email });
 }
 
 /** Fechamento mensal para a contabilidade: o pacote ZIP segue em anexo. */

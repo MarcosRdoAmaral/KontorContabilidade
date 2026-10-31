@@ -5,6 +5,8 @@ import { ErroNegocio } from './emissao.js';
 import { gerarRemessa400 } from '../cobranca/ailos400.js';
 import { codigoBarras, descreverMotivo, gerarRemessa, lerRetornoAuto, linhaDigitavel, nossoNumero, MOVIMENTO_RETORNO, type ContaAilos, type Titulo } from '../cobranca/ailos.js';
 import { gerarBoletoPdf } from '../cobranca/boleto-pdf.js';
+import { gerarDemonstrativoPdf } from '../cobranca/demonstrativo-pdf.js';
+import { lerPix } from '../cobranca/pix.js';
 
 const UF_IBGE: Record<string, string> = { '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO', '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR', '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF' };
 const hojeBr = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -79,23 +81,26 @@ export function pendenciasPagador(t: any): string[] {
  * `valor` é o valor ANTES do desconto do cliente. O desconto fixo cadastrado no cliente (motivo + valor) é abatido aqui,
  * para valer em todo boleto dele; `semDesconto` evita abater duas vezes quando a nota já carrega o mesmo desconto.
  */
-export function criarCobranca(d: { empresaId: number; tomadorId: number; notaId: number | null; descricao: string; valor: number; vencimento: string; usuarioId: number; semDesconto?: boolean }) {
-  const t = db.prepare('SELECT desconto_valor, desconto_motivo, multa_pct, juros_pct_mes, desc_pontual_pct, desc_pontual_dias FROM tomadores WHERE id = ?').get(d.tomadorId) as { desconto_valor: number | null; desconto_motivo: string | null; multa_pct: number | null; juros_pct_mes: number | null; desc_pontual_pct: number | null; desc_pontual_dias: number | null } | undefined;
+export function criarCobranca(d: { empresaId: number; tomadorId: number; notaId: number | null; descricao: string; valor: number; vencimento: string; usuarioId: number; semDesconto?: boolean; pix?: string | null }) {
+  const t = db.prepare('SELECT forma_cobranca, desconto_valor, desconto_motivo, multa_pct, juros_pct_mes, desc_pontual_pct, desc_pontual_dias FROM tomadores WHERE id = ?').get(d.tomadorId) as { forma_cobranca: 'BOLETO' | 'PIX'; desconto_valor: number | null; desconto_motivo: string | null; multa_pct: number | null; juros_pct_mes: number | null; desc_pontual_pct: number | null; desc_pontual_dias: number | null } | undefined;
   const desconto = !d.semDesconto && t?.desconto_valor && t.desconto_valor > 0 ? Math.round(t.desconto_valor * 100) / 100 : 0;
   if (desconto && desconto >= d.valor) throw new ErroNegocio(`O desconto do cliente (R$ ${desconto.toFixed(2).replace('.', ',')}) é maior ou igual ao valor do boleto. Ajuste o valor ou o desconto no cadastro do cliente.`);
   const valor = Math.round((d.valor - desconto) * 100) / 100;
   if (valor > 99999999.99) throw new ErroNegocio('Valor do boleto acima do limite.');
-  const r = db.prepare(`INSERT INTO cobrancas (empresa_id, tomador_id, nota_id, descricao, valor, vencimento, emissao, criado_por, desconto, desconto_motivo, multa_pct, juros_pct_mes, desc_pontual_pct, desc_pontual_dias) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(d.empresaId, d.tomadorId, d.notaId, d.descricao, valor, d.vencimento, hojeBr(), d.usuarioId, desconto, desconto ? t!.desconto_motivo : null, t?.multa_pct ?? null, t?.juros_pct_mes ?? null, t?.desc_pontual_pct ?? null, t?.desc_pontual_dias ?? null);
+  const forma = t?.forma_cobranca ?? 'BOLETO';
+  const pix = forma === 'PIX' && d.pix?.trim() ? conferirPix(d.pix, valor) : null;
+  const r = db.prepare(`INSERT INTO cobrancas (empresa_id, tomador_id, nota_id, descricao, valor, vencimento, emissao, criado_por, desconto, desconto_motivo, multa_pct, juros_pct_mes, desc_pontual_pct, desc_pontual_dias, forma, pix_copia_cola, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(d.empresaId, d.tomadorId, d.notaId, d.descricao, valor, d.vencimento, hojeBr(), d.usuarioId, desconto, desconto ? t!.desconto_motivo : null, t?.multa_pct ?? null, t?.juros_pct_mes ?? null, t?.desc_pontual_pct ?? null, t?.desc_pontual_dias ?? null,
+      forma, pix, pix ? 'REGISTRADO' : 'AGUARDANDO_BANCO');
   const id = Number(r.lastInsertRowid);
-  if (obterConta(d.empresaId)) { try { gerarTitulo(id); } catch { /* fica pendente, com o motivo na tela */ } }
+  if (forma === 'BOLETO' && obterConta(d.empresaId)) { try { gerarTitulo(id); } catch { /* fica pendente, com o motivo na tela */ } }
   return obterCobranca(id)!;
 }
 
 /** Reserva o número do boleto e calcula nosso número, código de barras e linha digitável. */
 export function gerarTitulo(cobrancaId: number) {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(cobrancaId) as any;
-  if (!c || c.status !== 'AGUARDANDO_BANCO') return;
+  if (!c || c.status !== 'AGUARDANDO_BANCO' || c.forma === 'PIX') return;
   const conta = obterConta(c.empresa_id);
   if (!conta) return;
   const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
@@ -122,7 +127,7 @@ export function obterCobranca(id: number) {
 
 export function listarCobrancas(empresaId: number) {
   return db.prepare(`SELECT c.id, c.nota_id, c.tomador_id, c.descricao, c.valor, c.vencimento, c.status, c.nosso_numero, c.linha_digitavel, c.baixa_pendente, c.pago_em, c.valor_pago,
-      c.observacao_banco, c.email_status, c.email_para, c.criado_em, c.desconto, c.desconto_motivo, t.nome AS tomador_nome, t.fone AS tomador_fone, c.codigo_barras, n.n_nfse FROM cobrancas c
+      c.observacao_banco, c.email_status, c.email_para, c.criado_em, c.forma, c.pix_copia_cola, c.desconto, c.desconto_motivo, t.nome AS tomador_nome, t.fone AS tomador_fone, c.codigo_barras, n.n_nfse FROM cobrancas c
     JOIN tomadores t ON t.id = c.tomador_id LEFT JOIN notas n ON n.id = c.nota_id
     WHERE c.empresa_id = ? ORDER BY c.vencimento DESC, c.id DESC LIMIT 500`).all(empresaId);
 }
@@ -175,11 +180,69 @@ export async function boletoPdf(cobrancaId: number): Promise<{ pdf: Buffer; nome
   return { pdf, nome: `Boleto_${c.nosso_numero}.pdf` };
 }
 
+// ---------------------------------------------------------------------------
+// Carteira Pix: o escritório gera a cobrança Pix no banco e cola o código aqui
+// ---------------------------------------------------------------------------
+/** Confere o Pix copia e cola e devolve o código limpo; recusa se o valor do Pix for diferente do da cobrança. */
+export function conferirPix(codigo: string, valor: number): string {
+  let p;
+  try { p = lerPix(codigo); } catch (e: any) { throw new ErroNegocio(e.message); }
+  if (p.valor != null && Math.abs(p.valor - valor) > 0.009)
+    throw new ErroNegocio(`O valor deste Pix (R$ ${p.valor.toFixed(2).replace('.', ',')}) é diferente do valor da cobrança (R$ ${valor.toFixed(2).replace('.', ',')}). Gere o Pix com o valor certo ou ajuste a cobrança.`);
+  return p.codigo;
+}
+export function informarPix(id: number, codigo: string) {
+  const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(id) as any;
+  if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
+  if (c.forma !== 'PIX') throw new ErroNegocio('Esta cobrança é da carteira de boleto.');
+  if (c.status === 'PAGO' || c.status === 'CANCELADO') throw new ErroNegocio('Esta cobrança já está encerrada.');
+  const pix = conferirPix(codigo, c.valor);
+  const lido = lerPix(pix);
+  db.prepare("UPDATE cobrancas SET pix_copia_cola = ?, status = 'REGISTRADO', observacao_banco = NULL WHERE id = ?").run(pix, id);
+  return { ...obterCobranca(id), pix_lido: { valor: lido.valor, recebedor: lido.recebedor, cidade: lido.cidade, chave: lido.chave } };
+}
+
+/** Referência do demonstrativo: a competência da nota, senão o mês anterior ao vencimento. */
+export function referenciaDa(c: any): string {
+  const comp = c.nota_id ? (db.prepare('SELECT competencia FROM notas WHERE id = ?').get(c.nota_id) as any)?.competencia : null;
+  if (comp) return `${comp.slice(5, 7)}/${comp.slice(0, 4)}`;
+  const [a, m] = c.vencimento.split('-').map(Number);
+  return m === 1 ? `12/${a - 1}` : `${String(m - 1).padStart(2, '0')}/${a}`;
+}
+
+/** Demonstrativo de cobrança (PDF) nos moldes do escritório: serviços, total e o Pix (QR Code) ou o boleto. */
+export async function demonstrativoPdf(cobrancaId: number): Promise<{ pdf: Buffer; nome: string }> {
+  const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(cobrancaId) as any;
+  if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
+  if (c.forma === 'PIX' && !c.pix_copia_cola) throw new ErroNegocio('Informe o Pix copia e cola desta cobrança para gerar o demonstrativo.');
+  const e = db.prepare('SELECT * FROM empresas WHERE id = ?').get(c.empresa_id) as any;
+  const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
+  const ufT = t.uf || UF_IBGE[String(t.cod_municipio ?? '').slice(0, 2)] || '';
+  const endT = [[t.logradouro, t.numero ? `nº ${t.numero}` : null].filter(Boolean).join(', '), t.complemento, t.bairro, t.cidade ? `${t.cidade}${ufT ? '/' + ufT : ''}` : null].filter(Boolean).join(', ');
+  const endE = [[e.logradouro, e.numero ? `nº ${e.numero}` : null].filter(Boolean).join(', '), e.bairro, e.cidade ? `${e.cidade}${e.uf ? '/' + e.uf : ''}` : null].filter(Boolean).join(', ');
+  const fone = e.contato_fone ? `WhatsApp: ${e.contato_fone}` : null;
+  const bruto = Math.round((c.valor + (c.desconto ?? 0)) * 100) / 100;
+  const nome = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '').slice(0, 40);
+  const referencia = referenciaDa(c);
+  const pdf = await gerarDemonstrativoPdf({
+    emitente: { nome: e.nome_fantasia || e.razao_social, documento: e.documento, endereco: endE, contato: [e.email, fone].filter(Boolean).join(' | '), logo: e.logo ? Buffer.from(e.logo) : null },
+    cliente: { nome: t.nome, documento: t.documento ?? '', endereco: endT },
+    referencia, vencimento: c.vencimento,
+    itens: [{ descricao: c.descricao, qtd: 1, valor: bruto }],
+    desconto: c.desconto > 0 ? { valor: c.desconto, motivo: c.desconto_motivo } : null,
+    total: c.valor,
+    pix: c.forma === 'PIX' ? c.pix_copia_cola : null,
+    boleto: c.forma === 'BOLETO' && c.linha_digitavel && c.codigo_barras ? { linhaDigitavel: c.linha_digitavel, codigoBarras: c.codigo_barras } : null,
+    rodape: e.demonstrativo_rodape,
+  });
+  return { pdf, nome: `Demonstrativo_Cobranca_${nome(t.nome)}_${referencia.replace('/', '-')}.pdf` };
+}
+
 export function cancelarCobranca(id: number) {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(id) as any;
   if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
   if (c.status === 'PAGO' || c.status === 'CANCELADO') throw new ErroNegocio('Esta cobrança já está encerrada.');
-  if (c.status === 'AGUARDANDO_BANCO' || c.status === 'A_REMETER' || c.status === 'REJEITADO') {
+  if (c.forma === 'PIX' || c.status === 'AGUARDANDO_BANCO' || c.status === 'A_REMETER' || c.status === 'REJEITADO') {
     db.prepare("UPDATE cobrancas SET status = 'CANCELADO' WHERE id = ?").run(id);
     return { baixaNoBanco: false };
   }

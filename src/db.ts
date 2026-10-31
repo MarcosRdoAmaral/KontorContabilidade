@@ -1094,6 +1094,11 @@ const migracoes: string[] = [
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (escritorio_id, chave)
   );`,
+  // 43: duas carteiras de cobrança: boleto (Ailos) ou Pix copia e cola (código colado pelo escritório), e o demonstrativo
+  `ALTER TABLE tomadores ADD COLUMN forma_cobranca TEXT NOT NULL DEFAULT 'BOLETO' CHECK (forma_cobranca IN ('BOLETO','PIX'));
+  ALTER TABLE cobrancas ADD COLUMN forma TEXT NOT NULL DEFAULT 'BOLETO' CHECK (forma IN ('BOLETO','PIX'));
+  ALTER TABLE cobrancas ADD COLUMN pix_copia_cola TEXT;
+  ALTER TABLE empresas ADD COLUMN demonstrativo_rodape TEXT;`,
 ];
 
 export function migrar(): void {
