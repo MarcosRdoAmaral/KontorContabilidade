@@ -178,6 +178,16 @@ async function concluir(id: number, pdf: Buffer, manterData = false) {
 export interface ResultadoSitfis { empresa_id: number; cliente: string; status: 'PRONTA' | 'SOLICITADA' | 'ERRO'; situacao?: string; mensagem: string; id?: number }
 
 /** Pede (ou retoma) o relatório de um cliente e espera um pouco por ele. */
+/** Valor de um ETag do SERPRO: "protocoloRelatorio:XYZ" → XYZ; sem prefixo, o próprio texto (só para o protocolo). */
+export function valorEtag(etag: string | undefined, chave: 'protocoloRelatorio' | 'tempoEspera'): string | null {
+  const t = String(etag ?? '').trim();
+  if (!t) return null;
+  const m = new RegExp(`${chave}\\s*[:=]\\s*([^,;\\s]+)`, 'i').exec(t);
+  if (m) return m[1];
+  if (/^[a-z]\w*\s*:/i.test(t)) return null; // outro campo
+  return chave === 'protocoloRelatorio' && t.length > 10 ? t : chave === 'tempoEspera' && /^\d+$/.test(t) ? t : null;
+}
+
 export async function consultarSituacao(escritorioId: number, usuarioId: number | null, empresaId: number, opcoes: { transporte?: Transporte; esperar?: Espera } = {}): Promise<ResultadoSitfis> {
   const e = db.prepare('SELECT id, documento, COALESCE(nome_fantasia, razao_social) AS cliente FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId) as any;
   if (!e) throw new ErroNegocio('Cliente não encontrado.', 404);
@@ -189,13 +199,16 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
   if (reg && Date.now() - Date.parse(reg.solicitada_em.replace(' ', 'T') + 'Z') > PROTOCOLO_VALIDO_MS) reg = null;
   if (!reg) {
     const r = await i.consultar(e.documento, 'SITFIS', 'SOLICITARPROTOCOLO91', null, 'Apoiar');
-    const protocolo = r.dados?.protocoloRelatorio ?? r.dados?.protocolo ?? null;
-    if (!r.ok || !protocolo) {
-      const msg = semProcuracao(r.mensagens) ? 'Sem procuração do cliente para o escritório no e-CAC.' : textoMsgs(r.mensagens) || `O SERPRO não devolveu o protocolo (HTTP ${r.http}).`;
+    // 304: já existe um protocolo válido para o cliente (pedido antes, aqui ou em outro sistema); ele vem no ETag
+    const protocolo = r.dados?.protocoloRelatorio ?? r.dados?.protocolo ?? (r.http === 304 ? valorEtag(r.etag, 'protocoloRelatorio') : null);
+    if (!(r.ok || r.http === 304) || !protocolo) {
+      const msg = semProcuracao(r.mensagens) ? 'Sem procuração do cliente para o escritório no e-CAC.' : textoMsgs(r.mensagens) || (r.http === 304
+        ? 'A Receita já tem um pedido recente deste cliente, mas não informou o protocolo. Tente de novo mais tarde.'
+        : `O SERPRO não devolveu o protocolo (HTTP ${r.http}).`);
       const id = Number(db.prepare(`INSERT INTO situacao_fiscal (empresa_id, status, erro, usuario_id, concluida_em) VALUES (?, 'ERRO', ?, ?, datetime('now'))`).run(empresaId, msg, usuarioId).lastInsertRowid);
       return { ...base, status: 'ERRO', mensagem: msg, id };
     }
-    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || 0;
+    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || (r.http === 304 ? 0 : Number(valorEtag(r.etag, 'tempoEspera')) || 0);
     const id = Number(db.prepare(`INSERT INTO situacao_fiscal (empresa_id, status, protocolo, liberar_em, usuario_id) VALUES (?, 'SOLICITADA', ?, ?, ?)`)
       .run(empresaId, String(protocolo), new Date(Date.now() + espera).toISOString(), usuarioId).lastInsertRowid);
     reg = db.prepare('SELECT * FROM situacao_fiscal WHERE id = ?').get(id);
@@ -210,7 +223,8 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
       const msg = lido.situacao === 'REGULAR' ? 'Sem pendências na Receita Federal e na PGFN.' : lido.situacao === 'PENDENCIAS' ? `${lido.qtdPendencias} pendência(s)${lido.totalAberto ? `, saldo de R$ ${lido.totalAberto.toFixed(2).replace('.', ',')}` : ''}.` : 'Relatório recebido: confira o PDF.';
       return { ...base, status: 'PRONTA', situacao: lido.situacao, mensagem: msg, id: reg.id };
     }
-    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || 0;
+    // 204: o relatório ainda está sendo gerado; o novo tempo de espera vem no ETag
+    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || Number(valorEtag(r.etag, 'tempoEspera')) || (r.http === 204 ? 5000 : 0);
     if (espera > 0 && gasto + espera <= ESPERA_MAX_MS) {
       db.prepare('UPDATE situacao_fiscal SET liberar_em = ? WHERE id = ?').run(new Date(Date.now() + espera).toISOString(), reg.id);
       gasto += espera; await esperar(espera); continue;

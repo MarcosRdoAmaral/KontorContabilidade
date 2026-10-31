@@ -103,6 +103,7 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     assert.equal(r2.situacao, 'REGULAR');
     assert.deepEqual(chamadas, [`Emitir:RELATORIOSITFIS92:${ALFA}`]);
 
+
     // ---------- tela ----------
     const painel = (await call('GET', '/api/escritorio/situacao-fiscal', undefined, t)).json;
     assert.equal(painel.clientes[0].empresa_id, ids[PADARIA], 'quem tem pendência vem primeiro');
@@ -162,6 +163,19 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     // desligada: não roda
     await call('PUT', '/api/escritorio/situacao-fiscal/agenda', { ativo: false, dias: [1, 15], emails: [] }, t);
     assert.deepEqual(await sitfisAutomatico(new Date(`${proxima.slice(0, 8)}28T10:00:00-03:00`), { transporte, esperar }), []);
+    // 304: a Receita já tem um protocolo do cliente e o devolve no ETag (sem corpo); 204 no Emitir traz o tempo de espera no ETag
+    const seq: string[] = [];
+    const t304 = { autenticar: transporte.autenticar, async consultar(corpo: any) {
+      const srv = corpo.pedidoDados.idServico; seq.push(srv);
+      if (srv === 'SOLICITARPROTOCOLO91') return { status: 304, corpo: null, cabecalhos: { etag: '"protocoloRelatorio:PROT+abc/123=="', expires: 'Sat, 31 Oct 2026 23:59:59 GMT' } };
+      assert.deepEqual(JSON.parse(corpo.pedidoDados.dados), { protocoloRelatorio: 'PROT+abc/123==' });
+      if (seq.filter((x) => x === 'RELATORIOSITFIS92').length === 1) return { status: 204, corpo: null, cabecalhos: { etag: '"tempoEspera:1500"' } };
+      return { status: 200, corpo: { status: 200, mensagens: [], dados: JSON.stringify({ pdf: pdfReg }) } };
+    } };
+    esperas.length = 0;
+    const r3 = await consultarSituacao(1, 1, ids[SEMPROC], { transporte: t304 as any, esperar });
+    assert.equal(r3.status, 'PRONTA'); assert.equal(r3.situacao, 'REGULAR');
+    assert.deepEqual(esperas, [1500]);
   } finally {
     await app.close();
   }

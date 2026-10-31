@@ -80,10 +80,10 @@ export type Endpoint = 'Consultar' | 'Apoiar' | 'Emitir' | 'Declarar';
 export interface Token { accessToken: string; jwtToken: string; expiraEm: number }
 export interface Transporte {
   autenticar(): Promise<Token>;
-  consultar(corpo: object, token: Token, endpoint?: Endpoint): Promise<{ status: number; corpo: any }>;
+  consultar(corpo: object, token: Token, endpoint?: Endpoint): Promise<{ status: number; corpo: any; cabecalhos?: Record<string, string> }>;
 }
 
-function requisicao(url: string, opcoes: https.RequestOptions, corpo: string): Promise<{ status: number; corpo: any; bruto: string }> {
+function requisicao(url: string, opcoes: https.RequestOptions, corpo: string): Promise<{ status: number; corpo: any; bruto: string; cabecalhos: Record<string, string> }> {
   return new Promise((resolve, reject) => {
     const r = https.request(url, { ...opcoes, timeout: 60_000 }, (res) => {
       const partes: Buffer[] = [];
@@ -92,7 +92,8 @@ function requisicao(url: string, opcoes: https.RequestOptions, corpo: string): P
         const bruto = Buffer.concat(partes).toString('utf8');
         let json: any = null;
         try { json = bruto ? JSON.parse(bruto) : null; } catch { json = null; }
-        resolve({ status: res.statusCode ?? 0, corpo: json, bruto });
+        const cabecalhos = Object.fromEntries(Object.entries(res.headers).map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v.join(', ') : String(v ?? '')]));
+        resolve({ status: res.statusCode ?? 0, corpo: json, bruto, cabecalhos });
       });
     });
     r.on('timeout', () => r.destroy(new Error('Tempo esgotado aguardando o Integra Contador.')));
@@ -120,7 +121,7 @@ function transporteReal(escritorioId: number): Transporte {
     },
     async consultar(corpo, token, endpoint = 'Consultar') {
       const r = await requisicao(`${api}/${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.accessToken}`, jwt_token: token.jwtToken, 'Content-Type': 'application/json', Accept: 'application/json' } }, JSON.stringify(corpo));
-      return { status: r.status, corpo: r.corpo };
+      return { status: r.status, corpo: r.corpo, cabecalhos: r.cabecalhos };
     },
   };
 }
@@ -169,7 +170,9 @@ export class Integra {
     let dadosLidos: any = null;
     const bruto = r.corpo?.dados;
     if (typeof bruto === 'string' && bruto.trim()) { try { dadosLidos = JSON.parse(bruto); } catch { dadosLidos = bruto; } } else if (bruto && typeof bruto === 'object') dadosLidos = bruto;
-    return { http: r.status, ok: r.status >= 200 && r.status < 300 && Number(r.corpo?.status ?? r.status) < 300, dados: dadosLidos, mensagens: msgs };
+    // Sem corpo (ex.: SITFIS devolve 304 com o protocolo em cache e 204 com o novo tempo de espera): o valor vem no ETag.
+    const etag = String(r.cabecalhos?.etag ?? '').replace(/^W\//, '').replace(/^"|"$/g, '').trim();
+    return { http: r.status, ok: r.status >= 200 && r.status < 300 && Number(r.corpo?.status ?? r.status) < 300, dados: dadosLidos, mensagens: msgs, etag, expira: r.cabecalhos?.expires ?? null };
   }
 }
 
