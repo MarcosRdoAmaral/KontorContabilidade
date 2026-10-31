@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.17.0';
+export const MANUAL_VERSAO = '1.18.0';
 
 export const MANUAL = [
   {
@@ -80,6 +80,7 @@ export const MANUAL = [
         <li><strong>DCTFWeb:</strong> com a folha fechada no eSocial (e a EFD-Reinf, se houver), <em>Transmitir e gerar o DARF</em> busca a declaração em andamento, assina, transmite e gera o DARF, que vai para a coluna DARF Prev. O botão <em>Transmitir DCTFWeb (lote)</em> faz isso para todos os clientes com folha ainda não transmitidos.</li>
         <li><strong>Enviar ao cliente:</strong> a mensagem traz os valores e vencimentos. <em>Enviar por e-mail</em> manda as guias em anexo; <em>WhatsApp</em> abre a conversa com a mensagem e baixa as guias para você anexar. O envio fica registrado e a data entra no controle. <em>Enviar fechamentos por e-mail</em> manda para todos os clientes com guia que ainda não receberam (os atendidos pelo WhatsApp ficam de fora).</li>
       </ul>
+      <p><strong>Transmitiu em outro sistema (SCI, portal do Simples, e-CAC)?</strong> Use <em>Buscar declaração e DAS já transmitidos</em> (PGDAS-D) ou <em>Buscar recibo e DARF já transmitidos</em> (DCTFWeb) na janela do cliente, ou os botões <em>Buscar DAS já transmitidos</em> (aba Fiscal) e <em>Buscar DARFs já transmitidos</em> (aba Departamento pessoal) para vários clientes de uma vez. O Kontor não transmite nada: busca a declaração e o recibo, gera a guia, marca a obrigação como entregue e lança o valor no controle. Depois é só enviar ao cliente. Se você clicar em <em>Transmitir</em> numa DCTFWeb que já foi transmitida, o Kontor percebe e só busca o recibo e o DARF.</p>
       <p>O PGDAS-D cobre as atividades principais, sem isenções e reduções detalhadas por tributo; MEI não entra. Comece por um cliente e confira o resultado no portal.</p>
       <h3>Senhas e acessos</h3>
       <p>Em Escritório &gt; Senhas e acessos ficam o CPF do responsável, o código de acesso e a atividade do Simples Nacional, e a senha previdenciária de cada cliente. As senhas são guardadas criptografadas e só aparecem ao clicar em <em>Mostrar</em> (voltam a ficar escondidas depois de um minuto), com o botão <em>Copiar</em>. Só quem tem a permissão “Senhas e acessos dos clientes” vê essa tela; ela não vem liberada por padrão para usuários novos.</p>

@@ -4615,7 +4615,7 @@ async function telaControle() {
   const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal', CONTABIL: 'Contábil' };
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Controle mensal</h1><p class="sutil">Entregas de cada cliente na competência: impostos e guias do fiscal, folha e encargos do departamento pessoal e a contabilização. Tudo é salvo ao sair de cada campo.</p></div>
-      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes com folha que ainda não foi transmitida">Transmitir DCTFWeb (lote)</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail o fechamento (guias) aos clientes com guia gerada e ainda não enviados">Enviar fechamentos por e-mail</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
+      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes com folha que ainda não foi transmitida">Transmitir DCTFWeb (lote)</button> <button id="ct-dctf-busca" title="Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF">Buscar DARFs já transmitidos</button> ' : ''}${f.area === 'FISCAL' ? '<button id="ct-pg-busca" title="Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS">Buscar DAS já transmitidos</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail o fechamento (guias) aos clientes com guia gerada e ainda não enviados">Enviar fechamentos por e-mail</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
     <div class="filtros">
       <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
       <label style="flex:1 1 220px">Buscar <input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Cliente"></label>
@@ -4697,6 +4697,16 @@ async function telaControle() {
     loteFechamento(`Transmitir a DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para cada cliente com folha (marcado sem folha fica de fora), o Kontor busca a declaração em andamento, assina com o certificado do escritório, transmite e gera o DARF. A folha precisa estar fechada no eSocial (e a EFD-Reinf, se houver). Cada cliente usa algumas chamadas ao Integra Contador, cobradas pelo SERPRO.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb`, { mes: f.mes }).then((r) => (r.jaTransmitida ? 'já estava transmitida' : `transmitida${r.recibo ? `, recibo ${r.recibo}` : ''}`) + (r.valor != null ? ` — DARF ${brl(r.valor)}` : r.aviso ? ` — ${r.aviso}` : '')), telaControle);
   });
+  $('#ct-dctf-busca') && ($('#ct-dctf-busca').onclick = () => {
+    const alvo = visiveis().filter((c) => c.tem_funcionarios && !c.dados.sem_folha && !fech.resumo[c.empresa_id]?.DCTFWEB?.tem_guia);
+    loteFechamento(`Buscar DARFs da DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite a DCTFWeb em outro sistema (SCI, e-CAC): o Kontor não transmite nada, só busca o recibo da declaração já transmitida e gera o DARF. Ficam de fora os clientes marcados sem folha e os que já têm DARF. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DARF ${brl(r.valor)}` : r.aviso || 'recibo encontrado, sem DARF')), telaControle);
+  });
+  $('#ct-pg-busca') && ($('#ct-pg-busca').onclick = () => {
+    const alvo = visiveis().filter((c) => c.regime === 'SIMPLES' && !c.dados.sem_movimento && !fech.resumo[c.empresa_id]?.PGDASD?.tem_guia);
+    loteFechamento(`Buscar DAS do Simples de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite o PGDAS-D em outro sistema (SCI, portal do Simples): o Kontor não transmite nada, só busca a declaração e o recibo já transmitidos e gera o DAS. Ficam de fora os clientes sem movimento e os que já têm DAS. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
+      (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DAS ${brl(r.valor)}` : r.aviso || 'declaração encontrada, sem DAS')), telaControle);
+  });
   $('#ct-env-lote') && ($('#ct-env-lote').onclick = () => {
     const tipo = f.area === 'FISCAL' ? 'PGDASD' : 'DCTFWEB';
     const alvo = visiveis().filter((c) => fech.resumo[c.empresa_id]?.[tipo]?.tem_guia && !fech.resumo[c.empresa_id]?.enviado_em && c.canal_envio !== 'WHATSAPP' && c.email);
@@ -4747,11 +4757,13 @@ async function abrirFechamento(empresaId, mes, aoFim) {
       <div id="fc-rec" class="grade"></div>
       <label class="check"><input type="checkbox" id="fc-ret" ${ent.retificadora ? 'checked' : ''}> Retificadora (já existe declaração deste mês)</label>
       <div id="fc-calc">${pg?.valores ? tabelaTributos(pg.valores, TRIB) : ''}</div>
+      <p class="dica">Declaração já transmitida? <button type="button" id="fc-pg-buscar">Buscar declaração e DAS já transmitidos</button></p>
       <div class="acoes"><button type="button" id="fc-calcular">Calcular</button><button type="button" class="primario" id="fc-transmitir" ${pg?.situacao === 'CALCULADO' ? '' : 'disabled'}>Transmitir e gerar o DAS</button>
         ${pg?.tem_guia ? arq('PGDASD', 'guia', 'DAS (PDF)') : ''}${pg?.tem_recibo ? arq('PGDASD', 'recibo', 'Recibo') : ''}${pg?.tem_declaracao ? arq('PGDASD', 'declaracao', 'Declaração') : ''}</div>
     </fieldset>` : '<p class="dica">Cliente fora do Simples Nacional: o PGDAS-D não se aplica.</p>'}
     ${d.tem_funcionarios || dc ? `<fieldset class="sub"><legend>DCTFWeb</legend>
       ${dc ? `<p>Situação: <strong class="${dc.situacao === 'TRANSMITIDA' ? 'cor-verde' : 'cor-vermelho'}">${dc.situacao === 'TRANSMITIDA' ? `Transmitida${dc.recibo ? ` (recibo ${esc(dc.recibo)})` : ''}${dc.transmitida_em ? ` em ${dhBr(dc.transmitida_em)}` : ''}` : 'Erro'}</strong>${dc.valor != null ? ` · DARF ${brl(dc.valor)}${dc.vencimento ? `, vence ${dataBr(dc.vencimento)}` : ''}` : ''}${dc.erro ? `<br><span class="dica ${dc.situacao === 'ERRO' ? 'cor-vermelho' : ''}">${esc(dc.erro)}</span>` : ''}</p>` : '<p class="dica">A declaração em andamento vem do fechamento da folha no eSocial (e da EFD-Reinf). O Kontor assina com o certificado do escritório, transmite e gera o DARF.</p>'}
+      <p class="dica">Declaração já transmitida? <button type="button" id="fc-dc-buscar">Buscar recibo e DARF já transmitidos</button></p>
       <div class="acoes"><button type="button" class="primario" id="fc-dctf">${dc?.situacao === 'TRANSMITIDA' ? 'Gerar o DARF de novo' : 'Transmitir e gerar o DARF'}</button>${dc?.tem_guia ? arq('DCTFWEB', 'guia', 'DARF (PDF)') : ''}${dc?.tem_recibo ? arq('DCTFWEB', 'recibo', 'Recibo') : ''}</div>
     </fieldset>` : ''}
     <fieldset class="sub"><legend>Enviar ao cliente</legend>
@@ -4789,6 +4801,15 @@ async function abrirFechamento(empresaId, mes, aoFim) {
         catch (e) { ev.target.disabled = false; ev.target.textContent = 'Transmitir e gerar o DAS'; erro(e); }
       };
     }
+    const buscar = (sel, url, rotulo, msg) => { const b = dlg.querySelector(sel); if (b) b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Buscando na Receita…';
+      try { const r = await api('POST', url, { mes }); aviso(msg(r)); recarregar(); }
+      catch (e) { b.disabled = false; b.textContent = rotulo; erro(e); }
+    }; };
+    buscar('#fc-pg-buscar', `/api/escritorio/fechamento/${empresaId}/pgdas/buscar`, 'Buscar declaração e DAS já transmitidos',
+      (r) => `PGDAS-D encontrado (declaração ${r.recibo})${r.valor != null ? `: DAS ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`);
+    buscar('#fc-dc-buscar', `/api/escritorio/fechamento/${empresaId}/dctfweb/buscar`, 'Buscar recibo e DARF já transmitidos',
+      (r) => `DCTFWeb encontrada${r.valor != null ? `: DARF ${brl(r.valor)}` : ''}.${r.aviso ? ` ${r.aviso}` : ''}`);
     const bd = dlg.querySelector('#fc-dctf');
     if (bd) bd.onclick = async (ev) => {
       if (!confirm(`${dc?.situacao === 'TRANSMITIDA' ? 'Gerar de novo o DARF' : 'Transmitir a DCTFWeb'} de ${rotuloMes(mes)} de ${d.cliente}?`)) return;

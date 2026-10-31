@@ -86,32 +86,48 @@ const codificacao = (buf: Buffer): BufferEncoding => (/encoding=["']iso-8859-1["
 // ---------------------------------------------------------------------------------------------
 // DCTFWeb
 // ---------------------------------------------------------------------------------------------
-export async function transmitirDctfweb(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, transporte?: Transporte) {
+const JA_TRANSMITIDA = /Ja_Transmitida|j[áa] (foi )?transmitida|j[áa] existe declara/i;
+
+/**
+ * Transmite a DCTFWeb em andamento e gera o DARF. Com soBuscar = true não transmite nada: só busca o recibo e
+ * gera o DARF da declaração já transmitida por outro sistema (SCI, Domínio, e-CAC...).
+ */
+export async function transmitirDctfweb(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, transporte?: Transporte, soBuscar = false) {
   const mes = MES.parse(mesBr);
   semDemonstracao(escritorioId, transporte);
   const e = empresaDoEscritorio(escritorioId, empresaId);
   const i = Integra.para(escritorioId, transporte);
   const dados = { categoria: 'GERAL_MENSAL', ...partes(mes) };
   try {
+    let jaTransmitida = soBuscar;
+    let recibo: string | null = null;
+    if (!soBuscar) {
     const r1 = await i.consultar(e.documento, 'DCTFWEB', 'CONSXMLDECLARACAO38', dados, 'Consultar');
     const b64 = r1.ok ? procurar(r1.dados, (k, v) => /xml/i.test(k) && typeof v === 'string' && v.length > 20) : null;
     if (!b64) erroIntegra(r1, 'DCTFWeb (XML da declaração)');
     const bruto = Buffer.from(b64, 'base64');
     const enc = codificacao(bruto);
     const xml = bruto.toString(enc);
-    const jaTransmitida = /<(?:[\w-]+:)?Signature[\s>]/.test(xml);
-    let recibo: string | null = null;
+    jaTransmitida = /<(?:[\w-]+:)?Signature[\s>]/.test(xml);
     if (!jaTransmitida) {
       const esc = db.prepare('SELECT * FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1').get(escritorioId) as any;
       if (!esc?.cert_pfx_enc) throw new ErroNegocio('Envie o certificado A1 do escritório em Cadastros > Empresas: a DCTFWeb é assinada com ele.');
       const assinado = assinarDctfweb(xml, certificadoDaEmpresa(esc));
       const r2 = await i.consultar(e.documento, 'DCTFWEB', 'TRANSDECLARACAO310', { ...dados, xmlAssinadoBase64: Buffer.from(assinado, enc).toString('base64') }, 'Declarar');
-      if (!r2.ok) erroIntegra(r2, 'DCTFWeb (transmissão)');
-      recibo = procurar(r2.dados, (k, v) => /recibo/i.test(k) && (typeof v === 'string' || typeof v === 'number') && String(v).length >= 6) ?? null;
+      if (!r2.ok && JA_TRANSMITIDA.test(textoMsgs(r2.mensagens))) jaTransmitida = true; // transmitida por outro sistema: só busca recibo e DARF
+      else {
+        if (!r2.ok) erroIntegra(r2, 'DCTFWeb (transmissão)');
+        recibo = procurar(r2.dados, (k, v) => /recibo/i.test(k) && (typeof v === 'string' || typeof v === 'number') && String(v).length >= 6) ?? null;
+      }
+    }
     }
     // recibo e DARF: falhas aqui não desfazem a transmissão
     let reciboPdf: string | null = null, guia: string | null = null, avisoGuia: string | null = null;
-    try { const r3 = await i.consultar(e.documento, 'DCTFWEB', 'CONSRECIBO32', dados, 'Consultar'); reciboPdf = r3.ok ? pdfB64(r3.dados) : null; } catch { /* segue */ }
+    try {
+      const r3 = await i.consultar(e.documento, 'DCTFWEB', 'CONSRECIBO32', dados, 'Consultar');
+      reciboPdf = r3.ok ? pdfB64(r3.dados) : null;
+      if (soBuscar && !reciboPdf) erroIntegra(r3.ok ? { ...r3, mensagens: [{ codigo: '', texto: 'Não há DCTFWeb transmitida para este período.' }] } : r3, 'DCTFWeb (recibo)');
+    } catch (err) { if (soBuscar) throw err; /* segue */ }
     try {
       const r4 = await i.consultar(e.documento, 'DCTFWEB', 'GERARGUIA31', dados, 'Emitir');
       guia = r4.ok ? pdfB64(r4.dados) : null;
@@ -122,11 +138,13 @@ export async function transmitirDctfweb(escritorioId: number, usuarioId: number,
       situacao: 'TRANSMITIDA', recibo: recibo ? String(recibo) : null, transmitida_em: jaTransmitida ? null : new Date().toISOString(), valor: lida.valor, vencimento: lida.vencimento,
       recibo_pdf: reciboPdf ? Buffer.from(reciboPdf, 'base64') : null, guia_pdf: guia ? Buffer.from(guia, 'base64') : null, erro: avisoGuia,
     });
-    marcarTarefa(empresaId, mes, 'DCTFWEB', usuarioId, recibo ? String(recibo) : null, jaTransmitida ? 'DCTFWeb já estava transmitida (conferida pelo Kontor).' : 'DCTFWeb transmitida pelo Kontor (Integra Contador).');
+    marcarTarefa(empresaId, mes, 'DCTFWEB', usuarioId, recibo ? String(recibo) : null, jaTransmitida ? 'DCTFWeb transmitida por outro sistema; recibo e DARF buscados pelo Kontor.' : 'DCTFWeb transmitida pelo Kontor (Integra Contador).');
     lancarNoControle(empresaId, mes, 'DP', 'darf_prev', lida.valor, usuarioId);
     return { jaTransmitida, recibo, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!guia, aviso: avisoGuia };
   } catch (err: any) {
-    gravar(empresaId, mes, 'DCTFWEB', usuarioId, { situacao: 'ERRO', erro: String(err?.message ?? err) });
+    // uma busca que não achou nada não estraga um fechamento já guardado
+    const atual = db.prepare("SELECT situacao FROM fechamentos WHERE empresa_id = ? AND competencia = ? AND tipo = 'DCTFWEB'").get(empresaId, mes) as any;
+    if (!(soBuscar && atual?.situacao === 'TRANSMITIDA')) gravar(empresaId, mes, 'DCTFWEB', usuarioId, { situacao: 'ERRO', erro: String(err?.message ?? err) });
     throw err;
   }
 }
@@ -196,6 +214,38 @@ export async function calcularPgdas(escritorioId: number, usuarioId: number, emp
   const total = Math.round(valores.reduce((t, v) => t + v.valor, 0) * 100) / 100;
   gravar(empresaId, mes, 'PGDASD', usuarioId, { situacao: 'CALCULADO', entrada_json: JSON.stringify(entrada), valores_json: JSON.stringify(valores), valor: total, erro: null });
   return { valores, total };
+}
+
+/**
+ * PGDAS-D transmitido por outro sistema (SCI, portal do Simples...): busca a última declaração do período com o
+ * recibo (CONSULTIMADECREC14) e gera o DAS (GERARDAS12). Não transmite nada.
+ */
+export async function buscarPgdas(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, transporte?: Transporte) {
+  const mes = MES.parse(mesBr);
+  semDemonstracao(escritorioId, transporte);
+  const e = empresaDoEscritorio(escritorioId, empresaId);
+  const i = Integra.para(escritorioId, transporte);
+  const pa = mes.replace('-', '');
+  const r = await i.consultar(e.documento, 'PGDASD', 'CONSULTIMADECREC14', { periodoApuracao: pa }, 'Consultar');
+  if (!r.ok) erroIntegra(r, 'PGDAS-D (consulta da declaração)');
+  const d = Array.isArray(r.dados) ? r.dados[0] : r.dados;
+  const numero = d?.numeroDeclaracao ? String(d.numeroDeclaracao) : null;
+  if (!numero) throw new ErroNegocio('Não há PGDAS-D transmitido para este período.');
+  const pdfDe = (o: any) => (typeof o?.pdf === 'string' && o.pdf ? Buffer.from(o.pdf, 'base64') : null);
+  let das: string | null = null, aviso: string | null = null;
+  try {
+    const g = await i.consultar(e.documento, 'PGDASD', 'GERARDAS12', { periodoApuracao: pa }, 'Emitir');
+    das = g.ok ? pdfB64(g.dados) : null;
+    if (!das) aviso = textoMsgs(g.mensagens) || 'O DAS não foi gerado (sem valor a pagar ou já pago).';
+  } catch (err: any) { aviso = err?.message ?? String(err); }
+  const lida = das ? await lerGuia(Buffer.from(das, 'base64')) : { valor: null, vencimento: null };
+  gravar(empresaId, mes, 'PGDASD', usuarioId, {
+    situacao: 'TRANSMITIDA', recibo: numero, transmitida_em: null, valor: lida.valor, vencimento: lida.vencimento,
+    declaracao_pdf: pdfDe(d?.declaracao), recibo_pdf: pdfDe(d?.recibo), guia_pdf: das ? Buffer.from(das, 'base64') : null, erro: aviso,
+  });
+  marcarTarefa(empresaId, mes, 'DAS', usuarioId, numero, 'PGDAS-D transmitido por outro sistema; declaração e DAS buscados pelo Kontor.');
+  lancarNoControle(empresaId, mes, 'FISCAL', 'imposto', lida.valor, usuarioId);
+  return { recibo: numero, valor: lida.valor, vencimento: lida.vencimento, temGuia: !!das, aviso, maed: !!d?.maed };
 }
 
 /** Transmite o PGDAS-D (comparando com o cálculo já conferido) e gera o DAS. */

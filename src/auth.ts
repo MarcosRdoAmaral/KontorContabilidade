@@ -57,7 +57,7 @@ const REGRAS: Regra[] = [
   { m: 'POST', r: /^\/api\/escritorio\/(parcelamentos\/\d+\/(consultar|das)|caixa-postal\/\d+\/(consultar|mensagem))$/, mod: ['situacao'] },
   { m: 'GET', r: /^\/api\/escritorio\/resumo-financeiro\/\d+$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/controle(\/linha|\/planilha\/(analisar|importar))?$/, mod: ['controle'] },
-  { r: /^\/api\/escritorio\/fechamento(\/\d+(\/atividades|\/dctfweb|\/pgdas\/(calcular|transmitir)|\/arquivo|\/enviar)?)?$/, mod: ['controle'] },
+  { r: /^\/api\/escritorio\/fechamento(\/\d+(\/atividades|\/dctfweb(\/buscar)?|\/pgdas\/(calcular|transmitir|buscar)|\/arquivo|\/enviar)?)?$/, mod: ['controle'] },
   { r: /^\/api\/escritorio\/acessos(\/\d+(\/revelar)?)?$/, mod: ['senhas'] },
   { m: 'GET', r: /^\/api\/escritorio\/carteira$/, mod: ['carteira', 'visao', 'obrigacoes', 'certificados', 'honorarios', 'captura'] },
   { r: /^\/api\/escritorio\/carteira(\/\d+|\/fora|\/trazer|\/planilha\/(analisar|importar))?$/, mod: ['carteira'] },
