@@ -1042,11 +1042,13 @@ function informarPixDialogo(c, aoSalvar) {
 }
 
 async function telaCobrancas() {
-  const [lista, remessas, conta] = await Promise.all([
+  const [lista, remessas, conta, cora] = await Promise.all([
     api('GET', `/api/empresas/${estado.empresaId}/cobrancas`),
     api('GET', `/api/empresas/${estado.empresaId}/remessas`),
     api('GET', `/api/empresas/${estado.empresaId}/conta-bancaria`),
+    api('GET', `/api/empresas/${estado.empresaId}/cora`).catch(() => null),
   ]);
+  const coraAtiva = !!cora?.ativa;
   const podeEditar = estado.usuario.papel !== 'cliente';
   const st = telaCobrancas.estado ??= { carteira: 'BOLETO' };
   const daCarteira = (k) => lista.filter((c) => (c.forma ?? 'BOLETO') === k);
@@ -1076,7 +1078,7 @@ async function telaCobrancas() {
   };
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Cobranças</h1><p class="sutil">${lista.length} registros · ${brl(abertoDe(lista))} em aberto</p></div>
-      ${podeEditar ? `<div class="acoes">${pix ? '' : `<button id="gerar-remessa" class="primario" ${conta && aRemeter ? '' : 'disabled'}>Gerar remessa${aRemeter ? ` (${aRemeter})` : ''}</button>`}
+      ${podeEditar ? `<div class="acoes">${coraAtiva ? '<button id="cora-atualizar" class="primario" title="Registra boletos pendentes, dá baixa nos pagos e traz o extrato da Cora">Atualizar da Cora</button>' : ''}${pix || (coraAtiva && !aRemeter) ? '' : `<button id="gerar-remessa" class="primario" ${conta && aRemeter ? '' : 'disabled'}>Gerar remessa${aRemeter ? ` (${aRemeter})` : ''}</button>`}
         <button id="novo-boleto" class="primario">Nova cobrança</button>
         <button id="modelo-wa">Mensagem do WhatsApp</button>
         <button id="cfg-demo" title="Texto do rodapé do demonstrativo de cobrança">Demonstrativo</button>
@@ -1087,7 +1089,8 @@ async function telaCobrancas() {
     </nav>
     <p class="sutil">${pix ? `Cobranças dos clientes da carteira Pix: gere a cobrança Pix no aplicativo do banco, clique em <strong>Informar Pix</strong> e cole o código copia e cola. O Kontor confere o código e o valor e monta o demonstrativo com o QR Code. ${brl(aberto)} em aberto.`
       : `Boletos do convênio Ailos, com remessa e retorno. O demonstrativo de cobrança vai junto no e-mail. ${brl(aberto)} em aberto.`} A carteira de cada cliente fica no cadastro dele (Faturamento e cobrança).</p>
-    ${!pix && !conta ? `<div class="banner teste">Os dados bancários (Ailos) desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
+    ${coraAtiva ? `<div class="banner">Cobrança pela <strong>Cora</strong>${cora.ambiente === 'teste' ? ' (ambiente de teste)' : ''}: os boletos são registrados na Cora na hora, com Pix, e a baixa é automática (a cada 10 minutos).${cora.saldo != null ? ` Saldo na Cora: <strong>${brl(cora.saldo)}</strong>.` : ''}</div>` : ''}
+    ${!pix && !conta && !coraAtiva ? `<div class="banner teste">Os dados bancários (Ailos) desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
     ${vis.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Vencimento</th><th>Cliente</th><th>Nota</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
       ${vis.map((c) => `<tr><td>${dataBr(c.vencimento)}${ativo(c) && c.vencimento < hoje ? ' <span class="dica erro">vencido</span>' : ''}</td>
         <td>${esc(c.tomador_nome)}<br><span class="dica">${esc((c.descricao ?? '').slice(0, 60))}</span>${c.desconto > 0 ? `<br><span class="dica">desconto de ${brl(c.desconto)}: ${esc(c.desconto_motivo ?? '')}</span>` : ''}</td>
@@ -1108,6 +1111,15 @@ async function telaCobrancas() {
     try { const r = await api('POST', `/api/cobrancas/${c.id}/email`, {}); aviso(`E-mail enviado para ${r.para}.`); telaCobrancas(); }
     catch (e) { aviso(mensagemErro(e)); b.disabled = false; b.textContent = 'E-mail'; }
   }));
+  const ca = $('#cora-atualizar');
+  if (ca) ca.onclick = async () => {
+    ca.disabled = true; ca.textContent = 'Atualizando…';
+    try {
+      const r = await api('POST', `/api/empresas/${estado.empresaId}/cora/sincronizar`, {});
+      aviso(`Cora atualizada: ${r.emitidas} boleto(s) registrado(s), ${r.baixadas} baixa(s)${r.falhas ? `, ${r.falhas} com pendência (veja a observação na cobrança)` : ''}.`);
+      telaCobrancas();
+    } catch (e) { aviso(mensagemErro(e)); ca.disabled = false; ca.textContent = 'Atualizar da Cora'; }
+  };
   const cd = $('#cfg-demo');
   if (cd) cd.onclick = async () => {
     const r = await api('GET', `/api/empresas/${estado.empresaId}/demonstrativo`);
@@ -1300,8 +1312,25 @@ async function telaCobrancas() {
 // ---------------------------------------------------------------------------
 async function telaBanco() {
   const c = (await api('GET', `/api/empresas/${estado.empresaId}/conta-bancaria`)) ?? { cooperativa_nome: 'Ailos', carteira: '01', multa_pct: 2, juros_pct_mes: 1 };
+  const cora = await api('GET', `/api/empresas/${estado.empresaId}/cora`).catch(() => null);
   conteudo.innerHTML = `
-    <div class="topo"><div><p class="sutil"><a href="#/empresas">← Empresas</a></p><h1>Dados bancários</h1><p class="sutil">${esc(empresa().razao_social)} — cobrança Ailos (banco 085)</p></div></div>
+    <div class="topo"><div><p class="sutil"><a href="#/empresas">← Empresas</a></p><h1>Dados bancários</h1><p class="sutil">${esc(empresa().razao_social)} — cobrança pela Cora (API) ou Ailos (remessa e retorno)</p></div></div>
+    <form id="form-cora" class="cartao" style="margin-bottom:20px">
+      <h2 style="margin-top:0">Banco Cora ${cora ? (cora.ativa ? '<span class="selo-estado" style="--c:var(--verde)">ativa</span>' : '<span class="selo-estado" style="--c:var(--laranja)">desativada</span>') : ''}</h2>
+      <p class="dica">Com a Cora, o boleto (com Pix) é registrado direto pelo sistema, a baixa é automática e o extrato vem da API, sem arquivo de remessa. Para gerar as credenciais: app ou Cora Web › <strong>Integrações via API</strong> › <strong>Integração direta</strong>; baixe o <em>Client ID</em>, o <em>certificado</em> e a <em>chave privada</em> (arquivos .pem). Teste e produção têm credenciais diferentes. Se a empresa tiver Cora ativa, os novos boletos saem pela Cora; os já emitidos pelo Ailos continuam com remessa e retorno.</p>
+      <div class="grade">
+        <label>Ambiente <select name="ambiente"><option value="producao" ${cora?.ambiente !== 'teste' ? 'selected' : ''}>Produção</option><option value="teste" ${cora?.ambiente === 'teste' ? 'selected' : ''}>Teste (stage)</option></select></label>
+        <label>Client ID <input name="client_id" maxlength="120" autocomplete="off" value="${esc(cora?.client_id ?? '')}"></label>
+        <label>Multa após o vencimento (%) <input name="multa_pct" data-num inputmode="decimal" value="${String(cora?.multa_pct ?? 2).replace('.', ',')}"></label>
+        <label>Juros ao mês (%) <input name="juros_pct_mes" data-num inputmode="decimal" value="${String(cora?.juros_pct_mes ?? 1).replace('.', ',')}"></label>
+        <label class="largo">Certificado (.pem) ${cora ? '<span class="dica">— já salvo; só preencha para trocar</span>' : ''} <textarea name="certificado" rows="3" placeholder="-----BEGIN CERTIFICATE-----" spellcheck="false"></textarea><input type="file" data-ler="certificado" accept=".pem,.crt,.cer,.txt"></label>
+        <label class="largo">Chave privada (.pem) ${cora ? '<span class="dica">— já salva; só preencha para trocar</span>' : ''} <textarea name="chave" rows="3" placeholder="-----BEGIN PRIVATE KEY-----" spellcheck="false" autocomplete="off"></textarea><input type="file" data-ler="chave" accept=".pem,.key,.txt"></label>
+        <label class="check"><input type="checkbox" name="ativa" ${cora ? (cora.ativa ? 'checked' : '') : 'checked'}> Usar a Cora nas novas cobranças</label>
+      </div>
+      <p class="erro" id="erro-cora" role="alert"></p>
+      <div class="acoes"><button class="primario" type="submit">Salvar Cora</button>${cora ? '<button type="button" id="cora-testar">Testar conexão</button><button type="button" id="cora-remover">Remover</button>' : ''}</div>
+      ${cora?.saldo != null ? `<p class="dica">Último saldo lido: ${brl(cora.saldo)}.</p>` : ''}
+    </form>
     <form id="form-banco">
       <fieldset><legend>Conta e convênio de cobrança</legend><p class="dica">Peça estes dados à sua cooperativa: o número do convênio de cobrança e a carteira são informados por ela.</p><div class="grade">
         <label>Cooperativa <input name="cooperativa_nome" required maxlength="30" value="${esc(c.cooperativa_nome ?? '')}"></label>
@@ -1341,6 +1370,28 @@ async function telaBanco() {
     ev.preventDefault();
     try { await api('PUT', `/api/empresas/${estado.empresaId}/feriados`, { feriados_extra: ev.target.feriados_extra.value }); aviso('Feriados salvos.'); }
     catch (e) { $('#erro-feriados').textContent = mensagemErro(e); }
+  };
+  const fc = $('#form-cora');
+  fc.querySelectorAll('[data-ler]').forEach((i) => (i.onchange = async () => { const a = i.files[0]; if (a) fc[i.dataset.ler].value = await a.text(); }));
+  fc.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const d = lerForm(fc);
+    try {
+      await api('PUT', `/api/empresas/${estado.empresaId}/cora`, { ativa: !!d.ativa, ambiente: d.ambiente, client_id: d.client_id ?? '', certificado: d.certificado || null, chave: d.chave || null, multa_pct: d.multa_pct ?? 0, juros_pct_mes: d.juros_pct_mes ?? 0 });
+      aviso('Cora salva.'); telaBanco();
+    } catch (e) { $('#erro-cora').textContent = mensagemErro(e); }
+  };
+  const ct = $('#cora-testar');
+  if (ct) ct.onclick = async () => {
+    ct.disabled = true; ct.textContent = 'Testando…';
+    try { const r = await api('POST', `/api/empresas/${estado.empresaId}/cora/testar`, {}); aviso(`Conexão com a Cora funcionando${r.saldo != null ? `. Saldo: ${brl(r.saldo)}` : ''}.`); telaBanco(); }
+    catch (e) { $('#erro-cora').textContent = mensagemErro(e); ct.disabled = false; ct.textContent = 'Testar conexão'; }
+  };
+  const cr = $('#cora-remover');
+  if (cr) cr.onclick = async () => {
+    if (!confirm('Remover a conta Cora desta empresa? Os boletos já registrados continuam existindo na Cora.')) return;
+    try { await api('DELETE', `/api/empresas/${estado.empresaId}/cora`); aviso('Conta Cora removida.'); telaBanco(); }
+    catch (e) { $('#erro-cora').textContent = mensagemErro(e); }
   };
   const f = $('#form-banco');
   f.onsubmit = async (ev) => {
@@ -2079,7 +2130,7 @@ async function telaExtrato() {
   const filtro = telaExtrato.filtro ?? 'todos';
   const semelhantes = telaExtrato.semelhantes ?? true;
   const base = `/api/empresas/${estado.empresaId}/extrato`;
-  const d = await api('GET', `${base}?mes=${mes}`);
+  const [d, coraExt] = await Promise.all([api('GET', `${base}?mes=${mes}`), api('GET', `/api/empresas/${estado.empresaId}/cora`).catch(() => null)]);
   const vis = d.lancamentos.filter((l) => ({ todos: true, sem: !l.categoria, entradas: l.valor > 0, saidas: l.valor < 0 }[filtro]));
   const soma = (l) => l.reduce((t, x) => t + Math.abs(x.valor), 0);
   const agrupar = (l) => Object.entries(l.reduce((a, x) => ({ ...a, [x.categoria ?? 'Sem classificação']: (a[x.categoria ?? 'Sem classificação'] ?? 0) + Math.abs(x.valor) }), {})).sort((a, b) => b[1] - a[1]);
@@ -2089,7 +2140,9 @@ async function telaExtrato() {
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Extrato e conciliação</h1><p class="sutil">Importe o extrato em PDF do Ailos, classifique entradas e saídas e ligue os recebimentos aos boletos. As <strong>saídas classificadas</strong> são lançadas automaticamente em <a href="#/despesas">Despesas e balanço</a> (exceto “Cartão de crédito” e “Transferências”); entradas como “Outras receitas” entram nas receitas.</p></div>
       <div><label>Mês ${d.meses.length ? `<select id="mes-ext">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-ext" value="${mes}">`}</label>
-        <button class="primario" id="imp-ext">Importar extrato (PDF)</button><input type="file" id="arq-ext" accept="application/pdf,.pdf" hidden></div></div>
+        ${coraExt?.ativa ? '<button class="primario" id="cora-ext">Sincronizar com a Cora</button>' : ''}
+        <button ${coraExt?.ativa ? '' : 'class="primario"'} id="imp-ext">Importar extrato (PDF)</button><input type="file" id="arq-ext" accept="application/pdf,.pdf" hidden></div></div>
+    ${coraExt?.ativa && coraExt.saldo != null ? `<p class="sutil">Saldo na Cora: <strong>${brl(coraExt.saldo)}</strong>${coraExt.saldo_em ? ` (atualizado em ${coraExt.saldo_em.slice(8, 10)}/${coraExt.saldo_em.slice(5, 7)} às ${coraExt.saldo_em.slice(11, 16)} UTC)` : ''}.</p>` : ''}
     <div id="res-import"></div>
     ${d.lancamentos.length ? `<div class="resumo">
       <div class="cartao"><div class="sutil">Entradas</div><div class="valor" style="color:${COR.verde}">${compacto(d.entradas)}</div><div class="dica">${ent.length} lançamento(s)</div></div>
@@ -2115,6 +2168,12 @@ async function telaExtrato() {
 
   $('#mes-ext').onchange = (ev) => { telaExtrato.mes = ev.target.value || mesAtual(); telaExtrato(); };
   const arq = $('#arq-ext');
+  const ce = $('#cora-ext');
+  if (ce) ce.onclick = async () => {
+    ce.disabled = true; ce.textContent = 'Sincronizando…';
+    try { const r = await api('POST', `/api/empresas/${estado.empresaId}/cora/sincronizar`, {}); aviso(`Extrato da Cora atualizado: ${r.extrato?.novos ?? 0} lançamento(s) novo(s).`); telaExtrato(); }
+    catch (e) { aviso(mensagemErro(e)); ce.disabled = false; ce.textContent = 'Sincronizar com a Cora'; }
+  };
   $('#imp-ext').onclick = () => arq.click();
   arq.onchange = async () => {
     const f = arq.files[0]; if (!f) return;

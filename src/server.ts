@@ -21,6 +21,7 @@ import { ErroNegocio } from './servicos/emissao.js';
 import { backupAutomatico } from './servicos/backup.js';
 import { buscarAutomaticamente } from './servicos/nfe-recebidas.js';
 import { fechamentoAutomatico } from './servicos/contabilidade.js';
+import { sincronizarAutomatico } from './servicos/cora.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -61,6 +62,11 @@ export async function criarApp() {
     // NFS-e prestadas e tomadas no Ambiente Nacional: mesma cadência (intervalo de 1 h por cliente sem novidade)
     const timerAdn = setInterval(() => { buscarAdnAutomaticamente().catch((e) => app.log.error(e)); }, 10 * 60e3);
     timerAdn.unref();
+  }
+  // Cora: a cada 10 min registra boletos pendentes, dá baixa nos pagos e traz o extrato
+  if (process.env.CORA_AUTOMATICO !== '0') {
+    const timerCora = setInterval(() => { sincronizarAutomatico().catch((e) => app.log.error(e)); }, 10 * 60e3);
+    timerCora.unref();
   }
   // Fechamento mensal para a contabilidade: a cada 30 min vê se alguma empresa chegou ao dia de envio
   if (process.env.FECHAMENTO_AUTOMATICO !== '0') {

@@ -54,7 +54,7 @@ export function salvarConta(empresaId: number, d: ContaBancaria) {
     const n = (db.prepare("SELECT COUNT(*) AS n FROM cobrancas WHERE empresa_id = ? AND nosso_numero IS NOT NULL AND status NOT IN ('PAGO','CANCELADO','REJEITADO')").get(empresaId) as { n: number }).n;
     if (n) throw new ErroNegocio(`Existem ${n} boleto(s) em aberto emitidos com a conta/convênio anteriores. Quite ou cancele esses boletos antes de trocar a conta.`);
   }
-  for (const c of db.prepare("SELECT id FROM cobrancas WHERE empresa_id = ? AND status = 'AGUARDANDO_BANCO' AND vencimento >= ?").all(empresaId, hojeBr()) as { id: number }[]) {
+  if (!usaCora(empresaId)) for (const c of db.prepare("SELECT id FROM cobrancas WHERE empresa_id = ? AND status = 'AGUARDANDO_BANCO' AND vencimento >= ? AND cora_id IS NULL").all(empresaId, hojeBr()) as { id: number }[]) {
     try { gerarTitulo(c.id); } catch { /* cadastro do cliente incompleto: segue pendente */ }
   }
   return obterConta(empresaId);
@@ -93,14 +93,18 @@ export function criarCobranca(d: { empresaId: number; tomadorId: number; notaId:
     .run(d.empresaId, d.tomadorId, d.notaId, d.descricao, valor, d.vencimento, hojeBr(), d.usuarioId, desconto, desconto ? t!.desconto_motivo : null, t?.multa_pct ?? null, t?.juros_pct_mes ?? null, t?.desc_pontual_pct ?? null, t?.desc_pontual_dias ?? null,
       forma, pix, pix ? 'REGISTRADO' : 'AGUARDANDO_BANCO');
   const id = Number(r.lastInsertRowid);
-  if (forma === 'BOLETO' && obterConta(d.empresaId)) { try { gerarTitulo(id); } catch { /* fica pendente, com o motivo na tela */ } }
+  if (!pix && usaCora(d.empresaId)) { import('./cora.js').then((m) => m.emitirEmSegundoPlano(id)); }
+  else if (forma === 'BOLETO' && obterConta(d.empresaId)) { try { gerarTitulo(id); } catch { /* fica pendente, com o motivo na tela */ } }
   return obterCobranca(id)!;
 }
+
+/** A empresa tem conta Cora ativa: as novas cobranças são registradas na Cora, não em remessa. */
+export const usaCora = (empresaId: number) => !!db.prepare('SELECT 1 FROM contas_cora WHERE empresa_id = ? AND ativa = 1').get(empresaId);
 
 /** Reserva o número do boleto e calcula nosso número, código de barras e linha digitável. */
 export function gerarTitulo(cobrancaId: number) {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(cobrancaId) as any;
-  if (!c || c.status !== 'AGUARDANDO_BANCO' || c.forma === 'PIX') return;
+  if (!c || c.status !== 'AGUARDANDO_BANCO' || c.forma === 'PIX' || c.cora_id) return;
   const conta = obterConta(c.empresa_id);
   if (!conta) return;
   const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
@@ -162,6 +166,7 @@ function mensagens(conta: any, c?: any): string[] {
 export async function boletoPdf(cobrancaId: number): Promise<{ pdf: Buffer; nome: string }> {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(cobrancaId) as any;
   if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
+  if (c.cora_id) return (await import('./cora.js')).pdfDaCora(cobrancaId);
   const pdf = await gerarBoletoPdf(dadosDoBoleto(c));
   return { pdf, nome: `Boleto_${c.nosso_numero}.pdf` };
 }
@@ -237,8 +242,8 @@ export async function demonstrativoPdf(cobrancaId: number): Promise<{ pdf: Buffe
     itens: [{ descricao: c.descricao, qtd: 1, valor: bruto }],
     desconto: c.desconto > 0 ? { valor: c.desconto, motivo: c.desconto_motivo } : null,
     total: c.valor,
-    pix: c.forma === 'PIX' ? c.pix_copia_cola : null,
-    boleto: c.forma === 'BOLETO' && c.nosso_numero ? dadosDoBoleto(c) : null,
+    pix: c.forma === 'PIX' || c.cora_id ? c.pix_copia_cola : null, // boleto da Cora já traz o Pix
+    boleto: c.forma === 'BOLETO' && c.nosso_numero && !c.cora_id ? dadosDoBoleto(c) : null, // o PDF do boleto da Cora vai à parte
     rodape: e.demonstrativo_rodape,
   });
   return { pdf, nome: `Demonstrativo_Cobranca_${nome(t.nome)}_${referencia.replace('/', '-')}.pdf` };

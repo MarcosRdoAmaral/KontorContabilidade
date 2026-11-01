@@ -1101,6 +1101,27 @@ const migracoes: string[] = [
   ALTER TABLE empresas ADD COLUMN demonstrativo_rodape TEXT;`,
   // avatar escolhido pelo usuário (Configurações > Minha conta)
   `ALTER TABLE usuarios ADD COLUMN avatar TEXT;`,
+  // banco Cora: banco Cora (API): credenciais por empresa e vínculo das cobranças com o boleto da Cora
+  `CREATE TABLE contas_cora (
+    empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id),
+    ativa INTEGER NOT NULL DEFAULT 1,
+    ambiente TEXT NOT NULL DEFAULT 'producao' CHECK (ambiente IN ('teste','producao')),
+    client_id TEXT NOT NULL,
+    cert_enc TEXT NOT NULL,
+    chave_enc TEXT NOT NULL,
+    multa_pct REAL NOT NULL DEFAULT 2,
+    juros_pct_mes REAL NOT NULL DEFAULT 1,
+    ultima_sync_pagos TEXT,
+    ultima_sync_extrato TEXT,
+    saldo REAL,
+    saldo_em TEXT,
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  ALTER TABLE cobrancas ADD COLUMN cora_id TEXT;
+  ALTER TABLE cobrancas ADD COLUMN cora_idem TEXT;
+  ALTER TABLE cobrancas ADD COLUMN cora_pdf_url TEXT;
+  ALTER TABLE cobrancas ADD COLUMN cora_pdf BLOB;
+  CREATE UNIQUE INDEX idx_cobrancas_cora ON cobrancas(cora_id) WHERE cora_id IS NOT NULL;`,
 ];
 
 export function migrar(): void {

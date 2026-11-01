@@ -187,6 +187,30 @@ export async function importarExtrato(empresaId: number, nomeArquivo: string, pd
   })();
 }
 
+/** Grava lançamentos que não vêm de PDF (ex.: API do banco), com a mesma categorização e conciliação da importação. */
+export function importarLancamentosExternos(empresaId: number, d: {
+  arquivo: string; hash: string; periodoIni?: string; periodoFim?: string; saldoAnterior?: number | null; saldoFinal?: number | null; conta?: string;
+  lancamentos: { data: string; descricao: string; documento: string; valor: number; saldo: number | null; chave: string }[];
+}) {
+  return db.transaction(() => {
+    let imp = (db.prepare('SELECT id FROM extrato_importacoes WHERE empresa_id = ? AND hash = ?').get(empresaId, d.hash) as any)?.id as number | undefined;
+    if (!imp) {
+      imp = Number(db.prepare(`INSERT INTO extrato_importacoes (empresa_id, arquivo, hash, periodo_ini, periodo_fim, saldo_anterior, saldo_final, qtd, conta)
+        VALUES (?,?,?,?,?,?,?,?,?)`).run(empresaId, d.arquivo.slice(0, 120), d.hash, d.periodoIni ?? null, d.periodoFim ?? null, d.saldoAnterior ?? null, d.saldoFinal ?? null, d.lancamentos.length, d.conta ?? null).lastInsertRowid);
+    }
+    const ins = db.prepare(`INSERT OR IGNORE INTO extrato_lancamentos (empresa_id, importacao_id, data, descricao, documento, valor, saldo, categoria, categoria_origem, chave)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    let novos = 0;
+    for (const l of d.lancamentos) {
+      const c = categoriaAutomatica(empresaId, l.descricao, l.valor);
+      novos += Number(ins.run(empresaId, imp, l.data, l.descricao, l.documento, l.valor, l.saldo, c?.categoria ?? null, c?.origem ?? null, l.chave).changes);
+    }
+    const conciliados = conciliarAutomatico(empresaId);
+    sincronizarDespesasDoExtrato(empresaId);
+    return { importacaoId: imp, novos, conciliados };
+  })();
+}
+
 /** Boletos que podem corresponder a um crédito: mesmo valor e data de pagamento/vencimento próxima. */
 export function candidatosBoleto(empresaId: number, lancId: number) {
   const l = db.prepare('SELECT * FROM extrato_lancamentos WHERE id = ? AND empresa_id = ?').get(lancId, empresaId) as any;

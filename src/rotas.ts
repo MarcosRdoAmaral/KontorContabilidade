@@ -12,6 +12,7 @@ import { camposDesconhecidos, exemplo, listarModelos, ModeloEditado, renderizar,
 import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
 import { ativarLicenca, exigirLicenca, statusLicenca } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
+import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
 import { Despesa, criarDespesa, editarDespesa, excluirDespesa, listarCategorias, listarDespesas, painelFinanceiro, salvarCategorias } from './servicos/financeiro.js';
 import { ClassificacaoCartao, classificarCartao, excluirFatura, faturasDoMes, importarFatura } from './servicos/cartao.js';
@@ -686,6 +687,26 @@ export async function rotas(app: FastifyInstance) {
       checarEmpresa(req, id);
       return salvarConta(id, ContaBancaria.parse(req.body));
     });
+    api.get('/api/empresas/:id/cora', async (req) => {
+      const id = Number((req.params as any).id); checarEmpresa(req, id);
+      return obterContaCora(id);
+    });
+    api.put('/api/empresas/:id/cora', { preHandler: exigirPapel('admin', 'operador'), bodyLimit: 1024 * 1024 }, async (req) => {
+      const id = Number((req.params as any).id); checarEmpresa(req, id);
+      return salvarContaCora(id, ContaCoraEntrada.parse(req.body));
+    });
+    api.delete('/api/empresas/:id/cora', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const id = Number((req.params as any).id); checarEmpresa(req, id);
+      removerContaCora(id); return { ok: true };
+    });
+    api.post('/api/empresas/:id/cora/testar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const id = Number((req.params as any).id); checarEmpresa(req, id);
+      return testarCora(id);
+    });
+    api.post('/api/empresas/:id/cora/sincronizar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const id = Number((req.params as any).id); checarEmpresa(req, id);
+      return sincronizarTudo(id, true);
+    });
     api.get('/api/cobrancas/:id/boleto', async (req, reply) => {
       const id = Number((req.params as any).id);
       cobrancaDoUsuario(req, id);
@@ -720,13 +741,15 @@ export async function rotas(app: FastifyInstance) {
     api.post('/api/cobrancas/:id/cancelar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id);
       cobrancaDoUsuario(req, id);
-      return cancelarCobranca(id);
+      return (cobrancaDoUsuario(req, id) as any).cora_id ? cancelarNaCora(id) : cancelarCobranca(id);
     });
     api.post('/api/cobrancas/:id/reemitir', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id);
       cobrancaDoUsuario(req, id);
       const d = z.object({ vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe o vencimento'), valor: z.number().positive().nullish() }).parse(req.body);
       exigirLicenca();
+      const antiga = obterCobranca(id);
+      if (antiga?.cora_id && antiga.status !== 'PAGO' && antiga.status !== 'CANCELADO') await cancelarNaCora(id); // a Cora não altera boleto: cancela e emite outro
       return reemitirCobranca(u(req).id, id, d.vencimento, d.valor);
     });
     api.get('/api/empresas/:id/modelos-whatsapp', async (req) => {

@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.34.0';
+export const MANUAL_VERSAO = '1.35.0';
 
 export const MANUAL = [
   {
@@ -336,6 +336,14 @@ export const MANUAL = [
       </ul>
       <h3>Demonstrativo de cobrança</h3>
       <p>O botão <em>Demonstrativo</em> gera o PDF (na carteira boleto, com o boleto completo na página 2) com o cabeçalho do escritório (logo, CNPJ, endereço, e-mail e WhatsApp do cadastro da empresa), o cliente, o vencimento, a discriminação dos serviços (com o desconto, se houver), o total e a forma de pagamento: QR Code e copia e cola na carteira Pix, ou a linha digitável na carteira boleto, com o boleto inteiro (recibo do pagador e ficha de compensação) na página seguinte. A frase do rodapé é definida no botão <em>Demonstrativo</em> do topo da tela. O demonstrativo vai anexo nos e-mails de cobrança; no Pix, o código copia e cola vai também no texto do e-mail (modelo <em>Cobrança por Pix</em>, em Configurações &gt; Modelos de e-mail). O botão <em>E-mail</em> envia ou reenvia a cobrança, e no WhatsApp o campo <code>{linha}</code> traz o Pix copia e cola nas cobranças Pix.</p>
+      <h3>Cobrança pela Cora (sem remessa)</h3>
+      <p>Em <strong>Empresas › Dados bancários</strong>, o bloco <em>Banco Cora</em> liga a API da Cora. Com ela, cada boleto (com Pix) é registrado na Cora assim que é criado, o PDF e a linha digitável vêm da Cora e o pagamento é baixado sozinho, a cada 10 minutos ou ao clicar em <em>Atualizar da Cora</em>. Não há arquivo de remessa nem de retorno.</p>
+      <ol>
+        <li>No app da Cora ou no Cora Web, abra <strong>Integrações via API</strong> e escolha <strong>Integração direta</strong>. Baixe o <em>Client ID</em>, o <em>certificado</em> e a <em>chave privada</em> (arquivos .pem). Teste e produção têm credenciais diferentes.</li>
+        <li>No Kontor, escolha o ambiente, informe o Client ID, cole (ou escolha o arquivo do certificado e da chave e clique em <em>Salvar Cora</em>. O sistema confere se a chave pertence ao certificado. A chave fica criptografada neste computador e nunca é mostrada de novo.</li>
+        <li>Clique em <em>Testar conexão</em>: se estiver tudo certo, aparece o saldo da conta.</li>
+      </ol>
+      <p>Regras da Cora: o boleto mínimo é de R$ 5,00; o cliente precisa ter CPF/CNPJ, endereço e CEP completos (se faltar, o motivo aparece na cobrança e, depois de corrigir o cadastro, <em>Atualizar da Cora</em> registra de novo). A Cora não altera um boleto: <em>Reemitir</em> cancela o antigo na Cora e cria outro. Boleto já pago na Cora não pode ser cancelado. O desconto por pagamento antecipado (antes do vencimento) não é enviado à Cora, que só aceita desconto até o vencimento. Os boletos antigos do Ailos continuam com remessa e retorno.</p>
       <h3>Multa, juros e desconto por cliente</h3>
       <p>No cadastro do cliente, aba <strong>Descontos</strong>, você pode definir <em>multa</em> e <em>juros ao mês</em> próprios (em branco vale o padrão dos dados bancários da empresa; 0 isenta o cliente) e um <em>desconto por pagamento antecipado</em>: um percentual do boleto, válido até certo número de dias antes do vencimento (0 = até o vencimento). O desconto vai na remessa ao banco como desconto até a data e sai nas instruções impressas; depois do prazo vale o valor cheio. O boleto guarda as condições vigentes na data em que foi criado, então mudar o cadastro depois não altera boletos já emitidos.</p>
       <h3>Fluxo com o banco (Ailos)</h3>
@@ -405,6 +413,7 @@ export const MANUAL = [
     id: 'extrato', titulo: 'Extrato e conciliação', resumo: 'Importar o extrato em PDF, classificar e ligar aos boletos.',
     corpo: `
       <p>Hoje o sistema lê o extrato em PDF do <strong>Ailos</strong> (outros bancos entram depois).</p>
+      <p>Se a empresa usa a <strong>Cora</strong>, o botão <em>Sincronizar com a Cora</em> traz os lançamentos e o saldo direto da conta, sem PDF, com a mesma classificação e conciliação.</p>
       <ol>
         <li>Em <strong>Extrato e conciliação</strong>, clique em <em>Importar extrato (PDF)</em>. O sistema confere o total lido com o saldo do próprio extrato.</li>
         <li><strong>Classifique</strong> entradas e saídas por categoria. Regras aprendem com o que você classifica e valem para lançamentos parecidos.</li>
