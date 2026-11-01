@@ -718,3 +718,7 @@ main:focus, main:focus-visible { outline: none; }
 .plano h3 { margin: 0 0 4px; }
 .plano .preco { font-size: 22px; font-weight: 700; margin: 4px 0; }
 .plano .preco small { font-size: 13px; font-weight: 400; opacity: .7; }
+
+.ign-x { background: none; border: 0; color: var(--sutil, #8a93a6); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; opacity: .45; vertical-align: middle; }
+.ign-x:hover, .ign-x:focus-visible { opacity: 1; color: var(--laranja, #e0a83c); }
+.mon-ign { opacity: .75; }

@@ -15,6 +15,23 @@ export type Estado = 'EM_DIA' | 'PENDENTE' | 'ATENCAO' | 'PROCESSANDO';
 const PESO: Record<Estado, number> = { EM_DIA: 0, PROCESSANDO: 1, PENDENTE: 2, ATENCAO: 3 };
 const pior = (l: (Estado | null)[]): Estado | null => l.filter(Boolean).reduce<Estado | null>((a, b) => (!a || PESO[b!] > PESO[a] ? b : a), null);
 
+/** Processos que o escritório ignora em cada cliente (somem da tela, do status geral e dos avisos). */
+export function ignoradosDoMonitor(ids: number[]): Map<number, Set<string>> {
+  const m = new Map<number, Set<string>>();
+  if (!ids.length) return m;
+  for (const r of db.prepare(`SELECT empresa_id, processo FROM monitor_ignorados WHERE empresa_id IN (${ids.join(',')})`).all() as any[]) {
+    const l = m.get(r.empresa_id) ?? new Set<string>(); l.add(r.processo); m.set(r.empresa_id, l);
+  }
+  return m;
+}
+export function ignorarNoMonitor(escritorioId: number, empresaId: number, processo: string, ignorar: boolean) {
+  if (!PROCESSOS.some((p) => p.id === processo)) throw new ErroNegocio('Coluna do Monitor desconhecida.');
+  if (!db.prepare('SELECT 1 FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId)) throw new ErroNegocio('Cliente não encontrado.', 404);
+  if (ignorar) db.prepare('INSERT OR IGNORE INTO monitor_ignorados (empresa_id, processo) VALUES (?, ?)').run(empresaId, processo);
+  else db.prepare('DELETE FROM monitor_ignorados WHERE empresa_id = ? AND processo = ?').run(empresaId, processo);
+  return { ok: true };
+}
+
 export const PROCESSOS = [
   { id: 'PGDAS', nome: 'PGDAS-D' },
   { id: 'PGMEI', nome: 'PGMEI' },
@@ -103,6 +120,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
   const parcs = ultimosParcelamentos(ids), caixas = ultimasCaixas(ids);
   const certs = db.prepare(`SELECT empresa_id, tipo, titular, validade FROM certificados WHERE escritorio_id = ? AND renovado = 0 AND empresa_id IN (${em})`).all(escritorioId) as any[];
 
+  const ignorados = ignoradosDoMonitor(ids);
   const notificacoes: Notif[] = [];
   const linhas = clientes.map((c) => {
     const n = (nivel: Estado, processo: Proc, titulo: string, texto: string, data: string) => notificacoes.push({ nivel, processo, empresa_id: c.id, cliente: c.cliente, titulo, texto, data });
@@ -141,7 +159,10 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
       ...(c.tem_a1 && c.cert_validade ? [{ nome: 'Certificado A1', validade: String(c.cert_validade).slice(0, 10) }] : [])];
     proc.CERT = pior(validades.map((v) => (v.validade < hoje ? 'ATENCAO' : v.validade <= somaDias(hoje, 30) ? 'PENDENTE' : 'EM_DIA')));
     for (const v of validades) if (v.validade <= somaDias(hoje, 30)) n(v.validade < hoje ? 'ATENCAO' : 'PENDENTE', 'CERT', `${v.nome}: ${v.validade < hoje ? 'validade vencida' : 'vence em breve'}`, `Validade ${v.validade.split('-').reverse().join('/')}.`, v.validade < hoje ? v.validade : hoje);
-    return { empresa_id: c.id, cliente: c.cliente, documento: c.documento, regime: c.regime, processos: proc,
+    const ign = ignorados.get(c.id) ?? new Set<string>();
+    for (const p of ign) proc[p as Proc] = null;
+    for (let i = notificacoes.length - 1; i >= 0 && notificacoes[i].empresa_id === c.id; i--) if (ign.has(notificacoes[i].processo)) notificacoes.splice(i, 1);
+    return { empresa_id: c.id, cliente: c.cliente, documento: c.documento, regime: c.regime, processos: proc, ignorados: [...ign],
       parc_consultado: pc?.consultado_em ?? null, caixa_consultada: cx?.consultado_em ?? null, nao_lidas: cx?.nao_lidas ?? null, geral: pior(Object.values(proc)) };
   });
 
@@ -149,7 +170,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
   const contar = (l: (Estado | null)[]) => ({
     ...Object.fromEntries((['EM_DIA', 'PENDENTE', 'ATENCAO', 'PROCESSANDO'] as Estado[]).map((e) => [e, l.filter((x) => x === e).length])), SEM_DADOS: l.filter((x) => !x).length });
   const subl = sublimites(ids);
-  for (const x of subl.clientes) if (x.situacao !== 'EM_DIA')
+  for (const x of subl.clientes) if (x.situacao !== 'EM_DIA' && !ignorados.get(x.empresa_id)?.has('PGDAS'))
     notificacoes.push({ nivel: x.situacao, processo: 'PGDAS', empresa_id: x.empresa_id, cliente: x.cliente, titulo: x.situacao === 'ATENCAO' ? 'Sublimite do Simples ultrapassado' : 'Perto do sublimite do Simples',
       texto: `Faturamento acumulado em ${x.competencia.slice(0, 4)}: ${x.acumulado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (até ${x.competencia.slice(5)}/${x.competencia.slice(0, 4)}). ${x.motivo}`, data: hoje });
   notificacoes.sort((a, b) => PESO[b.nivel] - PESO[a.nivel] || b.data.localeCompare(a.data));

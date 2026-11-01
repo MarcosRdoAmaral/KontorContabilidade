@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import { db } from '../db.js';
 import { feitasNoControle, fimDaCompetencia, monitorFiscal, prazoComControle, PROCESSOS } from './monitor.js';
 import { fgtsNaData } from './fgts.js';
+import { ignoradosDoMonitor } from './monitor.js';
 import { COR, MM, brl, cabecalho, dataBr, docFmt, emitenteDoEscritorio, rodapes, secao } from '../pdf/timbrado.js';
 
 /**
@@ -23,6 +24,7 @@ export function dadosPendencias(escritorioId: number, empresas: number[] | null,
   const mon = monitorFiscal(escritorioId, empresas, Infinity, competencia);
   const ids = mon.clientes.map((c) => c.empresa_id);
   const em = ids.length ? ids.join(',') : 'NULL';
+  const ign = ignoradosDoMonitor(ids);
   const mapa = (sql: string, ...p: any[]) => new Map((db.prepare(sql).all(...p) as any[]).map((r) => [r.empresa_id, r]));
   const sf = mapa(`SELECT empresa_id, situacao, total_aberto FROM situacao_fiscal WHERE id IN (SELECT MAX(id) FROM situacao_fiscal WHERE empresa_id IN (${em}) AND status = 'PRONTA' GROUP BY empresa_id)`);
   const fg = mapa(`SELECT empresa_id, situacao, total, competencias_json FROM fgts_consultas WHERE id IN (SELECT MAX(id) FROM fgts_consultas WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
@@ -45,9 +47,9 @@ export function dadosPendencias(escritorioId: number, empresas: number[] | null,
   const limite = somaDias(hoje, 30);
   const linhas = mon.clientes.map((c) => {
     const s = sf.get(c.empresa_id), f = fgtsNaData(fg.get(c.empresa_id), hoje), p = pc.get(c.empresa_id), x = cx.get(c.empresa_id);
-    const receita = s?.situacao === 'PENDENCIAS' ? Number(s.total_aberto ?? 0) : 0;
-    const fgts = f?.situacao === 'EM_ABERTO' ? Number(f.total ?? 0) : 0;
-    const parcelas = p?.situacao === 'EM_ATRASO' ? Number(p.valor_atrasado ?? 0) : 0;
+    const receita = s?.situacao === 'PENDENCIAS' && !ign.get(c.empresa_id)?.has('SITFIS') ? Number(s.total_aberto ?? 0) : 0;
+    const fgts = f?.situacao === 'EM_ABERTO' && !ign.get(c.empresa_id)?.has('FGTS') ? Number(f.total ?? 0) : 0;
+    const parcelas = p?.situacao === 'EM_ATRASO' && !ign.get(c.empresa_id)?.has('PARC') ? Number(p.valor_atrasado ?? 0) : 0;
     const certs = (notifs.get(c.empresa_id) ?? []).filter((n) => n.processo === 'CERT').length;
     const aEntregar = noMes.get(c.empresa_id) ?? [];
     const itens = [...(notifs.get(c.empresa_id) ?? [])];

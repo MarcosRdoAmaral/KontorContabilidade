@@ -1138,6 +1138,13 @@ const migracoes: string[] = [
   CREATE INDEX idx_fgts_documentos ON fgts_documentos(empresa_id, criado_em);`,
   // 47: guia do FGTS recalculada (atraso, pela Guia Parametrizada) não substitui o valor do mês no Controle mensal
   `ALTER TABLE fgts_documentos ADD COLUMN recalculo INTEGER NOT NULL DEFAULT 0;`,
+  // 48: Monitor fiscal: colunas (processos) que o escritório ignora em cada cliente
+  `CREATE TABLE monitor_ignorados (
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    processo TEXT NOT NULL,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (empresa_id, processo)
+  );`,
 ];
 
 export function migrar(): void {

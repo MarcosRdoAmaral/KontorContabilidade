@@ -5655,7 +5655,8 @@ async function telaMonitor() {
     podeSf ? api('GET', '/api/escritorio/situacao-fiscal') : null, podeSf ? api('GET', '/api/escritorio/situacao-fiscal/agenda') : null]);
   const f = telaMonitor.filtro ??= { estado: null, processo: null, q: '', qc: '', sit: '' };
   const sfDe = telaMonitor.sf = new Map((sf?.clientes ?? []).map((c) => [c.empresa_id, c]));
-  const fgtsAberto = (sf?.clientes ?? []).filter((c) => c.fgts?.situacao === 'EM_ABERTO');
+  const ignoraProc = (id, proc) => d.clientes.find((c) => c.empresa_id === id)?.ignorados?.includes(proc);
+  const fgtsAberto = (sf?.clientes ?? []).filter((c) => c.fgts?.situacao === 'EM_ABERTO' && !ignoraProc(c.empresa_id, 'FGTS'));
   const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
@@ -5728,7 +5729,7 @@ async function telaMonitor() {
     let l = d.clientes;
     const q = norm(f.qc), qd = f.qc.replace(/\D/g, '');
     if (q) l = l.filter((c) => norm(c.cliente).includes(q) || (qd && c.documento.includes(qd)));
-    if (f.sit) l = l.filter((c) => (f.sit === 'FGTS' ? sfDe.get(c.empresa_id)?.fgts?.situacao === 'EM_ABERTO' : sfSit(c) === f.sit));
+    if (f.sit) l = l.filter((c) => (f.sit === 'FGTS' ? sfDe.get(c.empresa_id)?.fgts?.situacao === 'EM_ABERTO' && !ignoraProc(c.empresa_id, 'FGTS') : sfSit(c) === f.sit));
     telaMonitor.visiveis = l;
     if (f.processo) l = l.filter((c) => (f.estado ? (c.processos[f.processo] ?? 'SEM_DADOS') === f.estado : c.processos[f.processo] && c.processos[f.processo] !== 'EM_DIA'));
     else if (f.estado) l = l.filter((c) => (c.geral ?? 'SEM_DADOS') === f.estado);
@@ -5736,9 +5737,19 @@ async function telaMonitor() {
     $('#mon-tit-clientes').textContent = `Clientes${nomeP ? ` — ${nomeP}` : ''}${f.estado ? ` — ${ROTULO_ESTADO[f.estado]}` : f.processo ? ' — com pendência' : ''} (${l.length})`;
     const chip = (e) => `<span class="selo-estado" style="--c:${COR_ESTADO[e ?? 'SEM_DADOS']}">${e ? ROTULO_ESTADO[e] : '—'}</span>`;
     $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela mon-tab"><thead><tr>${sf ? '<th><input type="checkbox" id="mon-todos" aria-label="Selecionar todos"></th>' : ''}<th>Cliente</th><th>Geral</th>${d.processos.map((p) => `<th>${esc(p.nome)}</th>`).join('')}${sf ? '<th title="Avisar o cliente por e-mail dos débitos em aberto">Avisar</th>' : ''}</tr></thead><tbody>
-      ${l.map((c) => { const x = sfDe.get(c.empresa_id); return `<tr>${sf ? `<td><input type="checkbox" data-sel="${c.empresa_id}" aria-label="Selecionar ${esc(c.cliente)}"></td>` : ''}<td class="mon-cli-nome"><button type="button" class="link-fech" data-det="${c.empresa_id}" title="Situação fiscal, parcelamentos e caixa postal"><strong>${esc(c.cliente)}</strong></button><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => `<td>${chip(c.processos[p.id])}${sf && p.id === 'SITFIS' ? `<div class="mon-extra">${celulaSf(x)}</div>` : sf && p.id === 'FGTS' && x?.fgts ? `<div class="mon-extra">${celulaFgts(x)}</div>` : ''}</td>`).join('')}
+      ${l.map((c) => { const x = sfDe.get(c.empresa_id); return `<tr>${sf ? `<td><input type="checkbox" data-sel="${c.empresa_id}" aria-label="Selecionar ${esc(c.cliente)}"></td>` : ''}<td class="mon-cli-nome"><button type="button" class="link-fech" data-det="${c.empresa_id}" title="Situação fiscal, parcelamentos e caixa postal"><strong>${esc(c.cliente)}</strong></button><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => {
+        const ign = (c.ignorados ?? []).includes(p.id);
+        if (ign) return `<td class="mon-ign"><span class="dica">ignorado</span> <button type="button" class="ign-x" data-ign="${c.empresa_id}:${p.id}" data-v="0" title="Voltar a acompanhar ${esc(p.nome)} neste cliente" aria-label="Voltar a acompanhar ${esc(p.nome)}">↺</button></td>`;
+        return `<td>${chip(c.processos[p.id])}<button type="button" class="ign-x" data-ign="${c.empresa_id}:${p.id}" data-v="1" title="Ignorar ${esc(p.nome)} neste cliente (some da tela, do status geral e dos avisos)" aria-label="Ignorar ${esc(p.nome)} neste cliente">×</button>${sf && p.id === 'SITFIS' ? `<div class="mon-extra">${celulaSf(x)}</div>` : sf && p.id === 'FGTS' && x?.fgts ? `<div class="mon-extra">${celulaFgts(x)}</div>` : ''}</td>`;
+      }).join('')}
         ${sf ? `<td>${x ? `<input type="checkbox" data-avisar="${c.empresa_id}" ${x.avisar_debitos ? 'checked' : ''} aria-label="Avisar este cliente" title="${x.email ? `Avisar ${esc(x.email)}` : 'Sem e-mail no cadastro'}">${x.ultimo_aviso ? `<br><span class="dica">avisado ${dataBr(x.ultimo_aviso)}</span>` : ''}` : ''}</td>` : ''}</tr>`; }).join('')}
       </tbody></table></div>` : '<div class="vazio">Nenhum cliente nesta situação.</div>');
+    $('#mon-clientes').querySelectorAll('[data-ign]').forEach((b) => (b.onclick = async () => {
+      const [id, proc] = b.dataset.ign.split(':');
+      const ignorar = b.dataset.v === '1';
+      if (ignorar && !confirm('Ignorar esta coluna para este cliente? A informação some da tela, do status geral e dos avisos. Você pode voltar a acompanhar depois, pelo ↺.')) return;
+      try { await api('PUT', `/api/escritorio/monitor/${id}/ignorar`, { processo: proc, ignorar }); telaMonitor(); } catch (e) { aviso(mensagemErro(e)); }
+    }));
     $('#mon-limpar') && ($('#mon-limpar').onclick = () => { f.estado = null; f.processo = null; telaMonitor(); });
     $('#mon-clientes').querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheMonitor(Number(b.dataset.det))));
     if (!sf) return;

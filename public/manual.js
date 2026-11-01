@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.41.1';
+export const MANUAL_VERSAO = '1.42.0';
 
 export const MANUAL = [
   {
@@ -170,6 +170,7 @@ export const MANUAL = [
       <h3>Parcelamentos e caixa postal</h3>
       <p>A situação fiscal, os parcelamentos, a caixa postal e o FGTS Digital ficam todos no Monitor fiscal. No alto, os cartões mostram os clientes com débitos na Receita e PGFN (com o total em aberto), os regulares, os ainda não consultados e quem tem FGTS em aberto; clique num cartão para filtrar a lista. Na lista de clientes, a coluna Situação fiscal traz o valor em aberto (clique para ver os débitos, recalcular guias e avisar o cliente), a coluna FGTS Digital traz o valor da última consulta e a coluna <em>Avisar</em> marca quem recebe o aviso de débitos. Clicando no nome do cliente, abre tudo dele num lugar só.</p>
       <h3>Pendências por cliente (PDF)</h3>
+      <p><strong>Ignorar uma coluna em um cliente:</strong> em cada célula da lista de clientes há um pequeno <strong>×</strong>. Clique nele quando aquele processo não se aplica ao cliente (por exemplo, o FGTS Digital de quem não tem empregados ou não deu procuração). A informação some da tela, do status geral do cliente, dos avisos e dos totais do PDF de pendências, e a célula passa a mostrar <em>ignorado</em>. Para voltar a acompanhar, clique no <strong>↺</strong> da mesma célula. Só aquele cliente é afetado.</p>
       <p>No alto do Monitor fiscal, o botão <em>Pendências por cliente (PDF)</em> gera um relatório consolidado da carteira no papel timbrado do escritório: os totais em aberto (Receita/PGFN, FGTS e parcelas em atraso), uma linha por cliente com pendência (situação, valores, obrigações atrasadas e a entregar no mês, mensagens não lidas da caixa postal e certificados vencendo) e, depois, o detalhe de cada cliente. Vale para os clientes marcados na lista ou, sem marcação, para todos os da lista (com o filtro aplicado). Bom para reunião de equipe ou para o responsável de cada carteira. Os dois relatórios (Pendências por cliente e Situação fiscal do cliente) também ficam no menu <strong>Relatórios</strong>, no grupo <em>Fiscal dos clientes</em>, onde dá para filtrar as pendências por responsável.</p>
       <h3>Relatório consolidado do cliente</h3>
       <p>No detalhe do cliente (clique no nome dele no Monitor fiscal), o botão <em>Relatório consolidado (PDF)</em> gera a <strong>Situação fiscal do cliente</strong> no papel timbrado do escritório, pronto para enviar: a situação geral, o total em aberto (Receita/PGFN, FGTS e parcelas em atraso), o resumo de cada processo, os débitos por tributo e período, as inscrições em dívida ativa, os parcelamentos, as competências do FGTS, as mensagens não lidas da caixa postal, as obrigações atrasadas e dos próximos 30 dias, os certificados e procurações e, no Simples, o faturamento acumulado frente ao sublimite. Nada é consultado na hora: o relatório usa as últimas consultas (a data de cada uma aparece no PDF).</p>

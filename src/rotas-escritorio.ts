@@ -1,7 +1,7 @@
 import { lembretesDoDia } from './servicos/inicio.js';
 import { ClienteDp, ConfigDp, painelDp, salvarClienteDp, salvarConfigDp, varrerPastaDp } from './servicos/envio-dp.js';
 import { abrirMensagem, consultarCaixaPostal, consultarParcelamentos, detalheCliente, emitirDasParcela } from './servicos/parcelamentos-caixa.js';
-import { monitorFiscal, resumoFinanceiro } from './servicos/monitor.js';
+import { ignorarNoMonitor, monitorFiscal, resumoFinanceiro } from './servicos/monitor.js';
 import { situacaoClientePdf } from './servicos/relatorio-cliente.js';
 import { pendenciasPdf } from './servicos/relatorio-pendencias.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -77,6 +77,11 @@ export async function rotasEscritorio(app: FastifyInstance) {
       const id = Number((req.params as any).id); checar(req, id);
       const r = await situacaoClientePdf(u(req).escritorio_id, id);
       return reply.type('application/pdf').header('content-disposition', `inline; filename="${r.nome}"`).send(r.pdf);
+    });
+    api.put('/api/escritorio/monitor/:id/ignorar', async (req) => {
+      const id = Number((req.params as any).id); checar(req, id);
+      const b = z.object({ processo: z.string(), ignorar: z.boolean() }).parse(req.body);
+      return ignorarNoMonitor(u(req).escritorio_id, id, b.processo, b.ignorar);
     });
     api.get('/api/escritorio/monitor/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return detalheCliente(u(req).escritorio_id, id); });
     api.post('/api/escritorio/parcelamentos/:id/consultar', async (req) => { const id = Number((req.params as any).id); checar(req, id); return consultarParcelamentos(u(req).escritorio_id, u(req).id, id); });
