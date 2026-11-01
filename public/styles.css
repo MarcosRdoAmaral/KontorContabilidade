@@ -708,3 +708,6 @@ main:focus, main:focus-visible { outline: none; }
 .avatar-iniciais { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; background: var(--laranja-fundo); color: var(--laranja); font-weight: 700; font-size: 1.3rem; border: 1px solid var(--laranja-forte); }
 .conta-avatar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
 .conta-avatar .avatar-iniciais { width: 56px; height: 56px; font-size: 1.15rem; }
+
+/* subtotal dentro de um relatório (ex.: por carteira) */
+.tabela tr.rel-subtotal td{font-weight:700;background:color-mix(in srgb,var(--laranja) 10%,transparent)}

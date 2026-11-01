@@ -53,7 +53,7 @@ const REGRAS: Regra[] = [
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
-  { m: 'GET', r: /^\/api\/escritorio\/monitor(\/\d+)?$/, mod: ['visao', 'situacao'] },
+  { m: 'GET', r: /^\/api\/escritorio\/monitor(\/\d+(\/relatorio)?)?$/, mod: ['visao', 'situacao'] },
   { m: 'POST', r: /^\/api\/escritorio\/(parcelamentos\/\d+\/(consultar|das)|caixa-postal\/\d+\/(consultar|mensagem))$/, mod: ['situacao'] },
   { m: 'GET', r: /^\/api\/escritorio\/resumo-financeiro\/\d+$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/controle(\/linha|\/planilha\/(analisar|importar))?$/, mod: ['controle'] },
@@ -94,7 +94,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/empresas\/\d+\/cora$/, mod: ['banco', 'empresas', 'cobrancas', 'emitir'] },
   { r: /^\/api\/empresas\/\d+\/cora\/(sincronizar)$/, mod: ['cobrancas', 'banco'] },
   { r: /^\/api\/empresas\/\d+\/cora(\/testar)?$/, mod: ['banco', 'empresas'] },
-  { r: /^\/api\/(empresas\/\d+\/(cobrancas|remessas|retorno|boleto-avulso)|cobrancas\/\d+\/(cancelar|pagar|reemitir|pix|email)|empresas\/\d+\/(modelos-whatsapp|demonstrativo)|remessas\/\d+\/arquivo)$/, mod: ['cobrancas'] },
+  { r: /^\/api\/(empresas\/\d+\/(cobrancas|remessas|retorno|boleto-avulso)|cobrancas\/\d+\/(cancelar|pagar|reemitir|pix|email|carta)|empresas\/\d+\/(modelos-whatsapp|demonstrativo)|remessas\/\d+\/arquivo)$/, mod: ['cobrancas'] },
   { m: 'GET', r: /^\/api\/cobrancas\/\d+\/(boleto|demonstrativo)$/, mod: ['cobrancas', 'notas', 'emitir'] },
   { m: 'POST', r: /^\/api\/(notas|faturar)$/, mod: ['emitir'] },
   { m: 'GET', r: /^\/api\/relatorios$|^\/api\/empresas\/\d+\/relatorios\/[a-z-]+$/, mod: ['relatorios'] },

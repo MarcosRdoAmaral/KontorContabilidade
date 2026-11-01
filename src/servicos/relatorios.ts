@@ -4,6 +4,7 @@ import { lerNfse } from '../nfse/leitura.js';
 import { ErroNegocio } from './emissao.js';
 import { balancoExtrato } from './extrato.js';
 import { despesaMes, recebidoMes } from './financeiro.js';
+import { COR, MM, cabecalho, docFmt, rodapes, type Emitente } from '../pdf/timbrado.js';
 
 /**
  * Relatórios gerenciais. A nota e o boleto têm datas próprias (emissão da nota, emissão do boleto, vencimento,
@@ -21,7 +22,7 @@ const dias = (a: string, b: string) => Math.round((Date.parse(a) - Date.parse(b)
 /** Um título = boleto, com os dados da nota a que pertence (quando houver). */
 function titulos(empresaId: number, tomadorId?: number | null) {
   const hoje = hojeBr();
-  const l = db.prepare(`SELECT c.id, c.vencimento, c.valor, c.valor_pago, c.pago_em, c.status AS st, c.descricao, c.desconto,
+  const l = db.prepare(`SELECT c.id, c.vencimento, c.valor, c.valor_pago, c.pago_em, c.status AS st, c.descricao, c.desconto, c.forma,
       COALESCE(c.emissao, substr(c.criado_em,1,10)) AS emissao_boleto, t.id AS tomador_id, t.nome AS cliente,
       n.id AS nota_id, n.n_nfse, n.valor_servico, n.status AS nota_status,
       COALESCE(date(n.autorizada_em, '-3 hours'), date(n.criado_em, '-3 hours')) AS emissao_nota
@@ -94,6 +95,22 @@ export const RELATORIOS: Record<string, Def> = {
       linhas: titulos(e, f.tomadorId).filter((x) => x.st === 'PAGO' && entre(x.pago_em, f)).sort((a, b) => (a.pago_em ?? '').localeCompare(b.pago_em ?? '')).map((x) => ({ ...x, valor_pago: x.valor_pago ?? x.valor })),
     }),
   },
+  'a-receber-carteira': {
+    grupo: 'Contas a receber',
+    titulo: 'Contas a receber por carteira', filtroData: 'Vencimento do boleto/Pix', situacoes: ['Vencido', 'A vencer'],
+    descricao: 'Cobranças em aberto separadas pela carteira (boleto bancário ou Pix copia e cola), com subtotal de cada uma. Mostra também as cobranças Pix que ainda esperam o código.',
+    gerar: (e, f) => {
+      const l = titulos(e, f.tomadorId).filter((x) => x.st !== 'PAGO' && entre(x.vencimento, f) && (!f.situacao || x.situacao === f.situacao));
+      const linhas: any[] = [];
+      for (const [forma, nome] of [['BOLETO', 'Boleto bancário'], ['PIX', 'Pix copia e cola']] as const) {
+        const g = l.filter((x) => (x.forma ?? 'BOLETO') === forma);
+        if (!g.length) continue;
+        linhas.push(...g.map((x) => ({ ...x, carteira: nome, situacao: forma === 'PIX' && x.st === 'AGUARDANDO_BANCO' ? `${x.situacao} · sem Pix` : x.situacao })));
+        linhas.push({ carteira: 'Subtotal', cliente: `${nome}: ${g.length} cobrança(s)`, valor_sub: soma(g, 'valor'), _subtotal: true });
+      }
+      return { colunas: [{ k: 'carteira', nome: 'Carteira', tipo: 'texto' }, COL.vencimento, COL.cliente, COL.nota, COL.valorBoleto, { k: 'valor_sub', nome: 'Subtotal', tipo: 'moeda' }, COL.atraso, COL.situacao], linhas };
+    },
+  },
   'saldo-vencido': {
     grupo: 'Contas a receber',
     titulo: 'Saldo vencido por cliente', filtroData: 'Posição na data final (títulos vencidos até ela)',
@@ -124,6 +141,20 @@ export const RELATORIOS: Record<string, Def> = {
       }
       const m = (k: string, nome: string): Coluna => ({ k, nome, tipo: 'moeda', soma: true });
       return { colunas: [COL.cliente, { k: 'qtd', nome: 'Boletos', tipo: 'inteiro', soma: true }, m('faturado', 'Faturado'), m('recebido', 'Recebido'), m('a_vencer', 'A vencer'), m('vencido', 'Vencido')], linhas: [...por.values()].sort((a, b) => b.faturado - a.faturado) };
+    },
+  },
+  'faturamento-cidade': {
+    grupo: 'Faturamento',
+    titulo: 'Faturamento por cidade/UF', filtroData: 'Data de emissão da nota',
+    descricao: 'Notas autorizadas no período agrupadas pela cidade e UF do cliente, com quantidade de clientes, de notas e participação no total. Ajuda a ver onde está o faturamento e a conferir o ISS de outros municípios.',
+    gerar: (e, f) => {
+      const l = db.prepare(`SELECT COALESCE(NULLIF(t.cidade,''), '(sem cidade no cadastro)') AS cidade, COALESCE(NULLIF(t.uf,''), '—') AS uf, COUNT(DISTINCT COALESCE(n.tomador_id, n.tomador_nome)) AS clientes,
+          COUNT(*) AS notas, SUM(n.valor_servico) AS valor FROM notas n LEFT JOIN tomadores t ON t.id = n.tomador_id
+        WHERE n.empresa_id = ? AND n.status = 'AUTORIZADA' ${f.tomadorId ? 'AND n.tomador_id = ' + Number(f.tomadorId) : ''} AND COALESCE(date(n.autorizada_em,'-3 hours'), date(n.criado_em,'-3 hours')) BETWEEN ? AND ?
+        GROUP BY 1, 2 ORDER BY valor DESC`).all(e, f.de, f.ate) as any[];
+      const t = soma(l, 'valor') || 1;
+      return { colunas: [{ k: 'uf', nome: 'UF', tipo: 'texto' }, { k: 'cidade', nome: 'Cidade', tipo: 'texto' }, { k: 'clientes', nome: 'Clientes', tipo: 'inteiro', soma: true }, { k: 'notas', nome: 'Notas', tipo: 'inteiro', soma: true }, { k: 'valor', nome: 'Faturado', tipo: 'moeda', soma: true }, { k: 'pct', nome: '% do total', tipo: 'inteiro' }],
+        linhas: l.map((x) => ({ ...x, valor: r2(x.valor), pct: Math.round((x.valor / t) * 100) })) };
     },
   },
   'notas-emitidas': {
@@ -316,6 +347,27 @@ export const RELATORIOS: Record<string, Def> = {
         linhas: l.map((x) => { const antes = ac; ac += x.valor; return { ...x, valor: r2(x.valor), pct: Math.round((x.valor / t) * 100), acum: Math.round((ac / t) * 100), classe: antes / t < 0.8 ? 'A' : antes / t < 0.95 ? 'B' : 'C' }; }) };
     },
   },
+  'cadastro-incompleto': {
+    grupo: 'Clientes', titulo: 'Clientes com cadastro incompleto', filtroData: 'Sem filtro de data (situação atual do cadastro)',
+    descricao: 'Clientes sem algum dado que faz falta na nota, no boleto ou no envio por e-mail: e-mail, telefone, endereço completo, município (código IBGE) ou CPF/CNPJ.',
+    gerar: (e, f) => {
+      const l = db.prepare(`SELECT t.* FROM tomadores t WHERE t.empresa_id = ? ${f.tomadorId ? 'AND t.id = ' + Number(f.tomadorId) : ''} ORDER BY t.nome`).all(e) as any[];
+      const vazio = (v: any) => v == null || String(v).trim() === '';
+      const linhas = l.map((t) => {
+        const falta: string[] = [];
+        if (vazio(t.email) && vazio(t.email_cobranca)) falta.push('e-mail');
+        if (vazio(t.fone)) falta.push('telefone');
+        if (['cep', 'logradouro', 'numero', 'bairro', 'cidade', 'uf'].some((k) => vazio(t[k]))) falta.push('endereço');
+        if (vazio(t.cod_municipio)) falta.push('município (IBGE)');
+        if (t.tipo_doc !== 'EXTERIOR' && vazio(t.documento)) falta.push('CPF/CNPJ');
+        const impacto = [falta.includes('endereço') || falta.includes('CPF/CNPJ') ? (t.modo_faturamento?.includes('BOLETO') ? 'boleto' : null) : null,
+          falta.includes('município (IBGE)') || falta.includes('CPF/CNPJ') ? (t.modo_faturamento?.includes('NOTA') ? 'nota' : null) : null,
+          falta.includes('e-mail') ? 'envio por e-mail' : null].filter(Boolean).join(', ');
+        return { cliente: t.nome, documento: docFmt(t.documento ?? ''), falta: falta.join(', '), impacto: impacto || '—', qtd: falta.length };
+      }).filter((x) => x.qtd).sort((a, b) => b.qtd - a.qtd || a.cliente.localeCompare(b.cliente));
+      return { colunas: [COL.cliente, { k: 'documento', nome: 'CPF/CNPJ', tipo: 'texto' }, { k: 'falta', nome: 'O que falta', tipo: 'texto' }, { k: 'impacto', nome: 'Atrapalha', tipo: 'texto' }], linhas };
+    },
+  },
   'clientes-sem-nota': {
     grupo: 'Clientes', titulo: 'Clientes sem faturamento no período', filtroData: 'Data de emissão da nota',
     descricao: 'Clientes cadastrados que não tiveram nota autorizada no período, com a data e o valor da última nota. Serve para achar quem ficou sem faturar ou deixou de comprar.',
@@ -341,7 +393,7 @@ export function gerarRelatorio(empresaId: number, id: string, f: Filtros): Relat
   const totais: Record<string, number> = {};
   for (const c of colunas) if (c.soma) totais[c.k] = soma(linhas, c.k);
   const br = (d: string) => d.split('-').reverse().join('/');
-  return { id, titulo: def.titulo, descricao: def.descricao, filtroData: def.filtroData, colunas, linhas, totais, subtitulo: `${def.filtroData}: ${br(f.de)} a ${br(f.ate)}${f.situacao ? ` · ${f.situacao}` : ''}` };
+  return { id, titulo: def.titulo, descricao: def.descricao, filtroData: def.filtroData, colunas, linhas, totais, subtitulo: def.filtroData.startsWith('Sem filtro') ? def.filtroData : `${def.filtroData}: ${br(f.de)} a ${br(f.ate)}${f.situacao ? ` · ${f.situacao}` : ''}` };
 }
 
 const fmt = (v: any, t: TipoColuna) => v == null || v === '' ? '' : t === 'moeda' ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : t === 'data' ? String(v).slice(0, 10).split('-').reverse().join('/') : String(v);
@@ -353,28 +405,42 @@ export function relatorioCsv(r: Relatorio): string {
   return '﻿' + l.join('\r\n');
 }
 
-export function relatorioPdf(r: Relatorio, empresa: string): Promise<Buffer> {
+export function relatorioPdf(r: Relatorio, em: Emitente): Promise<Buffer> {
   return new Promise((ok) => {
-    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30 });
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 0, bufferPages: true, info: { Title: r.titulo } });
     const partes: Buffer[] = []; doc.on('data', (b) => partes.push(b)); doc.on('end', () => ok(Buffer.concat(partes)));
-    const W = doc.page.width - 60, n = r.colunas.length;
-    const peso = (c: Coluna) => (c.tipo === 'texto' ? (c.k === 'cliente' || c.k === 'servico' ? 3 : 1.3) : c.tipo === 'inteiro' ? 0.9 : 1.2);
+    const X = 16 * MM, W = doc.page.width - 2 * X, LIM = doc.page.height - 18 * MM;
+    const peso = (c: Coluna) => (c.tipo === 'texto' ? (c.k === 'cliente' || c.k === 'servico' ? 3 : 1.3) : c.tipo === 'inteiro' ? 1.05 : 1.2);
     const tot = r.colunas.reduce((s, c) => s + peso(c), 0), larg = r.colunas.map((c) => (peso(c) / tot) * W);
-    const cab = () => {
-      doc.font('Helvetica-Bold').fontSize(14).text(r.titulo, 30, 30); doc.font('Helvetica').fontSize(9).fillColor('#555').text(`${empresa} · ${r.subtitulo} · emitido em ${fmt(hojeBr(), 'data')}`, 30, 48); doc.fillColor('#000');
+    const alinhar = (i: number) => (r.colunas[i].tipo === 'moeda' || r.colunas[i].tipo === 'inteiro' ? 'right' : 'left');
+    const celulas = (vals: string[], y: number, o: { negrito?: boolean; cor?: string; tam?: number } = {}) => {
+      doc.font(o.negrito ? 'Helvetica-Bold' : 'Helvetica').fontSize(o.tam ?? 7.8).fillColor(o.cor ?? COR.texto);
+      let x = X; vals.forEach((v, i) => { doc.text(v, x + 4, y, { width: larg[i] - 8, height: 11, ellipsis: true, lineBreak: false, align: alinhar(i) }); x += larg[i]; });
     };
-    const linha = (vals: string[], y: number, negrito = false, fundo?: string) => {
-      if (fundo) doc.rect(30, y - 2, W, 14).fill(fundo).fillColor('#000');
-      doc.font(negrito ? 'Helvetica-Bold' : 'Helvetica').fontSize(8);
-      let x = 30; vals.forEach((v, i) => { doc.text(v, x + 2, y, { width: larg[i] - 4, height: 11, ellipsis: true, lineBreak: false, align: r.colunas[i].tipo === 'moeda' || r.colunas[i].tipo === 'inteiro' ? 'right' : 'left' }); x += larg[i]; });
+    const cabTabela = (y: number) => {
+      doc.rect(X, y, W, 7 * MM).fill('#fdeeee');
+      doc.moveTo(X, y + 7 * MM).lineTo(X + W, y + 7 * MM).lineWidth(1.1).stroke(COR.vermelho);
+      celulas(r.colunas.map((c) => c.nome), y + 2.3 * MM, { negrito: true });
+      return y + 7 * MM + 2;
     };
-    let y = 75; cab(); linha(r.colunas.map((c) => c.nome), y, true, '#e8e8e8'); y += 16;
+    const pagina = () => {
+      const y = cabecalho(doc, em, { titulo: r.titulo, subtitulo: `${r.subtitulo} · emitido em ${fmt(hojeBr(), 'data')}`, compacto: true });
+      return cabTabela(y);
+    };
+    let y = pagina(), i = 0;
     for (const x of r.linhas) {
-      if (y > doc.page.height - 50) { doc.addPage(); cab(); y = 75; linha(r.colunas.map((c) => c.nome), y, true, '#e8e8e8'); y += 16; }
-      linha(r.colunas.map((c) => fmt(x[c.k], c.tipo)), y); y += 13;
+      if (y + 13 > LIM) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 0 }); y = pagina(); }
+      if (x._subtotal) { doc.rect(X, y - 1, W, 13).fill('#e8edf4'); i = 0; } else if (i++ % 2) doc.rect(X, y - 1, W, 13).fill('#f6f8fb');
+      celulas(r.colunas.map((c) => fmt(x[c.k], c.tipo)), y + 2, { negrito: !!x._subtotal, cor: x._subtotal ? COR.azul : undefined }); y += 13;
+      doc.moveTo(X, y - 1).lineTo(X + W, y - 1).lineWidth(0.4).stroke(COR.linha);
     }
-    if (r.colunas.some((c) => c.soma)) { y += 4; linha(r.colunas.map((c, i) => (i === 0 ? `TOTAL (${r.linhas.length})` : c.soma ? fmt(r.totais[c.k], c.tipo) : '')), y, true, '#f3f3f3'); }
-    if (!r.linhas.length) doc.font('Helvetica').fontSize(10).text('Nenhum registro no período.', 30, y + 10);
+    if (r.colunas.some((c) => c.soma)) {
+      if (y + 20 > LIM) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 0 }); y = pagina(); }
+      y += 4; doc.rect(X, y, W, 8 * MM).fill(COR.azul);
+      celulas(r.colunas.map((c, k) => (k === 0 ? `TOTAL (${r.linhas.filter((l) => !l._subtotal).length})` : c.soma ? fmt(r.totais[c.k], c.tipo) : '')), y + 2.6 * MM, { negrito: true, cor: '#ffffff', tam: 8.2 });
+    }
+    if (!r.linhas.length) doc.fillColor(COR.cinza).font('Helvetica-Oblique').fontSize(10).text('Nenhum registro no período.', X, y + 10, { width: W, align: 'center' });
+    rodapes(doc, em);
     doc.end();
   });
 }

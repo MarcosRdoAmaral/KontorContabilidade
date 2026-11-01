@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.35.0';
+export const MANUAL_VERSAO = '1.36.0';
 
 export const MANUAL = [
   {
@@ -159,6 +159,8 @@ export const MANUAL = [
       </ul>
       <h3>Parcelamentos e caixa postal</h3>
       <p>A situação fiscal, os parcelamentos, a caixa postal e o FGTS Digital ficam todos no Monitor fiscal. No alto, os cartões mostram os clientes com débitos na Receita e PGFN (com o total em aberto), os regulares, os ainda não consultados e quem tem FGTS em aberto; clique num cartão para filtrar a lista. Na lista de clientes, a coluna Situação fiscal traz o valor em aberto (clique para ver os débitos, recalcular guias e avisar o cliente), a coluna FGTS Digital traz o valor da última consulta e a coluna <em>Avisar</em> marca quem recebe o aviso de débitos. Clicando no nome do cliente, abre tudo dele num lugar só.</p>
+      <h3>Relatório consolidado do cliente</h3>
+      <p>No detalhe do cliente (clique no nome dele no Monitor fiscal), o botão <em>Relatório consolidado (PDF)</em> gera a <strong>Situação fiscal do cliente</strong> no papel timbrado do escritório, pronto para enviar: a situação geral, o total em aberto (Receita/PGFN, FGTS e parcelas em atraso), o resumo de cada processo, os débitos por tributo e período, as inscrições em dívida ativa, os parcelamentos, as competências do FGTS, as mensagens não lidas da caixa postal, as obrigações atrasadas e dos próximos 30 dias, os certificados e procurações e, no Simples, o faturamento acumulado frente ao sublimite. Nada é consultado na hora: o relatório usa as últimas consultas (a data de cada uma aparece no PDF).</p>
       <p>Os botões acima da lista (<em>Consultar situação fiscal</em>, <em>Consultar parcelamentos</em>, <em>Consultar caixa postal</em> e <em>Consultar FGTS Digital</em>, para quem tem acesso à Situação fiscal) valem para os clientes marcados ou, sem marcação, para todos os da lista (respeitando a busca e o filtro). As consultas à Receita buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Cada chamada é cobrada pelo SERPRO e nada roda sozinho.</p>
       <ul>
         <li><strong>Parcelamentos:</strong> para clientes do Simples e MEI, os pedidos do parcelamento normal, especial, Pert e Relp e, havendo parcelamento ativo, as parcelas em aberto (de 4 a 8 chamadas por cliente). Parcela de mês anterior ainda em aberto conta como em atraso. Clique no nome do cliente na lista para ver as parcelas e gerar o DAS de cada uma; o DAS fica guardado com as guias do cliente. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</li>
@@ -336,6 +338,8 @@ export const MANUAL = [
       </ul>
       <h3>Demonstrativo de cobrança</h3>
       <p>O botão <em>Demonstrativo</em> gera o PDF (na carteira boleto, com o boleto completo na página 2) com o cabeçalho do escritório (logo, CNPJ, endereço, e-mail e WhatsApp do cadastro da empresa), o cliente, o vencimento, a discriminação dos serviços (com o desconto, se houver), o total e a forma de pagamento: QR Code e copia e cola na carteira Pix, ou a linha digitável na carteira boleto, com o boleto inteiro (recibo do pagador e ficha de compensação) na página seguinte. A frase do rodapé é definida no botão <em>Demonstrativo</em> do topo da tela. O demonstrativo vai anexo nos e-mails de cobrança; no Pix, o código copia e cola vai também no texto do e-mail (modelo <em>Cobrança por Pix</em>, em Configurações &gt; Modelos de e-mail). O botão <em>E-mail</em> envia ou reenvia a cobrança, e no WhatsApp o campo <code>{linha}</code> traz o Pix copia e cola nas cobranças Pix.</p>
+      <h3>Carta de cobrança</h3>
+      <p>Numa cobrança vencida, o menu <em>⋯</em> tem <em>Carta de cobrança (PDF)</em>: um aviso no papel timbrado com todas as cobranças vencidas e não pagas daquele cliente, os dias de atraso e a estimativa de multa e juros até hoje (pelas regras de cada cobrança), com o total atualizado e espaço para assinatura.</p>
       <h3>Cobrança pela Cora (sem remessa)</h3>
       <p>Em <strong>Empresas › Dados bancários</strong>, o bloco <em>Banco Cora</em> liga a API da Cora. Com ela, cada boleto (com Pix) é registrado na Cora assim que é criado, o PDF e a linha digitável vêm da Cora e o pagamento é baixado sozinho, a cada 10 minutos ou ao clicar em <em>Atualizar da Cora</em>. Não há arquivo de remessa nem de retorno.</p>
       <ol>
@@ -441,14 +445,14 @@ export const MANUAL = [
       <p>A nota é emitida em um dia, o boleto vence em outro e é pago em outro. Por isso cada relatório informa <strong>qual data filtra o período</strong> e mostra as demais nas colunas.</p>
       <p>Os relatórios ficam em <strong>grupos</strong>, na lista à esquerda da tela:</p>
       <ul>
-        <li><strong>Faturamento:</strong> Receitas emitidas (por data de emissão) e Faturamento por mês (notas, canceladas e recebido).</li>
-        <li><strong>Contas a receber:</strong> por vencimento, em aberto por emissão, recebimentos (data do pagamento), saldo vencido por cliente (faixas de atraso), posição por cliente e prazo de recebimento por cliente (prazo e atraso médios, % pago em dia).</li>
+        <li><strong>Faturamento:</strong> Receitas emitidas (por data de emissão), Faturamento por mês (notas, canceladas e recebido) e Faturamento por cidade/UF do cliente.</li>
+        <li><strong>Contas a receber:</strong> por vencimento, em aberto por emissão, recebimentos (data do pagamento), saldo vencido por cliente (faixas de atraso), posição por cliente, prazo de recebimento por cliente (prazo e atraso médios, % pago em dia) e contas a receber por carteira (boleto × Pix, com subtotal de cada uma).</li>
         <li><strong>Despesas e pagamentos:</strong> despesas lançadas (com forma de pagamento e origem), por categoria, por forma de pagamento (PIX, débito, crédito, dinheiro), parcelas do cartão a vencer e compras (NF-e de entrada).</li>
         <li><strong>Fiscal e retenções:</strong> notas emitidas e tributos, livro de serviços prestados (ISS a recolher e ISS retido pelo tomador) e retenções por cliente (PIS, COFINS, CSLL, IRRF, INSS e ISS).</li>
         <li><strong>Resultado e caixa:</strong> resultado mensal (o balanço mês a mês), fluxo de caixa por categoria e pendências do extrato (sem classificação ou crédito sem boleto ligado).</li>
-        <li><strong>Clientes:</strong> curva ABC (classes A, B e C pelo faturamento) e clientes sem faturamento no período.</li>
+        <li><strong>Clientes:</strong> curva ABC (classes A, B e C pelo faturamento), clientes sem faturamento no período e clientes com cadastro incompleto (o que falta e o que isso atrapalha: nota, boleto ou e-mail).</li>
       </ul>
-      <p>Clique no relatório na lista, escolha o período, o cliente e a situação (quando houver) e clique em <em>Gerar</em>. Exporte para <strong>Excel (CSV)</strong> ou <strong>PDF</strong>.</p>`,
+      <p>Clique no relatório na lista, escolha o período, o cliente e a situação (quando houver) e clique em <em>Gerar</em>. Exporte para <strong>Excel (CSV)</strong> ou <strong>PDF</strong>; o PDF sai no papel timbrado da empresa (logo, CNPJ, endereço e contato no cabeçalho e o rodapé do demonstrativo em todas as páginas).</p>`,
   },
   {
     id: 'contabilidade', titulo: 'Exportar para a contabilidade', resumo: 'Pacote com extrato em OFX, PDF e XML das notas.',

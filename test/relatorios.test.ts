@@ -72,7 +72,7 @@ test('relatórios: nota emitida em uma data e boleto com vencimento em outra', a
     assert.equal((await rel('a-receber', 'de=2026-10-31&ate=2026-10-01')).status, 400);
     assert.equal((await call('GET', `/api/empresas/${eid}/relatorios/a-receber?de=2026-10-01&ate=2026-10-31`)).status, 401);
     const cat = (await call('GET', '/api/relatorios', t)).json;
-    assert.equal(cat.length, 21);
+    assert.equal(cat.length, 24);
     assert.ok(cat.every((c: any) => c.grupo), 'todo relatório tem grupo');
     assert.deepEqual([...new Set(cat.map((c: any) => c.grupo))].sort(), ['Clientes', 'Contas a receber', 'Despesas e pagamentos', 'Faturamento', 'Fiscal e retenções', 'Resultado e caixa']);
     // todos os relatórios rodam, em JSON e PDF, sem erro
