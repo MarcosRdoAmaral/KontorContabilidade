@@ -28,7 +28,8 @@ test('emissão automática: pronta no dia, confirma, não repete, pular e erro',
     const eid = (await call('POST', '/api/empresas', { documento: '11.222.333/0001-81', razao_social: 'Empresa Portal', cod_municipio: '4208203', op_simp_nac: 3, modo_emissao: 'PORTAL', portal_login: '11222333000181' }, t)).json.id;
     const sv = (await call('POST', `/api/empresas/${eid}/servicos`, { nome: 'Honorários', descricao: 'Honorários contábeis', c_trib_nac: '171901' }, t)).json.id;
     const tom = (await call('POST', `/api/empresas/${eid}/tomadores`, { tipo_doc: 'CPF', documento: '39053344705', nome: 'Cliente Mensal', modo_faturamento: 'BOLETO', servicos_padrao: [{ servico_id: sv, valor: 800 }] }, t)).json.id;
-    const mes = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7);
+    // mês anterior: o dia 1 dele (ajustado a dia útil) já passou, em qualquer data em que o teste rodar
+    const mes = (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
 
     assert.equal((await call('POST', `/api/empresas/${eid}/agenda/config`, { tomadorId: tom, ativa: true, dia: 40 }, t)).status, 400);
     assert.equal((await call('POST', `/api/empresas/${eid}/agenda/config`, { tomadorId: tom, ativa: true, dia: 1 }, t)).status, 200);

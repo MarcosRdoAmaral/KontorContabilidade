@@ -54,7 +54,7 @@ a { color: var(--laranja); }
 .login-caixa h1 { text-align: center; font-size: 1.2rem; }
 
 /* Estrutura */
-.app { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+.app { display: grid; grid-template-columns: 266px 1fr; min-height: 100vh; }
 .lateral { background: var(--lateral); border-right: 1px solid var(--lateral-borda); color: var(--tinta); padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .lateral > * { flex-shrink: 0; } /* sem isso, em janelas baixas os blocos encolhem e o logo é cortado */
 .fixo-lateral { position: sticky; top: -20px; z-index: 2; background: var(--lateral); margin: -20px -16px 0; padding: 20px 16px 12px; display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--lateral-borda); } /* logo, empresa e certificado ficam fixos; só o menu rola */
@@ -512,7 +512,7 @@ input.travado { background: var(--cinza-fundo); color: var(--tinta-2, #9a9a9a); 
 .mon-sub-linha .dica { display: block; margin-top: 4px; }
 
 /* Início */
-.inicio { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 24px; min-height: calc(100vh - 80px); align-items: stretch; }
+.inicio { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 24px; min-height: calc(100vh - 140px); align-items: stretch; }
 .inicio-marca { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
 .inicio-logo { width: min(420px, 80%); height: auto; filter: var(--logo-filtro); background: var(--logo-placa); border-radius: 12px; padding: 8px; }
 .inicio-saudacao { font-size: 1.6rem; font-weight: 600; margin: 28px 0 4px; }
@@ -597,3 +597,51 @@ button.kpi:hover { border-color: var(--laranja-forte); }
 .cob-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; min-width: 170px; padding: 6px; background: var(--superficie); border: 1px solid var(--borda-botao); border-radius: 10px; box-shadow: 0 12px 30px var(--sombra); }
 .cob-menu button { text-align: left; border: 0; background: transparent; padding: 8px 10px; }
 .cob-menu button:hover { background: var(--superficie-2); }
+
+/* Ícones, barra do topo e sininho */
+.ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ico-p { width: 15px; height: 15px; }
+#menu a { display: flex; align-items: center; gap: 11px; }
+#menu a .ico { opacity: .8; }
+#menu a.ativo .ico, #menu a:hover .ico { opacity: 1; color: var(--laranja); }
+.barra-topo { display: flex; justify-content: flex-end; align-items: center; gap: 14px; padding: 12px 28px 0; position: relative; z-index: 30; }
+.topo-sino-caixa, .topo-usuario-caixa { position: relative; }
+.topo-sino { position: relative; width: 42px; height: 42px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--superficie); border: 1px solid var(--borda-leve); color: var(--tinta); }
+.topo-sino .ico { width: 21px; height: 21px; }
+.topo-sino:hover { border-color: var(--laranja); color: var(--laranja); }
+.topo-badge { position: absolute; top: -3px; right: -3px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: var(--g-pend); color: #1a1405; font-size: .7rem; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--papel); }
+.topo-sino.tem-atencao .topo-badge { background: var(--g-atencao); color: #2a0a0a; }
+.topo-usuario { display: flex; align-items: center; gap: 9px; padding: 4px 12px 4px 4px; border-radius: 99px; background: var(--superficie); border: 1px solid var(--borda-leve); color: var(--tinta); }
+.topo-usuario:hover { border-color: var(--laranja); }
+.topo-avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--laranja-fundo); color: var(--laranja); font-weight: 700; font-size: .82rem; border: 1px solid var(--laranja-forte); }
+.topo-ola { font-size: .9rem; }
+.topo-painel, .topo-menu { position: absolute; right: 0; top: calc(100% + 8px); background: var(--superficie); border: 1px solid var(--borda-botao); border-radius: 14px; box-shadow: 0 18px 44px var(--sombra); padding: 12px; }
+.topo-painel { width: min(400px, 90vw); }
+.topo-painel header { display: flex; justify-content: space-between; align-items: center; margin: 2px 4px 10px; }
+.topo-painel header a { display: inline-flex; align-items: center; gap: 4px; font-size: .85rem; text-decoration: none; }
+.topo-menu { min-width: 220px; display: grid; gap: 2px; }
+.topo-menu-nome { margin: 2px 8px 8px; font-weight: 600; }
+.topo-menu a, .topo-menu button { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--tinta); text-decoration: none; background: transparent; border: 0; text-align: left; font: inherit; }
+.topo-menu a:hover, .topo-menu button:hover { background: var(--superficie-2); }
+.inicio-lembretes .ico { opacity: .6; }
+.selo-cert { display: inline-flex; align-items: center; gap: 5px; }
+.selo-cert .ico { width: 15px; height: 15px; }
+.selo-cert.ok .ico { color: var(--g-ok); }
+.selo-cert.aviso .ico { color: var(--g-pend); }
+.selo-cert.ruim .ico { color: var(--g-atencao); }
+
+/* Início: cartões com cabeçalho e ícone, saudação em destaque */
+.inicio-saudacao { font-size: 2.1rem; font-weight: 700; letter-spacing: -.01em; margin: 30px 0 10px; }
+.inicio-saudacao span { color: var(--laranja); }
+.inicio-traco { display: block; width: 180px; height: 3px; border-radius: 3px; margin: 0 auto 14px; background: linear-gradient(90deg, transparent, var(--laranja) 35%, var(--laranja) 65%, transparent); }
+.inicio-data { display: inline-flex; align-items: center; gap: 8px; }
+.inicio-cartao { border-left: 3px solid var(--laranja) !important; }
+.inicio-cab { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--borda-leve); }
+.inicio-cab h2 { margin: 0 !important; flex: 1; font-size: 1.08rem !important; }
+.inicio-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--laranja-fundo); color: var(--laranja); flex: none; }
+.inicio-ic .ico { width: 21px; height: 21px; }
+.inicio-acao { display: inline-flex; align-items: center; gap: 5px; font-size: .86rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+main:focus, main:focus-visible { outline: none; }
+#menu a { gap: 9px; }
+#menu a .ico { width: 17px; height: 17px; }
+#menu details.grupo > a { margin-left: 4px; padding-left: 10px; }

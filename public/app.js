@@ -371,7 +371,10 @@ function infoEmpresa() {
   $('#empresa-atual').title = e.razao_social;
   $('#info-empresa').innerHTML = `${fmtDoc(e.documento)}<br>
     ${e.ambiente === 1 ? 'Produção' : '<span class="alerta">Produção restrita (testes)</span>'} · série ${esc(e.serie)}<br>
-    ${!e.tem_certificado ? '<span class="alerta">Sem certificado A1</span>' : dias < 30 ? `<span class="alerta">Certificado vence em ${dias} dias</span>` : `Certificado até ${dataBr(e.cert_validade)}`}`;
+    ${!e.tem_certificado ? `<span class="alerta selo-cert ruim">${icone('alerta')}Sem certificado A1</span>`
+      : dias < 0 ? `<span class="alerta selo-cert ruim">${icone('alerta')}Certificado vencido em ${dataBr(e.cert_validade)}</span>`
+      : dias < 30 ? `<span class="alerta selo-cert aviso">${icone('alerta')}Certificado vence em ${dias} dias</span>`
+      : `<span class="selo-cert ok">Certificado até ${dataBr(e.cert_validade)} ${icone('ok')}</span>`}`;
 }
 
 $('#empresa-atual').onchange = (ev) => {
@@ -399,6 +402,7 @@ async function iniciar() {
   });
   // quem não tem o acesso a Relatórios ainda enxerga o manual, por um item próprio no menu
   $('#menu-doc').hidden = estado.usuario.modulos.includes('relatorios');
+  iconesMenu(); iniciarTopo();
   if (estado.usuario.trocar_senha) { $('#app').hidden = true; return trocarSenha({ obrigatoria: true }); }
   await carregarEmpresas();
   atualizarLicenca();
@@ -5895,24 +5899,123 @@ async function telaInicio() {
   const dia = Math.floor((Date.now() - agora.getTimezoneOffset() * 6e4) / 864e5);
   const nome = String(estado.usuario?.nome ?? '').split(' ')[0];
   const dataLonga = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const cartao = (ic, titulo, corpo, acao = '', cls = '') => `<section class="cartao inicio-cartao ${cls}"><header class="inicio-cab"><span class="inicio-ic">${icone(ic)}</span><h2>${titulo}</h2>${acao}</header>${corpo}</section>`;
   conteudo.innerHTML = `
     <div class="inicio">
       <section class="inicio-marca">
         <img src="/logo.svg" alt="Kontor Gestão Contabilidade" class="inicio-logo">
-        <p class="inicio-saudacao">${saudacao}${nome ? `, ${esc(nome)}` : ''}!</p>
-        <p class="sutil inicio-data">${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</p>
+        <p class="inicio-saudacao">${saudacao}${nome ? `, <span>${esc(nome)}</span>` : ''}!</p>
+        <span class="inicio-traco" aria-hidden="true"></span>
+        <p class="sutil inicio-data">${icone('calendario')}${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</p>
       </section>
       <aside class="inicio-lado">
-        <section class="cartao"><h2>Lembretes de hoje</h2><div id="ini-lembretes"><p class="dica">Carregando…</p></div></section>
-        <section class="cartao"><h2>Dica do dia</h2><p>${esc(DICAS_KONTOR[dia % DICAS_KONTOR.length])}</p></section>
-        <section class="cartao inicio-mensagem"><h2>Para o seu dia</h2><p>${esc(MENSAGENS_DIA[dia % MENSAGENS_DIA.length])}</p></section>
+        ${cartao('calendario', 'Lembretes de hoje', '<div id="ini-lembretes"><p class="dica">Carregando…</p></div>')}
+        ${cartao('lampada', 'Dica do dia', `<p>${esc(DICAS_KONTOR[dia % DICAS_KONTOR.length])}</p>`, `<a href="#/relatorios/documentacao" class="inicio-acao">Ver o manual ${icone('seta', 'ico ico-p')}</a>`)}
+        ${cartao('sol', 'Para o seu dia', `<p>${esc(MENSAGENS_DIA[dia % MENSAGENS_DIA.length])}</p>`, '', 'inicio-mensagem')}
       </aside>
     </div>`;
   try {
     const { lembretes } = await api('GET', '/api/inicio');
-    const cor = { ATENCAO: 'var(--g-atencao)', PENDENTE: 'var(--g-pend)', INFO: 'var(--g-proc)' };
-    $('#ini-lembretes').innerHTML = lembretes.length
-      ? `<ul class="inicio-lembretes">${lembretes.map((l) => `<li><a href="${esc(l.link)}"><i style="background:${cor[l.nivel]}"></i><span>${esc(l.texto)}</span><b>›</b></a></li>`).join('')}</ul>`
-      : '<p class="dica">Nada pendente por aqui. Aproveite o dia!</p>';
+    $('#ini-lembretes').innerHTML = listaLembretes(lembretes);
   } catch { $('#ini-lembretes').innerHTML = '<p class="dica">Não foi possível carregar os lembretes agora.</p>'; }
+}
+
+// ---------------------------------------------------------------------------
+// Ícones (traço fino, herdam a cor do tema), menu com ícones, sininho e usuário no topo
+// ---------------------------------------------------------------------------
+const ICONES = {
+  inicio: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  visao: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  painel: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  monitor: 'M5 20v-8M10 20V5M15 20v-6M20 20V9M3 20h18',
+  carteira: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM22 19v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.75',
+  tomadores: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM22 19v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.75',
+  obrigacoes: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M8 17h2',
+  certificados: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5',
+  controle: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M9 15l2 2 4-4',
+  senhas: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3M12 15v2',
+  honorarios: 'M14 3H6v18h12V7zM14 3v4h4M9 12h6M9 16h6',
+  captura: 'M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.6 8 4 4 0 0 1 17 18M12 12v8M9 15l3-3 3 3',
+  emitir: 'M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14h6',
+  agenda: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 13v3l2 1',
+  notas: 'M15 3H8v14h11V7zM15 3v4h4M5 7v14h11',
+  cobrancas: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
+  compras: 'M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.7a1 1 0 0 0 1-.8L20 8H6M9 20h.01M17 20h.01',
+  'nfe-sefaz': 'M12 4v11M7 10l5 5 5-5M4 20h16',
+  despesas: 'M4 7h15a1 1 0 0 1 1 1v11H5a1 1 0 0 1-1-1zM4 7l11-3v3M16 13h1',
+  extrato: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
+  cartao: 'M3 6h18v12H3zM3 10h18M7 15h3',
+  relatorios: 'M21 12a9 9 0 1 1-9-9v9zM15 3.5A9 9 0 0 1 20.5 9H15z',
+  servicos: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16',
+  tributacao: 'M19 5 5 19M6.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM17.5 20a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  empresas: 'M4 21V5l8-2v18M12 9h8v12M7 8h2M7 12h2M7 16h2M15 13h2M15 17h2M3 21h18',
+  banco: 'M3 10h18L12 4zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18',
+  config: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 13.5l2 1-2 3.5-2.2-.7a7 7 0 0 1-1.8 1L14.5 21h-5L9 18.3a7 7 0 0 1-1.8-1L5 18l-2-3.5 2-1a7 7 0 0 1 0-3l-2-1L5 6l2.2.7A7 7 0 0 1 9 5.7L9.5 3h5l.5 2.7a7 7 0 0 1 1.8 1L19 6l2 3.5-2 1a7 7 0 0 1 0 3z',
+  documentacao: 'M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8',
+  sair: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11',
+  sino: 'M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9M10.3 20.5a1.9 1.9 0 0 0 3.4 0',
+  lampada: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
+  sol: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  calendario: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  seta: 'M5 12h14M13 6l6 6-6 6',
+  ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.7 2.7L16 10',
+  alerta: 'M12 3 2 20h20zM12 9v5M12 17h.01',
+  usuario: 'M20 21v-1a5 5 0 0 0-5-5H9a5 5 0 0 0-5 5v1M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  chevron: 'M6 9l6 6 6-6',
+};
+const icone = (k, cls = 'ico') => (ICONES[k] ? `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[k]}"/></svg>` : '');
+
+function iconesMenu() {
+  document.querySelectorAll('#menu a').forEach((a) => {
+    if (a.querySelector('svg.ico')) return;
+    const chave = a.id === 'menu-doc' ? 'documentacao' : (a.getAttribute('href') || '').replace('#/', '').split('/')[0];
+    if (ICONES[chave]) a.insertAdjacentHTML('afterbegin', icone(chave));
+  });
+}
+
+/** Barra do topo: sininho com os lembretes do usuário e o menu do usuário. */
+function iniciarTopo() {
+  if ($('#barra-topo')) return;
+  const nome = String(estado.usuario?.nome ?? '').trim();
+  const iniciais = nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+  const coluna = document.querySelector('.coluna-principal');
+  coluna.insertAdjacentHTML('afterbegin', `<header class="barra-topo" id="barra-topo">
+    <div class="topo-sino-caixa"><button type="button" class="topo-sino" id="topo-sino" aria-label="Lembretes" aria-haspopup="true" aria-expanded="false">${icone('sino')}<span class="topo-badge" id="topo-badge" hidden></span></button>
+      <div class="topo-painel" id="topo-painel" hidden></div></div>
+    <div class="topo-usuario-caixa"><button type="button" class="topo-usuario" id="topo-usuario" aria-haspopup="true" aria-expanded="false"><span class="topo-avatar">${esc(iniciais)}</span><span class="topo-ola">Olá, <b>${esc(nome.split(' ')[0] || 'usuário')}</b></span>${icone('chevron', 'ico ico-p')}</button>
+      <div class="topo-menu" id="topo-menu" hidden>
+        <p class="topo-menu-nome">${esc(nome)}<br><span class="dica">${esc(estado.usuario?.login ?? '')}</span></p>
+        <a href="#/config/conta">${icone('usuario')}Minha conta</a><a href="#/config/aparencia">${icone('sol')}Aparência</a>
+        <button type="button" id="topo-sair">${icone('sair')}Sair</button>
+      </div></div>
+  </header>`);
+  const alternar = (botao, painel, abrir) => { const ab = abrir ?? painel.hidden; painel.hidden = !ab; botao.setAttribute('aria-expanded', String(ab)); };
+  $('#topo-sino').onclick = (ev) => { ev.stopPropagation(); alternar($('#topo-usuario'), $('#topo-menu'), false); alternar($('#topo-sino'), $('#topo-painel')); if (!$('#topo-painel').hidden) atualizarSino(true); };
+  $('#topo-usuario').onclick = (ev) => { ev.stopPropagation(); alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu')); };
+  document.addEventListener('click', (ev) => {
+    if (!ev.target.closest('.topo-sino-caixa')) alternar($('#topo-sino'), $('#topo-painel'), false);
+    if (!ev.target.closest('.topo-usuario-caixa')) alternar($('#topo-usuario'), $('#topo-menu'), false);
+  });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu'), false); } });
+  $('#topo-menu').querySelectorAll('a').forEach((a) => (a.onclick = () => alternar($('#topo-usuario'), $('#topo-menu'), false)));
+  $('#topo-sair').onclick = () => $('#sair').click();
+  window.addEventListener('hashchange', () => { alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu'), false); atualizarSino(); });
+  atualizarSino(true);
+}
+
+const COR_LEMBRETE = { ATENCAO: 'var(--g-atencao)', PENDENTE: 'var(--g-pend)', INFO: 'var(--g-proc)' };
+const listaLembretes = (lembretes) => (lembretes.length
+  ? `<ul class="inicio-lembretes">${lembretes.map((l) => `<li><a href="${esc(l.link)}"><i style="background:${COR_LEMBRETE[l.nivel]}"></i><span>${esc(l.texto)}</span>${icone('seta', 'ico ico-p')}</a></li>`).join('')}</ul>`
+  : '<p class="dica">Nada pendente por aqui. Aproveite o dia!</p>');
+let sinoEm = 0;
+async function atualizarSino(forcar = false) {
+  if (!$('#topo-badge') || (!forcar && Date.now() - sinoEm < 60e3)) return;
+  sinoEm = Date.now();
+  let lembretes;
+  try { ({ lembretes } = await api('GET', '/api/inicio')); } catch { return; }
+  const n = lembretes.filter((l) => l.nivel !== 'INFO').length;
+  $('#topo-badge').hidden = !n; $('#topo-badge').textContent = n > 9 ? '9+' : String(n);
+  $('#topo-sino').classList.toggle('tem-atencao', lembretes.some((l) => l.nivel === 'ATENCAO'));
+  $('#topo-painel').innerHTML = `<header><b>Lembretes de hoje</b>${typeof telaInicio === 'function' ? `<a href="#/inicio">Ver tudo ${icone('seta', 'ico ico-p')}</a>` : ''}</header>${listaLembretes(lembretes)}`;
+  $('#topo-painel').querySelectorAll('a').forEach((a) => (a.onclick = () => { $('#topo-painel').hidden = true; $('#topo-sino').setAttribute('aria-expanded', 'false'); }));
 }
