@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { db } from './db.js';
 import { CHAVE_PUBLICA } from './licenca-chave.js';
 import { ErroNegocio } from './servicos/emissao.js';
@@ -22,8 +25,44 @@ export const SUPORTE_WHATSAPP = '5547999017034';
 
 export type EstadoLicenca = 'livre' | 'teste' | 'ativa' | 'vencida' | 'relogio';
 
-/** Ganchos para teste. */
-export const _teste = { agora: () => new Date(), chave: () => process.env.LICENCA_CHAVE_PUBLICA ?? CHAVE_PUBLICA };
+/** No aplicativo instalado (KONTOR_EMPACOTADO=1, definido pelo próprio aplicativo) nenhuma variável de ambiente muda a chave nem os arquivos de controle. */
+const empacotado = () => process.env.KONTOR_EMPACOTADO === '1';
+export const _teste = { agora: () => new Date(), chave: () => (empacotado() ? CHAVE_PUBLICA : process.env.LICENCA_CHAVE_PUBLICA ?? CHAVE_PUBLICA) };
+
+// ---- Marcas do período de teste fora do banco ----
+// O início do teste e a última data de uso também ficam em dois arquivos assinados, fora da pasta do banco.
+// Apagar ou trocar o banco não reinicia o teste; adulterar uma marca bloqueia o teste.
+function pastasMarcas(): string[] {
+  if (!process.env.NFSE_MACHINE_ID) return []; // sem identificação estável do computador, as marcas não teriam como ser conferidas
+  const teste = !empacotado() && process.env.KONTOR_MARCAS;
+  if (teste) return teste.split(path.delimiter);
+  if (process.platform === 'win32') {
+    return [path.join(process.env.PROGRAMDATA ?? 'C:\\ProgramData', 'Kontor', 'sys'), path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'Kontor', 'cache')];
+  }
+  return [path.join(os.homedir(), '.local', 'share', 'kontor-sys'), path.join(os.homedir(), '.cache', 'kontor-sys')];
+}
+const assinar = (txt: string) => crypto.createHmac('sha256', crypto.createHash('sha256').update('kontor-contab-marca|' + idMaquina()).digest()).update(txt).digest('hex');
+const NOME_MARCA = 'kg-lic.dat';
+
+interface Marcas { inicio: string | null; visto: string | null; adulterada: boolean; faltando: boolean }
+function lerMarcas(): Marcas {
+  const m: Marcas = { inicio: null, visto: null, adulterada: false, faltando: false };
+  for (const pasta of pastasMarcas()) {
+    let txt: string;
+    try { txt = fs.readFileSync(path.join(pasta, NOME_MARCA), 'utf8'); } catch { m.faltando = true; continue; }
+    const [inicio, visto, ass] = txt.trim().split('|');
+    if (!inicio || !visto || !ass || assinar(`${inicio}|${visto}`) !== ass) { m.adulterada = true; continue; }
+    if (!m.inicio || inicio < m.inicio) m.inicio = inicio;
+    if (!m.visto || visto > m.visto) m.visto = visto;
+  }
+  return m;
+}
+function gravarMarcas(inicio: string, visto: string) {
+  const txt = `${inicio}|${visto}|${assinar(`${inicio}|${visto}`)}`;
+  for (const pasta of pastasMarcas()) {
+    try { fs.mkdirSync(pasta, { recursive: true }); fs.writeFileSync(path.join(pasta, NOME_MARCA), txt); } catch { /* pasta sem permissão: a outra marca e o banco continuam valendo */ }
+  }
+}
 
 const hojeBr = () => new Date(_teste.agora().getTime() - 3 * 3600e3).toISOString().slice(0, 10);
 const b64u = (b: Buffer) => b.toString('base64url');
@@ -84,12 +123,19 @@ export function statusLicenca() {
   const l = linha();
   const hoje = hojeBr();
   const agoraIso = _teste.agora().toISOString();
-  // relógio voltado: data atual bem anterior à última vez que o sistema foi aberto
-  const vistoDia = l.ultimo_visto ? l.ultimo_visto.slice(0, 10) : null;
+  const marcas = lerMarcas();
+  // relógio voltado: data atual bem anterior à última vez que o sistema foi aberto (no banco ou nas marcas)
+  const vistoDia = [l.ultimo_visto?.slice(0, 10), marcas.visto].filter(Boolean).sort().pop() as string | undefined;
   if (vistoDia && dias(hoje, vistoDia) > 1) {
     return { ...base, estado: 'relogio' as EstadoLicenca, permitido: false, mensagem: 'A data do computador está anterior à última utilização. Corrija a data do Windows para voltar a emitir.' };
   }
   if (!vistoDia || vistoDia < hoje) db.prepare('UPDATE licenca SET ultimo_visto = ? WHERE id = 1').run(agoraIso);
+
+  // vale o início mais antigo entre o banco e as marcas: trocar o banco não dá novo teste
+  const inicio = ([l.inicio_teste?.slice(0, 10), marcas.inicio].filter(Boolean) as string[]).sort()[0] ?? hoje;
+  if (l.inicio_teste?.slice(0, 10) !== inicio) db.prepare('UPDATE licenca SET inicio_teste = ? WHERE id = 1').run(inicio);
+  const vistoGravar = vistoDia && vistoDia > hoje ? vistoDia : hoje;
+  if (!marcas.adulterada && (marcas.faltando || marcas.inicio !== inicio || marcas.visto !== vistoGravar)) gravarMarcas(inicio, vistoGravar);
 
   if (l.codigo) {
     try {
@@ -107,9 +153,11 @@ export function statusLicenca() {
       }
     } catch { /* cai para o teste */ }
   }
-  let inicio = l.inicio_teste as string | null;
-  if (!inicio) { inicio = agoraIso; db.prepare('UPDATE licenca SET inicio_teste = ? WHERE id = 1').run(inicio); }
-  const resta = DIAS_TESTE - dias(inicio.slice(0, 10), hoje);
+  if (marcas.adulterada) {
+    return { ...base, estado: 'vencida' as EstadoLicenca, permitido: false, diasRestantes: 0,
+      mensagem: 'Os dados do período de teste foram alterados. Informe o código do computador ao suporte para receber o código de ativação.' };
+  }
+  const resta = DIAS_TESTE - dias(inicio, hoje);
   if (resta > 0) {
     return { ...base, estado: 'teste' as EstadoLicenca, permitido: true, diasRestantes: resta, aviso: resta <= AVISO_DIAS,
       mensagem: `Período de teste: ${resta} dia(s) restante(s).` };

@@ -77,6 +77,7 @@ async function iniciarServidor() {
   aplicarRestauracaoPendente();
   Object.assign(process.env, {
     NFSE_DESKTOP: '1',
+    KONTOR_EMPACOTADO: '1', // o servidor ignora variáveis que trocariam a chave de licença
     NFSE_MACHINE_ID: idDaMaquina(),
     HOST: '127.0.0.1',
     MASTER_KEY: segredos.masterKey,
@@ -87,6 +88,8 @@ async function iniciarServidor() {
     SEFIN_URL_TESTE: process.env.NFSE_TESTE_SEFIN ?? '',
   });
   if (!process.env.SEFIN_URL_TESTE) delete process.env.SEFIN_URL_TESTE;
+  delete process.env.LICENCA_CHAVE_PUBLICA;
+  delete process.env.KONTOR_MARCAS;
 
   const carregar = (arq) => import(pathToFileURL(path.join(raizApp, 'dist', arq)).href);
   banco = (await carregar('db.js')).db;

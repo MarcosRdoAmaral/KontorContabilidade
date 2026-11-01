@@ -7,6 +7,7 @@ import path from 'node:path';
 process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lic-')), 'a.db');
 process.env.MASTER_KEY ??= 'a'.repeat(64);
 process.env.SESSION_SECRET ??= 'b'.repeat(32);
+process.env.KONTOR_MARCAS = fs.mkdtempSync(path.join(os.tmpdir(), 'marcas-')); // marcas do teste fora do banco
 process.env.NFSE_MACHINE_ID = 'guid-do-computador-de-teste';
 
 const html = fs.readFileSync('ferramentas/gerador-de-licencas.html', 'utf8');
