@@ -41,7 +41,7 @@ export function cartaCobrancaPdf(empresaId: number, tomadorId: number): Promise<
 
     // destinatário
     pdf.rect(X, y, W, 20 * MM).fillAndStroke(COR.fundo, COR.linha);
-    txt('DESTINATÁRIO', X + 4 * MM, y + 3.5 * MM, { cor: COR.vermelho, negrito: true, tam: 8 });
+    txt('DESTINATÁRIO', X + 4 * MM, y + 3.5 * MM, { cor: COR.destaque, negrito: true, tam: 8 });
     txt(d.cliente.nome, X + 4 * MM, y + 8 * MM, { negrito: true, tam: 10, w: W - 8 * MM });
     txt([d.cliente.documento ? `${String(d.cliente.documento).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${docFmt(d.cliente.documento)}` : '', d.cliente.endereco].filter(Boolean).join('  ·  '), X + 4 * MM, pdf.y + 1, { cor: '#333', tam: 8, w: W - 8 * MM });
     y += 20 * MM + 7 * MM;
@@ -55,7 +55,7 @@ export function cartaCobrancaPdf(empresaId: number, tomadorId: number): Promise<
     y = secao(pdf, 'Cobranças vencidas em aberto', X, y);
     const cols = [{ n: 'Vencimento', w: 0.13 }, { n: 'Descrição', w: 0.33 }, { n: 'Dias', w: 0.07, r: true }, { n: 'Valor', w: 0.12, r: true }, { n: 'Multa', w: 0.1, r: true }, { n: 'Juros', w: 0.1, r: true }, { n: 'Atualizado', w: 0.15, r: true }];
     const cab = () => {
-      pdf.rect(X, y, W, 6.5 * MM).fill('#fdeeee'); pdf.moveTo(X, y + 6.5 * MM).lineTo(X + W, y + 6.5 * MM).lineWidth(1).stroke(COR.vermelho);
+      pdf.rect(X, y, W, 6.5 * MM).fill(COR.claro); pdf.moveTo(X, y + 6.5 * MM).lineTo(X + W, y + 6.5 * MM).lineWidth(1).stroke(COR.destaque);
       let x = X; for (const c of cols) { txt(c.n, x + 3, y + 2 * MM, { negrito: true, tam: 7.8, w: c.w * W - 6, align: c.r ? 'right' : 'left', quebra: false }); x += c.w * W; }
       y += 6.5 * MM + 1.5;
     };
@@ -70,7 +70,7 @@ export function cartaCobrancaPdf(empresaId: number, tomadorId: number): Promise<
     }
     if (y + 30 * MM > LIM) { pdf.addPage({ size: 'A4', margin: 0 }); y = 14 * MM; }
     y += 3;
-    pdf.rect(X, y, W, 10 * MM).fill(COR.azul);
+    pdf.rect(X, y, W, 10 * MM).fill(COR.escuro);
     txt('TOTAL ATUALIZADO ATÉ HOJE (ESTIMADO)', X + 4 * MM, y + 3.6 * MM, { cor: '#fff', negrito: true, tam: 9 });
     txt(brl(d.totalAtualizado), X + W - 64 * MM, y + 2.6 * MM, { cor: '#fff', negrito: true, tam: 13, w: 60 * MM, align: 'right' });
     y += 10 * MM + 5 * MM;

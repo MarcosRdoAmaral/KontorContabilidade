@@ -6,7 +6,8 @@ import { db } from '../db.js';
  * nome do escritório, a frase do rodapé e a numeração.
  */
 export const MM = 72 / 25.4;
-export const COR = { azul: '#0d2f4f', vermelho: '#d9382c', cinza: '#5b6472', fundo: '#f2f5f8', linha: '#d8dee6', texto: '#1f2937' };
+/** Paleta do produto (a mesma do tema padrão do sistema): `escuro` nas faixas e títulos, `destaque` nos títulos de seção e detalhes. */
+export const COR = { escuro: '#12234a', destaque: '#b8892e', claro: '#f7efdc', suave: '#e6cf98', cinza: '#5b6472', fundo: '#f2f4f9', linha: '#d9dfea', texto: '#1f2937' };
 export interface Emitente { nome: string; documento: string; endereco: string; contato: string; logo: Buffer | null; rodape: string | null }
 
 export const docFmt = (d: string) => { const x = String(d ?? '').replace(/\D/g, ''); return x.length === 14 ? x.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : x.length === 11 ? x.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : String(d ?? ''); };
@@ -32,18 +33,18 @@ export function emitenteDoEscritorio(escritorioId: number): Emitente {
 /** Cabeçalho na página atual; devolve o y livre logo abaixo. `compacto` = logo à esquerda e dados ao lado (relatórios). */
 export function cabecalho(pdf: PDFKit.PDFDocument, em: Emitente, o: { titulo: string; subtitulo?: string; compacto?: boolean }): number {
   const PW = pdf.page.width, X = 16 * MM, W = PW - 2 * X;
-  pdf.rect(0, 0, PW, 3 * MM).fill(COR.azul);
-  pdf.rect(0, 0, 32 * MM, 3 * MM).fill(COR.vermelho);
+  pdf.rect(0, 0, PW, 3 * MM).fill(COR.escuro);
+  pdf.rect(0, 0, 32 * MM, 3 * MM).fill(COR.destaque);
   let y = 10 * MM;
   const linhaDados = [em.documento ? `CNPJ: ${docFmt(em.documento)}` : '', em.endereco].filter(Boolean).join(' | ');
   if (o.compacto) {
     let xt = X;
     if (em.logo) { try { pdf.image(em.logo, X, y, { fit: [42 * MM, 14 * MM], valign: 'center' }); xt = X + 46 * MM; } catch { /* sem logo */ } }
     const wt = W - (xt - X) - 90 * MM;
-    pdf.fillColor(COR.azul).font('Helvetica-Bold').fontSize(11).text(em.nome, xt, y + 1, { width: wt, lineBreak: false, ellipsis: true });
+    pdf.fillColor(COR.escuro).font('Helvetica-Bold').fontSize(11).text(em.nome, xt, y + 1, { width: wt, lineBreak: false, ellipsis: true });
     pdf.fillColor(COR.cinza).font('Helvetica').fontSize(7).text(linhaDados, xt, y + 5.5 * MM, { width: wt, lineBreak: false, ellipsis: true });
     if (em.contato) pdf.text(em.contato, xt, y + 9 * MM, { width: wt, lineBreak: false, ellipsis: true });
-    pdf.fillColor(COR.azul).font('Helvetica-Bold').fontSize(15).text(o.titulo.toUpperCase(), X + W - 88 * MM, y, { width: 88 * MM, align: 'right' });
+    pdf.fillColor(COR.escuro).font('Helvetica-Bold').fontSize(15).text(o.titulo.toUpperCase(), X + W - 88 * MM, y, { width: 88 * MM, align: 'right' });
     if (o.subtitulo) pdf.fillColor(COR.cinza).font('Helvetica').fontSize(8).text(o.subtitulo, X + W - 88 * MM, pdf.y + 1, { width: 88 * MM, align: 'right' });
     y = Math.max(y + 15 * MM, pdf.y + 2 * MM);
     pdf.moveTo(X, y).lineTo(X + W, y).lineWidth(0.8).stroke(COR.linha);
@@ -52,11 +53,11 @@ export function cabecalho(pdf: PDFKit.PDFDocument, em: Emitente, o: { titulo: st
   if (em.logo) {
     try { pdf.image(em.logo, PW / 2 - 35 * MM, y, { fit: [70 * MM, 18 * MM], align: 'center', valign: 'center' }); y += 20 * MM; } catch { em = { ...em, logo: null }; }
   }
-  if (!em.logo) { pdf.fillColor(COR.azul).font('Helvetica-Bold').fontSize(16).text(em.nome, X, y, { width: W, align: 'center' }); y = pdf.y + 2 * MM; }
+  if (!em.logo) { pdf.fillColor(COR.escuro).font('Helvetica-Bold').fontSize(16).text(em.nome, X, y, { width: W, align: 'center' }); y = pdf.y + 2 * MM; }
   pdf.fillColor(COR.cinza).font('Helvetica').fontSize(7.5).text(linhaDados, X, y, { width: W, align: 'center' });
   if (em.contato) pdf.text(em.contato, X, pdf.y, { width: W, align: 'center' });
   y = pdf.y + 5 * MM;
-  pdf.fillColor(COR.azul).font('Helvetica-Bold').fontSize(18).text(o.titulo.toUpperCase(), X, y, { width: W, align: 'center' });
+  pdf.fillColor(COR.escuro).font('Helvetica-Bold').fontSize(18).text(o.titulo.toUpperCase(), X, y, { width: W, align: 'center' });
   if (o.subtitulo) pdf.fillColor(COR.cinza).font('Helvetica').fontSize(8.5).text(o.subtitulo, X, pdf.y, { width: W, align: 'center' });
   return pdf.y + 5 * MM;
 }
@@ -76,6 +77,6 @@ export function rodapes(pdf: PDFKit.PDFDocument, em: Emitente) {
 
 /** Título de seção (texto em vermelho, como no demonstrativo). */
 export function secao(pdf: PDFKit.PDFDocument, titulo: string, x: number, y: number) {
-  pdf.fillColor(COR.vermelho).font('Helvetica-Bold').fontSize(8.5).text(titulo.toUpperCase(), x, y);
+  pdf.fillColor(COR.destaque).font('Helvetica-Bold').fontSize(8.5).text(titulo.toUpperCase(), x, y);
   return pdf.y + 2 * MM;
 }

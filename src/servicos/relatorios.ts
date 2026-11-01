@@ -418,8 +418,8 @@ export function relatorioPdf(r: Relatorio, em: Emitente): Promise<Buffer> {
       let x = X; vals.forEach((v, i) => { doc.text(v, x + 4, y, { width: larg[i] - 8, height: 11, ellipsis: true, lineBreak: false, align: alinhar(i) }); x += larg[i]; });
     };
     const cabTabela = (y: number) => {
-      doc.rect(X, y, W, 7 * MM).fill('#fdeeee');
-      doc.moveTo(X, y + 7 * MM).lineTo(X + W, y + 7 * MM).lineWidth(1.1).stroke(COR.vermelho);
+      doc.rect(X, y, W, 7 * MM).fill(COR.claro);
+      doc.moveTo(X, y + 7 * MM).lineTo(X + W, y + 7 * MM).lineWidth(1.1).stroke(COR.destaque);
       celulas(r.colunas.map((c) => c.nome), y + 2.3 * MM, { negrito: true });
       return y + 7 * MM + 2;
     };
@@ -431,12 +431,12 @@ export function relatorioPdf(r: Relatorio, em: Emitente): Promise<Buffer> {
     for (const x of r.linhas) {
       if (y + 13 > LIM) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 0 }); y = pagina(); }
       if (x._subtotal) { doc.rect(X, y - 1, W, 13).fill('#e8edf4'); i = 0; } else if (i++ % 2) doc.rect(X, y - 1, W, 13).fill('#f6f8fb');
-      celulas(r.colunas.map((c) => fmt(x[c.k], c.tipo)), y + 2, { negrito: !!x._subtotal, cor: x._subtotal ? COR.azul : undefined }); y += 13;
+      celulas(r.colunas.map((c) => fmt(x[c.k], c.tipo)), y + 2, { negrito: !!x._subtotal, cor: x._subtotal ? COR.escuro : undefined }); y += 13;
       doc.moveTo(X, y - 1).lineTo(X + W, y - 1).lineWidth(0.4).stroke(COR.linha);
     }
     if (r.colunas.some((c) => c.soma)) {
       if (y + 20 > LIM) { doc.addPage({ size: 'A4', layout: 'landscape', margin: 0 }); y = pagina(); }
-      y += 4; doc.rect(X, y, W, 8 * MM).fill(COR.azul);
+      y += 4; doc.rect(X, y, W, 8 * MM).fill(COR.escuro);
       celulas(r.colunas.map((c, k) => (k === 0 ? `TOTAL (${r.linhas.filter((l) => !l._subtotal).length})` : c.soma ? fmt(r.totais[c.k], c.tipo) : '')), y + 2.6 * MM, { negrito: true, cor: '#ffffff', tam: 8.2 });
     }
     if (!r.linhas.length) doc.fillColor(COR.cinza).font('Helvetica-Oblique').fontSize(10).text('Nenhum registro no período.', X, y + 10, { width: W, align: 'center' });

@@ -84,10 +84,10 @@ export function pendenciasPdf(escritorioId: number, empresas: number[] | null): 
       ['TOTAL EM ABERTO', brl(d.totais.total)], ['Receita e PGFN', brl(d.totais.receita)], ['FGTS Digital', brl(d.totais.fgts)], ['Parcelas em atraso', brl(d.totais.parcelas)],
       ['Clientes em atenção', String(d.atencao)], ['Obrigações atrasadas', String(d.totais.obrigacoes)],
     ];
-    pdf.rect(X, y, W, 15 * MM).fill(COR.azul);
+    pdf.rect(X, y, W, 15 * MM).fill(COR.escuro);
     const wf = W / faixa.length;
     faixa.forEach(([r, v], i) => {
-      txt(r.toUpperCase(), X + i * wf + 4 * MM, y + 3 * MM, { cor: i ? '#c7d2e3' : '#fff', negrito: true, tam: 7, w: wf - 6 * MM, quebra: false });
+      txt(r.toUpperCase(), X + i * wf + 4 * MM, y + 3 * MM, { cor: i ? COR.suave : '#fff', negrito: true, tam: 7, w: wf - 6 * MM, quebra: false });
       txt(v, X + i * wf + 4 * MM, y + 7.5 * MM, { cor: '#fff', negrito: true, tam: i ? 11 : 13, w: wf - 6 * MM, quebra: false });
     });
     y += 15 * MM + 6 * MM;
@@ -99,7 +99,7 @@ export function pendenciasPdf(escritorioId: number, empresas: number[] | null): 
       { n: 'Parc. em atraso', w: 0.09, r: true }, { n: 'Obrig. atras.', w: 0.07, r: true }, { n: 'A entregar', w: 0.06, r: true }, { n: 'Cx. postal', w: 0.06, r: true }, { n: 'Certif.', w: 0.05, r: true }, { n: 'Total em aberto', w: 0.11, r: true },
     ];
     const cab = () => {
-      pdf.rect(X, y, W, 7 * MM).fill('#fdeeee'); pdf.moveTo(X, y + 7 * MM).lineTo(X + W, y + 7 * MM).lineWidth(1.1).stroke(COR.vermelho);
+      pdf.rect(X, y, W, 7 * MM).fill(COR.claro); pdf.moveTo(X, y + 7 * MM).lineTo(X + W, y + 7 * MM).lineWidth(1.1).stroke(COR.destaque);
       let x = X; for (const c of cols) { txt(c.n, x + 3, y + 2.4 * MM, { negrito: true, tam: 7.6, w: c.w * W - 6, align: c.r ? 'right' : 'left', quebra: false }); x += c.w * W; }
       y += 7 * MM + 2;
     };
@@ -124,7 +124,7 @@ export function pendenciasPdf(escritorioId: number, empresas: number[] | null): 
     if (!d.linhas.length) { txt('Nenhum cliente com pendências nas últimas consultas.', X, y + 6, { cor: COR.cinza, italico: true, tam: 10, w: W, align: 'center' }); y += 20; }
     else {
       if (y + 22 > LIM) { y = novaPagina(); }
-      y += 3; pdf.rect(X, y, W, 8 * MM).fill(COR.azul);
+      y += 3; pdf.rect(X, y, W, 8 * MM).fill(COR.escuro);
       const tot = [`TOTAL (${d.linhas.length})`, '', '', valor(d.totais.receita), valor(d.totais.fgts), valor(d.totais.parcelas), qtd(d.totais.obrigacoes), qtd(d.totais.a_entregar), qtd(d.totais.nao_lidas), qtd(d.totais.certificados), valor(d.totais.total)];
       let x = X; tot.forEach((s, k) => { txt(s, x + 3, y + 2.7 * MM, { cor: '#fff', negrito: true, tam: 8, w: cols[k].w * W - 6, align: cols[k].r ? 'right' : 'left', quebra: false }); x += cols[k].w * W; });
       y += 8 * MM + 3 * MM;
@@ -139,14 +139,14 @@ export function pendenciasPdf(escritorioId: number, empresas: number[] | null): 
         if (y + 9 * MM + 12 > LIM) y = novaPagina();
         const [rot, cor] = l.geral ? ESTADO[l.geral] : ['—', COR.cinza];
         pdf.rect(X, y, W, 7.5 * MM).fill(COR.fundo); pdf.rect(X, y, 1.2 * MM, 7.5 * MM).fill(cor);
-        txt(l.cliente, X + 4 * MM, y + 2.2 * MM, { negrito: true, tam: 8.6, cor: COR.azul, w: W * 0.55, quebra: false });
+        txt(l.cliente, X + 4 * MM, y + 2.2 * MM, { negrito: true, tam: 8.6, cor: COR.escuro, w: W * 0.55, quebra: false });
         txt([docFmt(l.documento), l.responsavel ? `Responsável: ${l.responsavel}` : '', rot, l.total ? `Em aberto ${brl(l.total)}` : ''].filter(Boolean).join('  ·  '), X + W * 0.45, y + 2.4 * MM, { tam: 7.5, cor: COR.cinza, w: W * 0.55 - 4 * MM, align: 'right', quebra: false });
         y += 7.5 * MM + 2;
         for (const n of l.itens) {
           const linha = `${n.titulo}${n.texto ? ` — ${n.texto}` : ''}`;
           pdf.font('Helvetica').fontSize(7.6);
           const h = pdf.heightOfString(linha, { width: W * 0.72 }) + 3;
-          if (y + h > LIM) { y = novaPagina(); txt(`${l.cliente} (continuação)`, X, y, { negrito: true, tam: 8, cor: COR.azul }); y = pdf.y + 2; }
+          if (y + h > LIM) { y = novaPagina(); txt(`${l.cliente} (continuação)`, X, y, { negrito: true, tam: 8, cor: COR.escuro }); y = pdf.y + 2; }
           pdf.circle(X + 5, y + 3.3, 2).fill(ESTADO[n.nivel]?.[1] ?? COR.cinza);
           txt(NOME_PROC[n.processo] ?? n.processo, X + 11, y + 0.8, { tam: 7.4, cor: COR.cinza, negrito: true, w: W * 0.13, quebra: false });
           txt(linha, X + W * 0.15, y + 0.8, { tam: 7.6, w: W * 0.72 });

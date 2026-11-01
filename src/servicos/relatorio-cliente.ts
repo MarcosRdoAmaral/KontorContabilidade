@@ -68,7 +68,7 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     pdf.on('error', falha);
     const X = 16 * MM, W = pdf.page.width - 2 * X, LIM = pdf.page.height - 20 * MM;
     let y = cabecalho(pdf, em, { titulo: 'Situação fiscal do cliente', subtitulo: `Posição em ${dataBr(d.hoje)}` });
-    const garantir = (h: number) => { if (y + h > LIM) { pdf.addPage({ size: 'A4', margin: 0 }); pdf.rect(0, 0, pdf.page.width, 3 * MM).fill(COR.azul); pdf.rect(0, 0, 32 * MM, 3 * MM).fill(COR.vermelho); y = 12 * MM; } };
+    const garantir = (h: number) => { if (y + h > LIM) { pdf.addPage({ size: 'A4', margin: 0 }); pdf.rect(0, 0, pdf.page.width, 3 * MM).fill(COR.escuro); pdf.rect(0, 0, 32 * MM, 3 * MM).fill(COR.destaque); y = 12 * MM; } };
     const texto = (t: string, x: number, yy: number, o: any = {}) => pdf.fillColor(o.cor ?? COR.texto).font(o.negrito ? 'Helvetica-Bold' : o.italico ? 'Helvetica-Oblique' : 'Helvetica').fontSize(o.tam ?? 8.5).text(t, x, yy, { width: o.w, align: o.align, lineBreak: o.quebra ?? true });
     const selo = (estado: string | null, x: number, yy: number) => {
       const [rot, cor] = estado ? ESTADO[estado] ?? [estado, COR.cinza] : ['Sem informação', '#9ca3af'];
@@ -77,8 +77,8 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     /** Tabela simples: cabeçalho em faixa clara com linha vermelha (como no demonstrativo). */
     const tabela = (cols: { nome: string; w: number; align?: 'left' | 'right' }[], linhas: string[][], vazio: string) => {
       garantir(16 * MM);
-      pdf.rect(X, y, W, 6.5 * MM).fill('#fdeeee');
-      pdf.moveTo(X, y + 6.5 * MM).lineTo(X + W, y + 6.5 * MM).lineWidth(1).stroke(COR.vermelho);
+      pdf.rect(X, y, W, 6.5 * MM).fill(COR.claro);
+      pdf.moveTo(X, y + 6.5 * MM).lineTo(X + W, y + 6.5 * MM).lineWidth(1).stroke(COR.destaque);
       let x = X; for (const c of cols) { texto(c.nome, x + 3, y + 2 * MM, { negrito: true, tam: 7.8, w: c.w * W - 6, align: c.align, quebra: false }); x += c.w * W; }
       y += 6.5 * MM + 1.5;
       if (!linhas.length) { texto(vazio, X + 3, y + 2, { cor: COR.cinza, italico: true }); y = pdf.y + 4 * MM; return; }
@@ -95,8 +95,8 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     // cliente e situação geral
     const hCli = 24 * MM;
     pdf.rect(X, y, W, hCli).fillAndStroke(COR.fundo, COR.linha);
-    texto('CLIENTE', X + 4 * MM, y + 3.5 * MM, { cor: COR.vermelho, negrito: true, tam: 8 });
-    texto('SITUAÇÃO GERAL', X + W - 54 * MM, y + 3.5 * MM, { cor: COR.vermelho, negrito: true, tam: 8, w: 50 * MM, align: 'right' });
+    texto('CLIENTE', X + 4 * MM, y + 3.5 * MM, { cor: COR.destaque, negrito: true, tam: 8 });
+    texto('SITUAÇÃO GERAL', X + W - 54 * MM, y + 3.5 * MM, { cor: COR.destaque, negrito: true, tam: 8, w: 50 * MM, align: 'right' });
     texto(d.cliente.nome, X + 4 * MM, y + 8.5 * MM, { negrito: true, tam: 10, w: W - 64 * MM });
     texto([`${String(d.cliente.documento).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${docFmt(d.cliente.documento)}`, d.cliente.regime, d.cliente.responsavel ? `Responsável: ${d.cliente.responsavel}` : ''].filter(Boolean).join('  ·  '), X + 4 * MM, pdf.y + 1, { cor: '#333', tam: 8, w: W - 64 * MM });
     const [rotG, corG] = d.geral ? ESTADO[d.geral] ?? [d.geral, COR.cinza] : ['Sem informação', COR.cinza];
@@ -104,10 +104,10 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     y += hCli + 6;
 
     // total em aberto
-    pdf.rect(X, y, W, 16 * MM).fill(COR.azul);
+    pdf.rect(X, y, W, 16 * MM).fill(COR.escuro);
     texto('TOTAL EM ABERTO', X + 5 * MM, y + 3.3 * MM, { cor: '#fff', negrito: true, tam: 9 });
     texto([d.componentes.receita ? `Receita/PGFN ${brl(d.componentes.receita)}` : '', d.componentes.fgts ? `FGTS ${brl(d.componentes.fgts)}` : '', d.componentes.parcelas ? `Parcelas em atraso ${brl(d.componentes.parcelas)}` : ''].filter(Boolean).join('  ·  ') || 'Nenhum valor em aberto nas últimas consultas',
-      X + 5 * MM, y + 8.3 * MM, { cor: '#c7d2e3', tam: 7.3, w: W - 75 * MM });
+      X + 5 * MM, y + 8.3 * MM, { cor: COR.suave, tam: 7.3, w: W - 75 * MM });
     texto(brl(d.totalAberto), X + W - 85 * MM, y + 4.6 * MM, { cor: '#fff', negrito: true, tam: 17, w: 80 * MM, align: 'right' });
     y += 16 * MM + 6 * MM;
 
@@ -116,7 +116,7 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     {
       const cols = [{ nome: 'Processo', w: 0.32 }, { nome: 'Situação', w: 0.18 }, { nome: 'O que pede atenção', w: 0.5 }];
       garantir(14 * MM);
-      pdf.rect(X, y, W, 6.5 * MM).fill('#fdeeee'); pdf.moveTo(X, y + 6.5 * MM).lineTo(X + W, y + 6.5 * MM).lineWidth(1).stroke(COR.vermelho);
+      pdf.rect(X, y, W, 6.5 * MM).fill(COR.claro); pdf.moveTo(X, y + 6.5 * MM).lineTo(X + W, y + 6.5 * MM).lineWidth(1).stroke(COR.destaque);
       let x = X; for (const c of cols) { texto(c.nome, x + 3, y + 2 * MM, { negrito: true, tam: 7.8, quebra: false }); x += c.w * W; }
       y += 6.5 * MM + 1.5;
       for (const [k, nome] of Object.entries(PROC_NOME)) {
