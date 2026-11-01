@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import { desenharBoleto, type DadosBoleto } from './boleto-pdf.js';
+import { COR } from '../pdf/timbrado.js';
 
 /** Demonstrativo de cobrança (A4): cabeçalho do escritório, cliente, serviços, total e a forma de pagamento (Pix ou boleto). */
 export interface DadosDemonstrativo {
@@ -18,7 +19,8 @@ export interface DadosDemonstrativo {
 }
 
 const MM = 72 / 25.4;
-const AZUL = '#0d2f4f', VERMELHO = '#d9382c', CINZA = '#5b6472', FUNDO = '#f2f5f8', LINHA = '#d8dee6';
+/** Cores do produto (as mesmas dos relatórios: src/pdf/timbrado.ts). */
+const AZUL = COR.escuro, VERMELHO = COR.destaque, CINZA = COR.cinza, FUNDO = COR.fundo, LINHA = COR.linha;
 const brl = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dataBr = (iso: string) => iso.split('-').reverse().join('/');
 export const docFmt = (d: string) => { const x = String(d ?? '').replace(/\D/g, ''); return x.length === 14 ? x.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : x.length === 11 ? x.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : String(d ?? ''); };
@@ -66,7 +68,7 @@ export async function gerarDemonstrativoPdf(d: DadosDemonstrativo): Promise<Buff
     pdf.fillColor(VERMELHO).font('Helvetica-Bold').fontSize(8.5).text('DISCRIMINAÇÃO DOS SERVIÇOS', X, y);
     y += 5 * MM;
     const cQtd = X + W - 50 * MM, cVal = X + W - 32 * MM;
-    pdf.rect(X, y, W, 8 * MM).fill('#fdeeee');
+    pdf.rect(X, y, W, 8 * MM).fill(COR.claro);
     pdf.moveTo(X, y + 8 * MM).lineTo(X + W, y + 8 * MM).lineWidth(1.2).stroke(VERMELHO);
     pdf.fillColor('#111').font('Helvetica-Bold').fontSize(8).text('Descrição', X + 3 * MM, y + 2.8 * MM).text('Qtd.', cQtd, y + 2.8 * MM, { width: 14 * MM, align: 'center' }).text('Valor', cVal, y + 2.8 * MM, { width: 29 * MM, align: 'right' });
     y += 8 * MM;
