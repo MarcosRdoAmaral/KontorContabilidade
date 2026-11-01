@@ -79,6 +79,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
       return reply.type('application/pdf').header('content-disposition', `inline; filename="${r.nome}"`).send(r.pdf);
     });
     api.put('/api/escritorio/monitor/:id/ignorar', async (req) => {
+      if (u(req).tipo !== 'adm' && u(req).papel !== 'admin') throw new ErroNegocio('Só o administrador pode ignorar ou voltar a acompanhar uma coluna do Monitor fiscal.', 403);
       const id = Number((req.params as any).id); checar(req, id);
       const b = z.object({ processo: z.string(), ignorar: z.boolean() }).parse(req.body);
       return ignorarNoMonitor(u(req).escritorio_id, id, b.processo, b.ignorar);

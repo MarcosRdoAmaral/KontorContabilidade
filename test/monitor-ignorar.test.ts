@@ -48,6 +48,13 @@ test('monitor fiscal: ignorar uma coluna em um cliente tira da tela, do status g
     m = await ler();
     assert.equal(cli(b).processos.FGTS, 'PENDENTE');
 
+    // só o administrador ignora (usuário normal com acesso ao Monitor recebe 403)
+    assert.equal((await call('POST', '/api/usuarios', { login: 'joao', nome: 'João', email: 'joao@x.com', tipo: 'normal', permissoes: ['visao', 'situacao'], empresas: [] }, t)).status, 200);
+    const l1 = (await call('POST', '/api/login', { usuario: 'JOAO', senha: 'Kontor2026' })).json;
+    await call('PUT', '/api/me/senha', { atual: 'Kontor2026', nova: 'joao-nova-123' }, l1.token);
+    const tj = (await call('POST', '/api/login', { usuario: 'JOAO', senha: 'joao-nova-123' })).json.token;
+    assert.equal((await call('GET', '/api/escritorio/monitor', undefined, tj)).status, 200);
+    assert.equal((await call('PUT', `/api/escritorio/monitor/${b}/ignorar`, { processo: 'FGTS', ignorar: true }, tj)).status, 403);
     // coluna inexistente e cliente de outro escritório são recusados
     assert.equal((await call('PUT', `/api/escritorio/monitor/${b}/ignorar`, { processo: 'XYZ', ignorar: true }, t)).status, 400);
     assert.equal((await call('PUT', `/api/escritorio/monitor/99999/ignorar`, { processo: 'FGTS', ignorar: true }, t)).status, 404);
