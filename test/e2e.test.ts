@@ -8,6 +8,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
+process.env.LICENCA_CHAVE_PUBLICA ??= ''; // sem controle de licença neste teste
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nfse-'));
 process.env.DATABASE_PATH = path.join(tmp, 'db.sqlite');

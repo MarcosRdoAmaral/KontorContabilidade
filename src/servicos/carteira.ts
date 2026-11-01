@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
+import { exigirLimite } from '../licenca.js';
 import { codMunicipioValido, documentoValido, limparDoc, soDigitos } from '../nfse/validacao.js';
 import { REGIMES, limparTarefasQueNaoSeAplicam, listarTarefas, regimeDe, resumoTarefas } from './obrigacoes.js';
 import { listarCertificados, resumoCertificados } from './certificados.js';
@@ -69,6 +70,7 @@ export function criarCliente(escritorioId: number, d: ClienteCarteira): number {
   conferirResponsavel(escritorioId, d.responsavel_id);
   const existe = db.prepare('SELECT na_carteira FROM empresas WHERE escritorio_id = ? AND documento = ?').get(escritorioId, d.documento) as any;
   if (existe) throw new ErroNegocio(existe.na_carteira ? 'Este CNPJ/CPF já está na carteira.' : 'Este CNPJ/CPF está cadastrado como empresa do sistema (Cadastros > Empresas). Para ele ser também cliente, marque lá "Também é cliente da contabilidade".', 409);
+  exigirLimite(d.eh_escritorio ? 'empresas' : 'clientes', d.documento);
   return db.transaction(() => {
     if (d.eh_escritorio) db.prepare('UPDATE empresas SET eh_escritorio = 0 WHERE escritorio_id = ?').run(escritorioId);
     const op = opSimples(d.regime);

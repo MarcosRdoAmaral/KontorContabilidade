@@ -4,6 +4,7 @@ import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
 import { consultarCnpj } from './consulta-cnpj.js';
 import { cnpjValido, cpfValido } from '../nfse/validacao.js';
+import { exigirLimite } from '../licenca.js';
 import { ClienteCarteira, criarCliente } from './carteira.js';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +130,7 @@ export async function importarLote(empresaId: number, itens: { documento: string
         motivos.push('CPF: preencher endereço e e-mail');
       }
       if (!d.nome) throw new ErroNegocio('Sem nome para cadastrar.');
+      exigirLimite('clientes', doc);
       const insc = motivos.length ? motivos.join('; ') : 'cadastro criado por planilha';
       const r = db.prepare(`INSERT INTO tomadores (empresa_id, tipo_doc, documento, nome, email, fone, cep, cod_municipio, logradouro, numero, complemento, bairro, cidade, uf, conferir, conferir_motivo)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).run(empresaId, doc.length === 14 ? 'CNPJ' : 'CPF', doc, d.nome.slice(0, 300), d.email ?? null, d.fone ?? null, d.cep ?? null, d.cod_municipio ?? null,

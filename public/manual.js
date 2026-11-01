@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.40.0';
+export const MANUAL_VERSAO = '1.41.0';
 
 export const MANUAL = [
   {
@@ -485,7 +485,7 @@ export const MANUAL = [
         <li><strong>Aparência:</strong> escolha entre <em>Azul e dourado</em> (o padrão), <em>Azul e roxo</em>, <em>Verde petróleo e esmeralda</em>, <em>Grafite e azul elétrico</em>, <em>Marrom e champagne</em>, <em>Roxo e rosa</em>, <em>Preto e laranja</em> e <em>Branco e laranja</em>. Vale para o computador.</li>
         <li><strong>Backup:</strong> o sistema faz cópia automática diária; também dá para baixar um backup quando quiser. Guarde uma cópia fora do computador.</li>
         <li><strong>Zerar dados</strong> (só o usuário master, em Backup): apaga os clientes e empresas (menos a do escritório) e/ou o movimento do escritório (notas, boletos, tomadores avulsos, compras, despesas, extratos, cartões, estoque), para recomeçar sem reinstalar. Ficam usuários, licença, configurações, a empresa do escritório com o certificado, a numeração das notas, serviços e contas bancárias. Pede a senha master e a palavra ZERAR, baixa um backup e guarda outra cópia na pasta <em>antes-de-zerar</em>; para voltar, use Arquivo &gt; Restaurar backup….</li>
-        <li><strong>Licença:</strong> mostra a situação e permite informar um novo código. Nos <strong>15 dias</strong> antes do vencimento (da licença ou do período de teste) o menu mostra "Licença vence em N dia(s)" em destaque e o sistema abre um aviso uma vez por dia, com o código do computador para pedir a renovação. Vencida a licença, só a emissão é bloqueada.</li>
+        <li><strong>Licença:</strong> mostra a situação e o <strong>plano</strong> e permite informar um novo código. O período de teste dura <strong>7 dias</strong> e permite <strong>1 empresa e 2 clientes</strong>. Os planos pagos são <strong>Bronze</strong> (R$ 350/mês, até 30 clientes na carteira), <strong>Prata</strong> (R$ 600/mês, até 100 clientes), <strong>Ouro</strong> (R$ 1.000/mês, até 300 clientes) e <strong>Diamante</strong> (ilimitado, sob encomenda). O botão <strong>Alterar plano</strong> mostra os planos e abre o WhatsApp do suporte já com o código do computador; depois do pagamento você recebe o novo código e o cola ali. Ao atingir o limite do plano, o cadastro de novo cliente ou de nova empresa pede a troca de plano. Nos <strong>15 dias</strong> antes do vencimento (da licença ou do período de teste) o menu mostra "Licença vence em N dia(s)" em destaque e o sistema abre um aviso uma vez por dia, com o código do computador para pedir a renovação. Vencida a licença, só a emissão é bloqueada.</li>
         <li><strong>Atualizações:</strong> quando sai uma versão nova, aparece um aviso no topo com três opções: <em>Atualizar agora</em> (baixa, faz a cópia de segurança e instala), <em>Baixar e instalar ao fechar</em> (baixa agora e instala sozinho quando você fechar o programa) e <em>Só baixar</em> (deixa pronta; depois é só clicar em <em>Instalar agora</em>). Os dados são preservados.</li>
       </ul>`,
   },

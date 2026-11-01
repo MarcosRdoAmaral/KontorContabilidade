@@ -13,7 +13,7 @@ const html = fs.readFileSync('ferramentas/gerador-de-licencas.html', 'utf8');
 const nucleo = /<script id="nucleo">([\s\S]*?)<\/script>/.exec(html)![1];
 const ferr = new Function(nucleo + '; return { gerarChaves, emitirCodigo, somaMeses, lerChavePrivada };')();
 
-test('licença: teste de 30 dias, ativação por computador, vencimento e relógio', async () => {
+test('licença: teste de 7 dias, ativação por computador, vencimento e relógio', async () => {
   (await import('../src/db.js')).migrar();
   const L = await import('../src/licenca.js');
   const { calcularVencimento, valorLiquido } = await import('../src/servicos/faturamento.js');
@@ -28,11 +28,11 @@ test('licença: teste de 30 dias, ativação por computador, vencimento e relóg
   const k = await ferr.gerarChaves();
   L._teste.chave = () => k.publica;
   assert.equal(L.statusLicenca().estado, 'teste');
-  assert.equal(L.statusLicenca().diasRestantes, 30);
-  agora = new Date('2026-02-05T15:00:00Z');
+  assert.equal(L.statusLicenca().diasRestantes, 7);
+  agora = new Date('2026-01-14T15:00:00Z');
   assert.equal(L.statusLicenca().estado, 'teste');
-  assert.equal(L.statusLicenca().aviso, true);
-  agora = new Date('2026-02-20T15:00:00Z');
+  assert.equal(L.statusLicenca().diasRestantes, 3);
+  agora = new Date('2026-01-20T15:00:00Z');
   assert.equal(L.statusLicenca().estado, 'vencida');
   assert.throws(() => L.exigirLicenca(), /teste terminou/);
 
@@ -51,7 +51,7 @@ test('licença: teste de 30 dias, ativação por computador, vencimento e relóg
 
   const st = L.ativarLicenca(bom);
   assert.equal(st.estado, 'ativa');
-  assert.equal(st.diasRestantes, 89);
+  assert.equal(st.diasRestantes, 120);
   L.exigirLicenca();
   agora = new Date('2026-05-10T15:00:00Z');
   assert.equal(L.statusLicenca().aviso, true);

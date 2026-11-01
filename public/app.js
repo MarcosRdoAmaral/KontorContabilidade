@@ -2440,6 +2440,21 @@ async function atualizarLicenca() {
   } catch { return null; }
 }
 
+function textoLimites(s) {
+  const pl = (n, um, mais) => (n == null ? `${mais} ilimitados` : n === 1 ? `1 ${um}` : `${n} ${mais}`);
+  return `${pl(s.limites.empresas, 'empresa', 'empresas')} e ${pl(s.limites.clientes, 'cliente', 'clientes')}`;
+}
+function planosHtml(s) {
+  const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return `<div class="planos-grade">${['bronze', 'prata', 'ouro', 'diamante'].map((id) => {
+    const p = s.planos[id];
+    return `<div class="plano ${s.plano === id ? 'atual' : ''}"><h3>${esc(p.nome)}</h3>
+      <p class="preco">${p.preco == null ? 'Sob encomenda' : `${brl(p.preco)}<small>/mês</small>`}</p>
+      <p class="dica">${esc(p.resumo)}</p>
+      ${s.plano === id && s.estado === 'ativa' ? '<p><strong>Plano atual</strong></p>' : `<button type="button" data-plano="${id}">${id === 'diamante' ? 'Pedir orçamento' : 'Quero este plano'}</button>`}</div>`;
+  }).join('')}</div><p class="dica">O pedido abre o WhatsApp do suporte já com o código deste computador. Depois do pagamento você recebe o novo código de ativação e o cola abaixo.</p>`;
+}
+
 async function telaLicenca() {
   const s = await atualizarLicenca() ?? await api('GET', '/api/licenca');
   const admin = estado.usuario.papel === 'admin';
@@ -2449,15 +2464,26 @@ async function telaLicenca() {
     <div class="banner ${s.permitido && !s.aviso ? '' : 'teste'}">${esc(s.mensagem)}</div>
     ${s.cliente ? `<p>Licenciado para <strong>${esc(s.cliente)}</strong>.</p>` : ''}
     ${s.estado === 'livre' ? '' : `
+    <fieldset><legend>Seu plano</legend>
+      <p><strong>${esc(s.planoNome)}</strong> · ${esc(textoLimites(s))} <button type="button" class="primario" id="alterar-plano">Alterar plano</button></p>
+      <div id="planos" hidden>${planosHtml(s)}</div>
+    </fieldset>
     <fieldset><legend>Código deste computador</legend>
       <p class="dica">Para renovar, envie este código ao suporte. Você receberá um código de ativação válido apenas neste computador.</p>
       <p><span class="codigo-copia" id="cod-pc">${esc(s.codigoComputador)}</span> <button type="button" id="copiar-cod">Copiar</button></p>
     </fieldset>
     <fieldset><legend>Inserir código de ativação</legend>
-      ${admin ? `<form id="form-lic"><label>Código recebido <textarea name="codigo" required placeholder="KG1.…"></textarea></label>
+      ${admin ? `<form id="form-lic"><label>Código recebido <textarea name="codigo" required placeholder="KG2.…"></textarea></label>
         <p class="erro" id="erro-lic"></p><div class="acoes"><button class="primario" type="submit">Ativar</button></div></form>` : '<p class="dica">Peça a um administrador para inserir o código.</p>'}
     </fieldset>
     <p class="dica">Com a licença vencida, apenas a emissão é bloqueada: consultas, downloads de PDF/XML e backup continuam funcionando.</p>`}`;
+  const ap = $('#alterar-plano');
+  if (ap) ap.onclick = () => { const b = $('#planos'); b.hidden = !b.hidden; };
+  document.querySelectorAll('[data-plano]').forEach((b) => b.onclick = () => {
+    const p = s.planos[b.dataset.plano];
+    const msg = `Olá! Quero ${s.plano === 'teste' ? 'contratar' : 'alterar para'} o plano ${p.nome} do Kontor Gestão Contabilidade.\nPlano atual: ${s.planoNome}\nCliente: ${s.cliente || '(a informar)'}\nCódigo do computador: ${s.codigoComputador}`;
+    window.open(`https://wa.me/${s.suporteWhatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
+  });
   const copiar = $('#copiar-cod');
   if (copiar) copiar.onclick = async () => { try { await navigator.clipboard.writeText(s.codigoComputador); aviso('Código copiado.'); } catch { aviso('Selecione o código e copie com Ctrl+C.'); } };
   const fl = $('#form-lic');

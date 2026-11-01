@@ -10,7 +10,7 @@ import { EdicaoUsuario, NovoUsuario, confirmarRecuperacao, criarUsuario, editarU
 import { config } from './config.js';
 import { camposDesconhecidos, exemplo, listarModelos, ModeloEditado, renderizar, restaurarModelo, salvarModelo } from './servicos/modelos-email.js';
 import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
-import { ativarLicenca, exigirLicenca, statusLicenca } from './licenca.js';
+import { ativarLicenca, exigirLicenca, exigirLimite, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
@@ -299,6 +299,7 @@ export async function rotas(app: FastifyInstance) {
       // já é cliente da carteira: passa a ser também empresa do sistema, sem duplicar
       const ja = db.prepare('SELECT id, gerencia FROM empresas WHERE escritorio_id = ? AND documento = ?').get(u(req).escritorio_id, d.documento) as any;
       if (ja?.gerencia) throw new ErroNegocio('Esta empresa já está cadastrada.', 409);
+      exigirLimite('empresas');
       if (ja) {
         db.prepare(`UPDATE empresas SET razao_social=?, nome_fantasia=?, inscricao_municipal=?, cod_municipio=?, uf=?, email=?, op_simp_nac=?, reg_ap_trib_sn=?, reg_esp_trib=?, p_tot_trib_sn=?, ambiente=?, serie=?, modo_emissao=?, portal_login=? WHERE id=?`)
           .run(d.razao_social, d.nome_fantasia ?? null, d.inscricao_municipal ?? null, d.cod_municipio, d.uf ?? null, d.email || null, d.op_simp_nac, d.op_simp_nac === 3 ? d.reg_ap_trib_sn ?? 1 : null,
@@ -409,6 +410,7 @@ export async function rotas(app: FastifyInstance) {
       const id = Number((req.params as any).id);
       checarEmpresa(req, id);
       const d = Tomador.parse(req.body);
+      exigirLimite('clientes', d.documento);
       const naCarteira = d.documento ? db.prepare('SELECT 1 FROM empresas e JOIN tomadores t ON t.carteira_empresa_id = e.id WHERE t.empresa_id = ? AND e.documento = ?').get(id, d.documento) : null;
       if (naCarteira) throw new ErroNegocio('Este cliente já está na Carteira de clientes e já aparece nesta lista. Edite-o por lá.', 409);
       conferirServicosPadrao(id, d.servicos_padrao);
@@ -797,7 +799,7 @@ export async function rotas(app: FastifyInstance) {
       return processarRetorno(id, d.conteudo);
     });
 
-    api.get('/api/licenca', async () => statusLicenca());
+    api.get('/api/licenca', async () => ({ ...statusLicenca(), planos: PLANOS, uso: usoAtual(), suporteWhatsapp: SUPORTE_WHATSAPP }));
     api.post('/api/licenca', { preHandler: exigirPapel('admin') }, async (req) => {
       const d = z.object({ codigo: z.string().min(10) }).parse(req.body);
       return ativarLicenca(d.codigo);

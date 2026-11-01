@@ -11,6 +11,7 @@ Object.assign(process.env, { DATABASE_PATH: path.join(tmp, 'd.db'), STORAGE_DIR:
 const ESC = '06990590000123', PADARIA = '11222333000181', ALFA = '45723174000110', SEMPROC = '27865757000102';
 
 import { COM_PENDENCIAS, REGULAR, relatorioPdf } from './fixtures/situacao-fiscal.js';
+process.env.LICENCA_CHAVE_PUBLICA ??= ''; // sem controle de licença neste teste
 
 test('leitura do relatório de situação fiscal (formato real, páginas giradas)', async () => {
   const { lerRelatorio, textoDoPdf } = await import('../src/servicos/situacao-fiscal.js');

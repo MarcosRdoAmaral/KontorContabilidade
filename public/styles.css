@@ -711,3 +711,10 @@ main:focus, main:focus-visible { outline: none; }
 
 /* subtotal dentro de um relatório (ex.: por carteira) */
 .tabela tr.rel-subtotal td{font-weight:700;background:color-mix(in srgb,var(--laranja) 10%,transparent)}
+
+.planos-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 12px 0; }
+.plano { background: var(--superficie); border: 1px solid var(--borda, #444); border-radius: 10px; padding: 14px; }
+.plano.atual { border-color: var(--laranja); }
+.plano h3 { margin: 0 0 4px; }
+.plano .preco { font-size: 22px; font-weight: 700; margin: 4px 0; }
+.plano .preco small { font-size: 13px; font-weight: 400; opacity: .7; }
