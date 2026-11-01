@@ -521,7 +521,16 @@ async function telaPainel() {
 // Emitir nota
 // ---------------------------------------------------------------------------
 
-async function telaEmitir(notaIdCorrecao) {
+async function telaEmitir(param) {
+  // #/emitir/ID corrige uma nota recusada; #/emitir/clonar-ID emite uma nota nova a partir de outra já emitida
+  const clonarId = /^clonar-(\d+)$/.exec(param ?? '')?.[1];
+  const notaIdCorrecao = clonarId ? null : param;
+  const origem = clonarId ? await api('GET', `/api/notas/${clonarId}`) : null;
+  if (origem && origem.empresa_id !== estado.empresaId && estado.empresas.some((x) => x.id === origem.empresa_id)) {
+    estado.empresaId = origem.empresa_id;
+    try { localStorage.setItem('empresaId', estado.empresaId); } catch { /* ok */ }
+    $('#empresa-atual').value = estado.empresaId; infoEmpresa();
+  }
   const e = empresa();
   const [tomadores, servicos, tiposResp] = await Promise.all([
     api('GET', `/api/empresas/${e.id}/tomadores`),
@@ -530,13 +539,19 @@ async function telaEmitir(notaIdCorrecao) {
   ]);
   const tiposSaida = (tiposResp.tipos ?? []).filter((t) => t.sentido === 'SAIDA');
   const corrigindo = notaIdCorrecao ? await api('GET', `/api/notas/${notaIdCorrecao}`) : null;
-  const p = corrigindo?.payload ?? {};
+  let p = corrigindo?.payload ?? {};
+  if (origem) {
+    // nota importada do portal (ou antiga) não guarda o formulário original: completa com o que está no registro
+    p = { tomadorId: origem.tomador_id, descricao: origem.descricao, valor: String(origem.valor_servico).replace('.', ','), ...(origem.payload?.importadoDoPortal ? {} : origem.payload) };
+    p.competencia = hoje();
+  }
 
   conteudo.innerHTML = `
     <div class="topo"><div>
-      <h1>${corrigindo ? `Corrigir e reenviar DPS nº ${corrigindo.n_dps}` : 'Emitir nota'}</h1>
+      <h1>${corrigindo ? `Corrigir e reenviar DPS nº ${corrigindo.n_dps}` : origem ? 'Emitir nota a partir de outra' : 'Emitir nota'}</h1>
       <p class="sutil">${esc(e.razao_social)} — ${fmtDoc(e.documento)}</p>
     </div></div>
+    ${origem ? `<div class="banner">Copiado da ${origem.n_nfse ? `NFS-e nº ${origem.n_nfse}` : `DPS ${origem.serie}/${origem.n_dps}`} (${esc(origem.tomador_nome ?? 'sem tomador')}, ${brl(origem.valor_servico)}). Isto emite uma <strong>nota nova</strong>, com outro número: confira a competência, o valor e a descrição antes de emitir. <a href="#/nota/${origem.id}">Voltar para a nota</a></div>` : ''}
     ${e.ambiente === 2 ? '<div class="banner teste">Esta empresa está em produção restrita: as notas são de teste e não têm valor fiscal.</div>' : ''}
     ${e.modo_emissao === 'PORTAL' ? '<div class="banner teste">Esta empresa emite as notas pelo portal do Emissor Nacional (sem certificado). Aqui você gera o <strong>boleto</strong>; a nota é emitida no portal e importada em <a href="#/notas">Notas emitidas</a>.</div>' : !e.tem_certificado ? '<div class="banner teste">Cadastre o certificado A1 da empresa antes de emitir.</div>' : ''}
     <form id="form-emitir">
@@ -802,7 +817,7 @@ async function telaEmitir(notaIdCorrecao) {
   renderConferencia();
   habilitarConsultaF2($('#form-emitir'), $('#form-emitir').tomadorId, tomadores);
   ligarBuscaCliente($('#form-emitir').tomadorId, tomadores);
-  $('#novo-tomador').onclick = () => formTomador(null, async (id) => { telaEmitir.prefTomador = id; await telaEmitir(notaIdCorrecao); $('#form-emitir').tomadorId.value = id; });
+  $('#novo-tomador').onclick = () => formTomador(null, async (id) => { telaEmitir.prefTomador = id; await telaEmitir(param); $('#form-emitir').tomadorId.value = id; });
 
   // regra do cliente: nota / nota + boleto / só boleto
   const somaDias = (d, n) => new Date(d.getTime() + n * 86400e3);
@@ -2430,6 +2445,7 @@ async function telaNota(id) {
     ${n.alertas.length ? `<h2>Alertas da Sefin</h2><ul>${n.alertas.map((a) => `<li>${esc(a.Descricao ?? a.descricao ?? JSON.stringify(a))}</li>`).join('')}</ul>` : ''}
     <div class="acoes">
       ${n.chave_acesso ? `<button class="primario" id="b-pdf">Abrir DANFSe</button><button id="b-xml">Baixar XML</button><button id="b-portal">Consultar no portal nacional</button>${estado.usuario.papel !== 'cliente' && n.ambiente === 1 ? `<button id="b-email">Enviar por e-mail${n.status === 'CANCELADA' ? ' (aviso de cancelamento)' : ''}</button><button id="b-whats">Enviar por WhatsApp</button>` : ''}` : ''}
+      ${n.empresa_id && estado.usuario.modulos.includes('emitir') && estado.usuario.papel !== 'cliente' ? `<a href="#/emitir/clonar-${n.id}"><button type="button" id="b-clonar" title="Abre a emissão já preenchida com os dados desta nota">Clonar nota</button></a>` : ''}
       ${['REJEITADA', 'ERRO_COMUNICACAO', 'PENDENTE'].includes(n.status) ? `<a href="#/emitir/${n.id}"><button type="button">Corrigir e reenviar</button></a><button id="b-reenviar">Reenviar sem alterar</button>` : ''}
       ${n.status === 'ERRO_COMUNICACAO' ? '<button id="b-consultar">Consultar na Sefin</button>' : ''}
       ${podeCancelar ? '<button class="perigo" id="b-cancelar">Cancelar nota</button>' : ''}

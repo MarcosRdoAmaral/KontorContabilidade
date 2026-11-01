@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.28.2';
+export const MANUAL_VERSAO = '1.29.0';
 
 export const MANUAL = [
   {
@@ -294,6 +294,7 @@ export const MANUAL = [
       <p><strong>Retenção dispensada:</strong> retenção de até R$ 10,00 não é feita, a cada pagamento: PIS + COFINS + CSLL são somados (Lei 10.833/2003, art. 31, § 3º) e o IRRF é avaliado à parte (Lei 9.430/1996, art. 67). O valor dispensado <em>não se acumula</em> com notas seguintes (Solução de Consulta RFB 258/2024). O sistema aplica isso ao calcular as retenções pelos percentuais e na emissão automática, e mostra “Dispensada” na conferência. Para reter mesmo assim, digite o valor retido.</p>
       <h3>Se algo der errado</h3>
       <ul>
+        <li><strong>Clonar nota:</strong> na tela de qualquer nota emitida, o botão <em>Clonar nota</em> abre a emissão já preenchida (cliente, serviço, valor, descrição e tributação) com a competência de hoje. Confira os dados e emita: sai uma nota nova, com outro número.</li>
         <li><strong>Rejeitada:</strong> a tela da nota mostra o código e o motivo. Use <em>Corrigir e reenviar</em>; o número da DPS é mantido.</li>
         <li><strong>Sem resposta da Sefin:</strong> use <em>Consultar na Sefin</em> antes de reenviar; a nota pode já ter sido gerada e é recuperada sem duplicar.</li>
       </ul>
