@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.32.0';
+export const MANUAL_VERSAO = '1.33.0';
 
 export const MANUAL = [
   {
@@ -34,13 +34,11 @@ export const MANUAL = [
       <p class="dica">O menu mostra só o que o seu usuário tem permissão de usar (Configurações &gt; Usuários e acessos). Este manual está liberado para todos os usuários: em Relatórios &gt; Documentação, ou no item Documentação do menu para quem não tem o acesso a Relatórios.</p>`,
   },
   {
-    id: 'inicio', titulo: 'Início', resumo: 'Tela de abertura com lembretes do dia, dica e mensagem.',
+    id: 'inicio', titulo: 'Início e lembretes', resumo: 'Tela de abertura com acesso rápido, dica e mensagem do dia; lembretes no sininho.',
     corpo: `
-      <p>Ao abrir o programa, a tela <strong>Início</strong> mostra a logo, a saudação e, à direita:</p>
-      <ul>
-        <li><strong>Lembretes de hoje:</strong> obrigações atrasadas, que vencem hoje ou nos próximos 3 dias; certificados e procurações vencendo em 30 dias; DAS e DARF do mês passado gerados e ainda não enviados; falhas no envio automático do DP; mensagens relevantes não lidas na caixa postal; parcelas em atraso e clientes perto do sublimite. Cada usuário vê só o que tem acesso; clique no lembrete para ir à tela.</li>
-        <li><strong>Dica do dia</strong> sobre o Kontor e uma <strong>mensagem</strong> para o dia, que mudam todo dia.</li>
-      </ul>`,
+      <p>Ao abrir o programa, a tela <strong>Início</strong> mostra a saudação, a logo, o <strong>acesso rápido</strong> às telas mais usadas (conforme os acessos do usuário), a <strong>dica do dia</strong> sobre o Kontor e uma <strong>mensagem</strong> para o dia.</p>
+      <p>Os <strong>lembretes</strong> ficam no <strong>sininho</strong>, no alto de todas as telas. O número mostra quantos pedem ação (vermelho quando há algo atrasado). Clique no sininho para ver a lista: obrigações atrasadas, que vencem hoje ou nos próximos 3 dias; certificados e procurações vencendo em 30 dias; DAS e DARF do mês passado gerados e ainda não enviados; falhas no envio automático do DP; mensagens relevantes não lidas na caixa postal; parcelas em atraso e clientes perto do sublimite. Cada usuário vê só o que tem acesso; clique num lembrete para ir direto à tela.</p>
+      <p>Ao lado do sininho fica o seu nome, com atalhos para <em>Minha conta</em>, <em>Aparência</em> e <em>Sair</em>.</p>`,
   },
   {
     id: 'visao', titulo: 'Visão geral do escritório', resumo: 'Prazos, certificados e honorários de toda a carteira numa tela.',

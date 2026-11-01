@@ -5892,33 +5892,6 @@ const MENSAGENS_DIA = [
   'Respire: um problema de cada vez sempre tem solução.',
 ];
 
-async function telaInicio() {
-  const agora = new Date();
-  const h = agora.getHours();
-  const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
-  const dia = Math.floor((Date.now() - agora.getTimezoneOffset() * 6e4) / 864e5);
-  const nome = String(estado.usuario?.nome ?? '').split(' ')[0];
-  const dataLonga = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const cartao = (ic, titulo, corpo, acao = '', cls = '') => `<section class="cartao inicio-cartao ${cls}"><header class="inicio-cab"><span class="inicio-ic">${icone(ic)}</span><h2>${titulo}</h2>${acao}</header>${corpo}</section>`;
-  conteudo.innerHTML = `
-    <div class="inicio">
-      <section class="inicio-marca">
-        <img src="/logo.svg" alt="Kontor Gestão Contabilidade" class="inicio-logo">
-        <p class="inicio-saudacao">${saudacao}${nome ? `, <span>${esc(nome)}</span>` : ''}!</p>
-        <span class="inicio-traco" aria-hidden="true"></span>
-        <p class="sutil inicio-data">${icone('calendario')}${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</p>
-      </section>
-      <aside class="inicio-lado">
-        ${cartao('calendario', 'Lembretes de hoje', '<div id="ini-lembretes"><p class="dica">Carregando…</p></div>')}
-        ${cartao('lampada', 'Dica do dia', `<p>${esc(DICAS_KONTOR[dia % DICAS_KONTOR.length])}</p>`, `<a href="#/relatorios/documentacao" class="inicio-acao">Ver o manual ${icone('seta', 'ico ico-p')}</a>`)}
-        ${cartao('sol', 'Para o seu dia', `<p>${esc(MENSAGENS_DIA[dia % MENSAGENS_DIA.length])}</p>`, '', 'inicio-mensagem')}
-      </aside>
-    </div>`;
-  try {
-    const { lembretes } = await api('GET', '/api/inicio');
-    $('#ini-lembretes').innerHTML = listaLembretes(lembretes);
-  } catch { $('#ini-lembretes').innerHTML = '<p class="dica">Não foi possível carregar os lembretes agora.</p>'; }
-}
 
 // ---------------------------------------------------------------------------
 // Ícones (traço fino, herdam a cor do tema), menu com ícones, sininho e usuário no topo
@@ -5962,6 +5935,8 @@ const ICONES = {
   alerta: 'M12 3 2 20h20zM12 9v5M12 17h.01',
   usuario: 'M20 21v-1a5 5 0 0 0-5-5H9a5 5 0 0 0-5 5v1M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   chevron: 'M6 9l6 6 6-6',
+  raio: 'M13 2 4 14h7l-1 8 9-12h-7z',
+  foguete: 'M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M9 13l2 2M14.5 4.5c2.5-1.5 5-1.5 5.5-1s.5 3-1 5.5l-6 6-4.5-4.5zM9 9H5l-2 3 4 1M15 15v4l-3 2-1-4M15 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
 };
 const icone = (k, cls = 'ico') => (ICONES[k] ? `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[k]}"/></svg>` : '');
 
@@ -6016,6 +5991,63 @@ async function atualizarSino(forcar = false) {
   const n = lembretes.filter((l) => l.nivel !== 'INFO').length;
   $('#topo-badge').hidden = !n; $('#topo-badge').textContent = n > 9 ? '9+' : String(n);
   $('#topo-sino').classList.toggle('tem-atencao', lembretes.some((l) => l.nivel === 'ATENCAO'));
-  $('#topo-painel').innerHTML = `<header><b>Lembretes de hoje</b>${typeof telaInicio === 'function' ? `<a href="#/inicio">Ver tudo ${icone('seta', 'ico ico-p')}</a>` : ''}</header>${listaLembretes(lembretes)}`;
+  $('#topo-painel').innerHTML = `<header><b>Lembretes de hoje</b></header>${listaLembretes(lembretes)}`;
   $('#topo-painel').querySelectorAll('a').forEach((a) => (a.onclick = () => { $('#topo-painel').hidden = true; $('#topo-sino').setAttribute('aria-expanded', 'false'); }));
 }
+
+// ---------------------------------------------------------------------------
+// Início: boas-vindas, acesso rápido, dica e mensagem do dia (os lembretes ficam no sininho do topo)
+// ---------------------------------------------------------------------------
+async function telaInicio() {
+  const agora = new Date();
+  const h = agora.getHours();
+  const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const dia = Math.floor((Date.now() - agora.getTimezoneOffset() * 6e4) / 864e5);
+  const nome = String(estado.usuario?.nome ?? '').split(' ')[0];
+  const dataLonga = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const pode = (m) => m.split(' ').some((x) => estado.usuario.modulos.includes(x));
+  const acessos = INICIO.acessos.filter((a) => pode(a.modulo)).slice(0, 4);
+  const cartao = (ic, titulo, corpo, cls = '') => `<section class="cartao inicio-cartao ${cls}"><header class="inicio-cab"><span class="inicio-ic">${icone(ic)}</span><h2>${titulo}</h2></header>${corpo}</section>`;
+  conteudo.innerHTML = `
+    <div class="inicio2">
+      <div class="inicio2-principal">
+        <section class="inicio-hero">
+          <div class="inicio-hero-texto">
+            <p class="inicio-hero-data">${icone('calendario')}${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</p>
+            <h1>${saudacao}${nome ? `, <span>${esc(nome)}</span>` : ''}!</h1>
+            <p class="inicio-hero-sub">${esc(INICIO.subtitulo)}</p>
+            <span class="inicio-traco2" aria-hidden="true"></span>
+          </div>
+          <img src="/logo.svg" alt="${esc(INICIO.produto)}" class="inicio-logo inicio-hero-logo">
+        </section>
+        ${acessos.length ? `<section class="inicio-acessos"><h2>${icone('raio')}Acesso rápido</h2>
+          <div class="inicio-acessos-grade">${acessos.map((a) => `<a class="inicio-atalho" href="${a.href}"><span class="inicio-ic">${icone(a.icone)}</span><strong>${esc(a.titulo)}</strong><span class="inicio-atalho-sub">${esc(a.sub)}</span>${icone('seta', 'ico ico-p inicio-atalho-seta')}</a>`).join('')}</div></section>` : ''}
+        <a class="inicio-banner" href="#/relatorios/documentacao">
+          <span class="inicio-banner-ic">${icone('foguete')}</span>
+          <span class="inicio-banner-texto"><strong>Sua rotina ainda mais <span>simples.</span></strong><span>Conheça todas as funcionalidades do ${esc(INICIO.produto)} no manual.</span></span>
+          <span class="inicio-banner-botao">Ver o manual ${icone('seta', 'ico ico-p')}</span>
+        </a>
+      </div>
+      <aside class="inicio2-lado">
+        ${cartao('lampada', 'Dica do dia', `<p>${esc(INICIO.dicas[dia % INICIO.dicas.length])}</p>`)}
+        ${cartao('sol', 'Para o seu dia', `<p>${esc(INICIO.mensagens[dia % INICIO.mensagens.length])}</p>`, 'inicio-mensagem')}
+        <p class="dica inicio-dica-sino">${icone('sino', 'ico ico-p')} Os lembretes do dia ficam no sininho, no alto da tela.</p>
+      </aside>
+    </div>`;
+}
+
+const INICIO = {
+  produto: 'Kontor Gestão Contabilidade',
+  subtitulo: 'Aqui você encontra tudo o que precisa para gerir o seu escritório contábil com mais eficiência.',
+  acessos: [
+    { href: '#/monitor', icone: 'monitor', titulo: 'Monitor fiscal', sub: 'Acompanhe a sua carteira', modulo: 'visao situacao' },
+    { href: '#/obrigacoes', icone: 'obrigacoes', titulo: 'Obrigações e prazos', sub: 'Não perca prazos', modulo: 'obrigacoes' },
+    { href: '#/controle', icone: 'controle', titulo: 'Controle mensal', sub: 'Feche e envie o mês', modulo: 'controle' },
+    { href: '#/captura', icone: 'captura', titulo: 'Captura de documentos', sub: 'Receba as notas', modulo: 'captura' },
+    { href: '#/carteira', icone: 'carteira', titulo: 'Carteira de clientes', sub: 'Cadastro e perfil', modulo: 'carteira' },
+    { href: '#/cobrancas', icone: 'cobrancas', titulo: 'Cobranças', sub: 'Boletos e Pix', modulo: 'cobrancas' },
+    { href: '#/emitir', icone: 'emitir', titulo: 'Emitir nota', sub: 'NFS-e do escritório', modulo: 'emitir' },
+  ],
+  dicas: DICAS_KONTOR,
+  mensagens: MENSAGENS_DIA,
+};
