@@ -2011,6 +2011,36 @@ async function telaDocumentacao() {
 }
 
 const GRUPOS_REL = ['Faturamento', 'Contas a receber', 'Despesas e pagamentos', 'Fiscal e retenções', 'Resultado e caixa', 'Clientes'];
+/** Relatórios fiscais da carteira (os mesmos do Monitor fiscal), abertos pela tela de Relatórios. */
+async function relatorioFiscal(tipo) {
+  const corpo = conteudo.querySelector('.rel-corpo');
+  corpo.innerHTML = '<p class="sutil">Carregando os clientes…</p>';
+  const cart = await api('GET', '/api/escritorio/carteira').catch(() => []);
+  const lista = (Array.isArray(cart) ? cart : cart.clientes ?? []).filter((c) => c.situacao !== 'ENCERRADO').sort((a, b) => (a.nome_fantasia || a.razao_social).localeCompare(b.nome_fantasia || b.razao_social));
+  const nome = (c) => c.nome_fantasia || c.razao_social;
+  const resp = [...new Set(lista.map((c) => c.responsavel).filter(Boolean))].sort();
+  corpo.innerHTML = tipo === 'pend' ? `<form id="form-fis" class="filtros grade">
+      <div class="largo"><strong>Pendências por cliente</strong><span class="dica" style="display:block">PDF consolidado da carteira no papel timbrado: totais em aberto (Receita/PGFN, FGTS, parcelas em atraso), uma linha por cliente com pendência e o detalhe de cada um. Usa as últimas consultas feitas no Kontor. Também fica no Monitor fiscal.</span></div>
+      <label>Responsável <select name="resp"><option value="">Todos</option>${resp.map((r) => `<option>${esc(r)}</option>`).join('')}</select></label>
+      <label>Cliente <select name="cli"><option value="">Todos</option>${lista.map((c) => `<option value="${c.id}">${esc(nome(c))}</option>`).join('')}</select></label>
+      <div class="acoes"><button class="primario" type="submit">Gerar PDF</button></div></form>`
+    : `<form id="form-fis" class="filtros grade">
+      <div class="largo"><strong>Situação fiscal do cliente</strong><span class="dica" style="display:block">PDF com tudo de um cliente: situação geral, total em aberto, resumo por processo, débitos na Receita e PGFN, parcelamentos, FGTS, caixa postal, obrigações, certificados e sublimite do Simples. Também fica no Monitor fiscal, clicando no nome do cliente.</span></div>
+      <label class="largo">Cliente <select name="cli" required><option value="">Escolha o cliente</option>${lista.map((c) => `<option value="${c.id}">${esc(nome(c))}</option>`).join('')}</select></label>
+      <div class="acoes"><button class="primario" type="submit">Gerar PDF</button></div></form>`;
+  $('#form-fis').onsubmit = async (ev) => {
+    ev.preventDefault(); const fm = ev.target, b = fm.querySelector('button'); b.disabled = true;
+    try {
+      if (tipo === 'sit') await baixar(`/api/escritorio/monitor/${fm.cli.value}/relatorio`, 'Situacao_Fiscal.pdf', true);
+      else {
+        const ids = fm.cli.value ? [fm.cli.value] : fm.resp.value ? lista.filter((c) => c.responsavel === fm.resp.value).map((c) => c.id) : [];
+        if (fm.resp.value && !ids.length) return aviso('Nenhum cliente desse responsável.');
+        await baixar(`/api/escritorio/monitor/pendencias${ids.length ? `?ids=${ids.join(',')}` : ''}`, 'Pendencias_por_cliente.pdf', true);
+      }
+    } finally { b.disabled = false; }
+  };
+}
+
 async function telaRelatorios(aba) {
   if (aba === 'documentacao') return telaDocumentacao();
   const cat = await api('GET', '/api/relatorios');
@@ -2018,11 +2048,13 @@ async function telaRelatorios(aba) {
   const est = telaRelatorios.est ??= { rel: cat[0].id, de: ini, ate: fim, tomadorId: '', situacao: '' };
   const clientes = await api('GET', `/api/empresas/${estado.empresaId}/tomadores`).catch(() => []);
   const fmtCel = (v, t) => (v == null || v === '' ? '' : t === 'moeda' ? brl(v) : t === 'data' ? dataBr(v) : esc(String(v)));
+  const podeFiscal = ['visao', 'situacao'].some((m) => estado.usuario.modulos.includes(m));
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Relatórios</h1><p class="sutil">A nota e o boleto têm datas diferentes (emissão, vencimento, pagamento). Cada relatório diz qual data usa no filtro e mostra as outras nas colunas.</p></div></div>
     <nav class="abas" aria-label="Relatórios"><a href="#/relatorios" class="ativo">Relatórios</a><a href="#/relatorios/documentacao">Documentação</a></nav>
     <div class="rel-layout">
-    <nav class="rel-grupos" aria-label="Tipos de relatório">${GRUPOS_REL.filter((g) => cat.some((c) => c.grupo === g)).map((g) => `<details class="grupo" ${cat.some((c) => c.grupo === g && c.id === est.rel) ? 'open' : ''}><summary>${esc(g)} <span class="dica">${cat.filter((c) => c.grupo === g).length}</span></summary>
+    <nav class="rel-grupos" aria-label="Tipos de relatório">${podeFiscal ? `<details class="grupo" open><summary>Fiscal dos clientes <span class="dica">2</span></summary>
+      <a href="#" data-fis="pend">Pendências por cliente</a><a href="#" data-fis="sit">Situação fiscal do cliente</a></details>` : ''}${GRUPOS_REL.filter((g) => cat.some((c) => c.grupo === g)).map((g) => `<details class="grupo" ${cat.some((c) => c.grupo === g && c.id === est.rel) ? 'open' : ''}><summary>${esc(g)} <span class="dica">${cat.filter((c) => c.grupo === g).length}</span></summary>
       ${cat.filter((c) => c.grupo === g).map((c) => `<a href="#" data-rel="${c.id}" class="${c.id === est.rel ? 'ativo' : ''}">${esc(c.titulo)}</a>`).join('')}</details>`).join('')}</nav>
     <div class="rel-corpo">
     <form id="form-rel" class="filtros grade">
@@ -2036,6 +2068,7 @@ async function telaRelatorios(aba) {
     </form>
     <div id="res-rel"><div class="vazio">Escolha o relatório ao lado, ajuste o período e clique em Gerar.</div></div>
     </div></div>`;
+  conteudo.querySelectorAll('[data-fis]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); conteudo.querySelectorAll('[data-rel], [data-fis]').forEach((x) => x.classList.toggle('ativo', x === a)); relatorioFiscal(a.dataset.fis); }));
   const f = $('#form-rel');
   const atual = () => ({ rel: f.rel.value, de: f.de.value, ate: f.ate.value, tomadorId: f.tomadorId.value, situacao: f.situacao.value });
   const ajustar = () => { const c = cat.find((x) => x.id === f.rel.value); $('#tit-rel').textContent = c.titulo; $('#desc-rel').textContent = `${c.descricao} Filtra por: ${c.filtroData}.`; $('#lbl-sit').hidden = !c.situacoes; if (!c.situacoes) f.situacao.value = ''; };
