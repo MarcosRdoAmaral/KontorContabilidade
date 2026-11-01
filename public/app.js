@@ -2332,7 +2332,7 @@ function avisarVencimentoLicenca(s) {
 }
 
 async function atualizarLicenca() {
-  const el = $('#licenca-info');
+  const el = $('#licenca-info') ?? document.createElement('span'); // a situação da licença fica em Configurações > Licença
   try {
     const s = await api('GET', '/api/licenca');
     estado.licenca = s;
@@ -5947,9 +5947,6 @@ function iconesMenu() {
     if (ICONES[chave]) a.insertAdjacentHTML('afterbegin', icone(chave));
   });
   document.querySelectorAll('.lateral-rodape [data-icone]').forEach((el) => { if (!el.querySelector('svg.ico')) el.insertAdjacentHTML('afterbegin', icone(el.dataset.icone)); });
-  // a etiqueta da licença fica junto de Configurações e leva direto à aba Licença
-  const lic = $('#licenca-info');
-  if (lic) lic.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); location.hash = '#/config/licenca'; };
 }
 
 /** Barra do topo: sininho com os lembretes do usuário e o menu do usuário. */
