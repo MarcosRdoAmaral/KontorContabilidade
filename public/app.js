@@ -5012,8 +5012,37 @@ async function detalheFgtsCliente(empresaId) {
         <td class="num">${x.qtdTrabalhadores ?? ''}</td><td class="num">${v((x.vlMensal ?? 0) + (x.vlRescisorio ?? 0) + (x.vlCompensatorio ?? 0) + (x.vlProcessoTrabalhista ?? 0))}</td>
         <td class="num">${v((x.vlEncargos ?? 0) + (x.vlAtualizacaoMonetaria ?? 0) + (x.vlJuros ?? 0) + (x.vlMulta ?? 0))}</td><td class="num"><strong>${v(x.vlTotal)}</strong></td></tr>`)).join('')}</tbody></table>
       <p class="dica">A guia é emitida no próprio FGTS Digital (Gestão de Guias &gt; Emissão de Guia Rápida), com a data de pagamento que o cliente escolher.</p>`}
+    <h3>Guias e recibos</h3>
+    ${d.documentos?.length ? `<table class="tabela"><thead><tr><th>Baixado em</th><th>Documento</th><th>Competência</th><th>Vencimento</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+      ${d.documentos.map((x) => `<tr><td>${dhBr(x.criado_em)}${x.usuario ? `<br><span class="dica">${esc(x.usuario)}</span>` : ''}</td><td>${x.tipo === 'GUIA' ? 'Guia' : 'Recibo'}<br><span class="dica">${esc(x.nome)}</span></td>
+        <td>${x.competencia ? rotuloMes(x.competencia) : '—'}</td><td>${dataBr(x.vencimento) || '—'}</td><td class="num">${x.valor != null ? brl(x.valor) : '—'}</td>
+        <td><button type="button" data-doc="${x.id}">Abrir</button></td></tr>`).join('')}</tbody></table>` : '<p class="dica">Nenhuma guia ou recibo baixado pelo Kontor ainda.</p>'}
+    ${window.nfseDesktop?.fgtsDocumento ? `<div class="filtros grade fgts-doc">
+      <label>Competência da guia <select id="fg-comp">${(() => { const l = []; for (let i = 0, m = mesAnterior(mesAtual()); i < 13; i++, m = mesAnterior(m)) l.push(m); return l.map((m) => `<option value="${m}">${rotuloMes(m)}</option>`).join(''); })()}</select></label>
+      <div class="acoes"><button type="button" class="primario" id="fg-guia">Emitir ou recalcular guia</button><button type="button" id="fg-recibo">Baixar recibo</button></div>
+      <p class="dica largo" id="fg-msg">O Kontor abre o FGTS Digital no perfil de procurador deste cliente. Lá você escolhe a competência e a data de pagamento (outra data recalcula multa e juros) e emite; o PDF fica guardado aqui e o valor da guia vai para o Controle mensal (DP &gt; FGTS) da competência escolhida.</p></div>`
+      : '<p class="dica">Emitir ou recalcular a guia e baixar o recibo funciona no aplicativo instalado (Windows), que entra no FGTS Digital com o certificado.</p>'}
     ${d.anteriores.length ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.anteriores.map((a) => `<li>${dhBr(a.consultado_em)} — ${esc(SIT_FGTS[a.situacao]?.[0] ?? a.situacao)}${a.situacao === 'EM_ABERTO' ? ` (${brl(a.total ?? 0)})` : ''}</li>`).join('')}</ul>` : ''}
-    <div class="acoes"><button data-fechar class="primario">Fechar</button></div></div>`);
+    <div class="acoes"><button data-fechar class="primario">Fechar</button></div></div>`, (dlg) => {
+    dlg.querySelectorAll('[data-doc]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/fgts/${empresaId}/documentos/${b.dataset.doc}`, 'FGTS.pdf', true)));
+    const ultimaComp = u?.competencias?.map((c) => c.competencia).filter((c) => /^\d{4}-\d{2}$/.test(c ?? '')).sort().at(-1);
+    if (ultimaComp && dlg.querySelector(`#fg-comp option[value="${ultimaComp}"]`)) dlg.querySelector('#fg-comp').value = ultimaComp;
+    const pedir = async (tipo, b) => {
+      const msg = dlg.querySelector('#fg-msg'), ponte = window.nfseDesktop;
+      dlg.querySelectorAll('.fgts-doc button').forEach((x) => (x.disabled = true));
+      ponte.aoAndamentoFgts?.((p) => { if (p?.mensagem) msg.textContent = p.mensagem; });
+      msg.textContent = 'Abrindo o FGTS Digital…';
+      try {
+        const r = await ponte.fgtsDocumento({ documento: d.documento, nome: d.cliente }, tipo);
+        if (!r?.ok) throw new Error(r?.erro ?? 'Não foi possível baixar o PDF.');
+        const s = await api('POST', `/api/escritorio/fgts/${empresaId}/documentos`, { tipo, competencia: tipo === 'GUIA' ? dlg.querySelector('#fg-comp').value : null, nome: r.nome, base64: r.base64 });
+        aviso(tipo === 'GUIA' ? `Guia guardada${s.valor != null ? `: ${brl(s.valor)}${s.vencimento ? `, vence ${dataBr(s.vencimento)}` : ''} (lançada no Controle mensal)` : ''}.` : 'Recibo guardado.');
+        detalheFgtsCliente(empresaId);
+      } catch (e) { msg.textContent = mensagemErro(e); msg.classList.add('erro'); dlg.querySelectorAll('.fgts-doc button').forEach((x) => (x.disabled = false)); }
+    };
+    dlg.querySelector('#fg-guia') && (dlg.querySelector('#fg-guia').onclick = (ev) => pedir('GUIA', ev.target));
+    dlg.querySelector('#fg-recibo') && (dlg.querySelector('#fg-recibo').onclick = (ev) => pedir('RECIBO', ev.target));
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ export function detalheFgts(escritorioId: number, empresaId: number) {
     const { competencias_json, ...r } = i === 0 ? fgtsNaData(x)! : { ...x, competencias: x.competencias_json ? JSON.parse(x.competencias_json) : [] };
     return { ...r, notificacao: r.notificacao == null ? null : !!r.notificacao };
   });
-  return { ...e, ultima: ultima ?? null, anteriores: anteriores.map(({ competencias, ...r }) => r) };
+  return { ...e, ultima: ultima ?? null, anteriores: anteriores.map(({ competencias, ...r }) => r), documentos: listarDocumentosFgts(empresaId) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -106,4 +106,38 @@ export function fgtsNaData<T extends Record<string, any>>(f: T | null | undefine
     a_vencer: soma(futuras), qtd_a_vencer: futuras.length,
     proximo_vencimento: futuras.map((c) => c.vencimento).sort()[0] ?? null,
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Guias e recibos do FGTS Digital: o aplicativo abre o portal no perfil do cliente, o usuário emite (ou recalcula
+// com outra data de pagamento) e o PDF baixado volta para cá, ligado ao cliente e, na guia, ao Controle mensal.
+// ---------------------------------------------------------------------------------------------
+export const DocumentoFgts = z.object({
+  tipo: z.enum(['GUIA', 'RECIBO']),
+  competencia: z.string().regex(/^\d{4}-\d{2}$/).nullish(),
+  nome: z.string().trim().min(1).max(160),
+  base64: z.string().min(100).max(14_000_000),
+});
+export async function salvarDocumentoFgts(escritorioId: number, usuarioId: number, empresaId: number, d: z.infer<typeof DocumentoFgts>) {
+  if (!db.prepare('SELECT 1 FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId)) throw new ErroNegocio('Cliente não encontrado.', 404);
+  const pdf = Buffer.from(d.base64, 'base64');
+  if (pdf.subarray(0, 4).toString() !== '%PDF') throw new ErroNegocio('O arquivo baixado do FGTS Digital não é um PDF.');
+  const { lerGuia } = await import('./fechamento.js');
+  const lido = d.tipo === 'GUIA' ? await lerGuia(pdf) : { valor: null, vencimento: null };
+  const id = Number(db.prepare('INSERT INTO fgts_documentos (empresa_id, tipo, competencia, nome, pdf, valor, vencimento, usuario_id) VALUES (?,?,?,?,?,?,?,?)')
+    .run(empresaId, d.tipo, d.competencia ?? null, d.nome.replace(/[^\w.\- ]+/g, '_'), pdf, lido.valor, lido.vencimento, usuarioId).lastInsertRowid);
+  if (d.tipo === 'GUIA' && d.competencia && lido.valor != null) {
+    const { lancarNoControle } = await import('./controle-mensal.js');
+    lancarNoControle(empresaId, d.competencia, 'DP', 'fgts', lido.valor, usuarioId, true);
+  }
+  return { id, valor: lido.valor, vencimento: lido.vencimento };
+}
+export function listarDocumentosFgts(empresaId: number) {
+  return db.prepare(`SELECT d.id, d.tipo, d.competencia, d.nome, d.valor, d.vencimento, d.criado_em, u.nome AS usuario FROM fgts_documentos d LEFT JOIN usuarios u ON u.id = d.usuario_id
+    WHERE d.empresa_id = ? ORDER BY d.id DESC LIMIT 50`).all(empresaId);
+}
+export function documentoFgts(empresaId: number, id: number) {
+  const d = db.prepare('SELECT nome, pdf FROM fgts_documentos WHERE id = ? AND empresa_id = ?').get(id, empresaId) as any;
+  if (!d) throw new ErroNegocio('Documento não encontrado.', 404);
+  return { nome: d.nome.endsWith('.pdf') ? d.nome : `${d.nome}.pdf`, pdf: Buffer.from(d.pdf) };
 }

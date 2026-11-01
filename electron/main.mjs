@@ -3,7 +3,7 @@
 import { app, BrowserWindow, Menu, dialog, shell, safeStorage, net, ipcMain } from 'electron';
 import { spawn, execFileSync } from 'node:child_process';
 import { buscarNovaVersao, urlPermitida } from './atualizador.mjs';
-import { consultarFgts } from './fgts.mjs';
+import { consultarFgts, documentoFgts } from './fgts.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -199,6 +199,14 @@ ipcMain.handle('fgts:consultar', async (e, clientes) => {
   if (fgtsEmAndamento) return { ok: false, erro: 'Já há uma consulta ao FGTS Digital em andamento.' };
   fgtsEmAndamento = true;
   try { return { ok: true, resultados: await consultarFgts(janela, Array.isArray(clientes) ? clientes.slice(0, 500) : [], (p) => { if (!e.sender.isDestroyed()) e.sender.send('fgts:andamento', p); }) }; }
+  catch (err) { return { ok: false, erro: String(err?.message ?? err) }; }
+  finally { fgtsEmAndamento = false; }
+});
+ipcMain.handle('fgts:documento', async (e, cliente, tipo) => {
+  if (fgtsEmAndamento) return { ok: false, erro: 'Já há uma consulta ao FGTS Digital em andamento.' };
+  if (!cliente?.documento || !['GUIA', 'RECIBO'].includes(tipo)) return { ok: false, erro: 'Pedido inválido.' };
+  fgtsEmAndamento = true;
+  try { return await documentoFgts(janela, { documento: String(cliente.documento).replace(/\D/g, ''), nome: String(cliente.nome ?? '') }, tipo, (p) => { if (!e.sender.isDestroyed()) e.sender.send('fgts:andamento', p); }); }
   catch (err) { return { ok: false, erro: String(err?.message ?? err) }; }
   finally { fgtsEmAndamento = false; }
 });

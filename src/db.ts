@@ -1122,6 +1122,20 @@ const migracoes: string[] = [
   ALTER TABLE cobrancas ADD COLUMN cora_pdf_url TEXT;
   ALTER TABLE cobrancas ADD COLUMN cora_pdf BLOB;
   CREATE UNIQUE INDEX idx_cobrancas_cora ON cobrancas(cora_id) WHERE cora_id IS NOT NULL;`,
+  // 46: guias e recibos do FGTS Digital baixados pelo aplicativo (emitidos ou recalculados no portal, dentro do Kontor)
+  `CREATE TABLE fgts_documentos (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id),
+    tipo TEXT NOT NULL CHECK (tipo IN ('GUIA','RECIBO')),
+    competencia TEXT,
+    nome TEXT NOT NULL,
+    pdf BLOB NOT NULL,
+    valor REAL,
+    vencimento TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_fgts_documentos ON fgts_documentos(empresa_id, criado_em);`,
 ];
 
 export function migrar(): void {

@@ -21,7 +21,7 @@ import { atualizarReceitas, consultarDeclaracaoPgdas, buscarPgdas, transmitirPgd
 import { AREAS, LinhaControle, listarControle, salvarLinha } from './servicos/controle-mensal.js';
 import { Acesso, listarAcessos, revelarAcesso, salvarAcesso } from './servicos/acessos.js';
 import { analisarControle, importarControle } from './servicos/importar-controle.js';
-import { ResultadoFgts, detalheFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
+import { DocumentoFgts, ResultadoFgts, detalheFgts, documentoFgts, salvarDocumentoFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
 import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
@@ -394,6 +394,12 @@ export async function rotasEscritorio(app: FastifyInstance) {
       return salvarResultadosFgts(u(req).escritorio_id, u(req).id, b.resultados);
     });
     api.get('/api/escritorio/fgts/:id', async (req) => { checar(req, id(req)); return detalheFgts(u(req).escritorio_id, id(req)); });
+    api.post('/api/escritorio/fgts/:id/documentos', { bodyLimit: 15 * 1024 * 1024 }, async (req) => { checar(req, id(req)); return salvarDocumentoFgts(u(req).escritorio_id, u(req).id, id(req), DocumentoFgts.parse(req.body)); });
+    api.get('/api/escritorio/fgts/:id/documentos/:doc', async (req, reply) => {
+      checar(req, id(req));
+      const d = documentoFgts(id(req), Number((req.params as any).doc));
+      return reply.type('application/pdf').header('content-disposition', `inline; filename="${d.nome}"`).send(d.pdf);
+    });
     // recálculo manual de guias (uma por vez, um PDF por guia)
     api.post('/api/escritorio/situacao-fiscal/guias/:id', async (req) => {
       checar(req, id(req));

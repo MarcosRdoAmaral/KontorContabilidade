@@ -266,3 +266,59 @@ export async function consultarFgts(pai, clientes, aoAvisar) {
   }
   return resultados;
 }
+
+/**
+ * Guia (emitida ou recalculada) ou recibo do FGTS Digital: entra no perfil do cliente como procurador, leva o usuário
+ * à tela certa e guarda o primeiro PDF que o portal baixar. Quem escolhe a competência e a data de pagamento é o
+ * usuário, no próprio portal (é ali que o FGTS Digital recalcula encargos para outra data).
+ */
+export async function documentoFgts(pai, cliente, tipo, aoAvisar) {
+  const w = await esperarLogin(pai, aoAvisar);
+  if (!(await logado())) throw new Error('A sessão do FGTS Digital expirou. Entre de novo.');
+  const p = await definirProcurador(w, cliente.documento, cliente.nome, aoAvisar);
+  if (!p.ok) return { ok: false, erro: p.erro ?? p.motivo ?? 'Não foi possível entrar no perfil do cliente.' };
+  const ses = session.fromPartition(PARTICAO);
+  const pasta = fs.mkdtempSync(path.join(app.getPath('temp'), 'kontor-fgts-'));
+  let pronto = null, falhou = null;
+  const aoBaixar = (_e, item) => {
+    const nome = item.getFilename() || `${tipo === 'GUIA' ? 'Guia_FGTS' : 'Recibo_FGTS'}.pdf`;
+    const destino = path.join(pasta, nome.replace(/[^\w.\- ]+/g, '_'));
+    item.setSavePath(destino);
+    item.once('done', (_ev, estado) => {
+      if (estado !== 'completed') { falhou = 'O download foi interrompido.'; return; }
+      try {
+        const buf = fs.readFileSync(destino);
+        if (buf.subarray(0, 4).toString() !== '%PDF') return; // não é o PDF (ex.: planilha); continua esperando
+        pronto = { nome: nome.toLowerCase().endsWith('.pdf') ? nome : `${nome}.pdf`, base64: buf.toString('base64') };
+      } catch (err) { falhou = String(err?.message ?? err); }
+    });
+  };
+  ses.on('will-download', aoBaixar);
+  // PDF aberto em outra janela (blob ou link) vira download
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^blob:|\.pdf(\?|$)|\/pdf|guia|recibo|comprovante/i.test(url)) w.webContents.downloadURL(url);
+    return { action: 'deny' };
+  });
+  try {
+    // leva à tela: o menu do portal é procurado pelo texto (sem achar, o usuário navega)
+    const alvo = tipo === 'GUIA' ? 'emiss[aã]o de guia r[aá]pida|guia r[aá]pida' : 'recibo|comprovante|consulta de pagamento|pagamentos';
+    await js(w, `const re = new RegExp(${JSON.stringify(alvo)}, 'i'); const l = [...document.querySelectorAll('a, button, [role=menuitem], li')].filter((x) => re.test(x.textContent ?? '') && (x.textContent ?? '').length < 80);
+      const b = l.sort((x, y) => x.textContent.length - y.textContent.length)[0]; if (b) (b.closest('a, button') ?? b).click(); return !!b;`).catch(() => false);
+    aoAvisar?.({ etapa: 'documento', mensagem: tipo === 'GUIA'
+      ? `Perfil de ${cliente.nome} aberto. Na Emissão de Guia Rápida, marque a competência, escolha a data de pagamento (outra data recalcula multa e juros) e clique em Emitir. O Kontor guarda a guia sozinho.`
+      : `Perfil de ${cliente.nome} aberto. Abra a guia paga (Gestão de Guias) e baixe o recibo/comprovante. O Kontor guarda o PDF sozinho.` });
+    w.show(); w.focus();
+    const fim = Date.now() + 15 * 60e3;
+    while (Date.now() < fim) {
+      if (pronto) return { ok: true, ...pronto };
+      if (falhou) return { ok: false, erro: falhou };
+      if (!janelaFgts || janelaFgts.isDestroyed()) return { ok: false, erro: 'A janela do FGTS Digital foi fechada antes de baixar o PDF.' };
+      await dormir(700);
+    }
+    return { ok: false, erro: 'Nenhum PDF foi baixado em 15 minutos.' };
+  } finally {
+    ses.removeListener('will-download', aoBaixar);
+    if (janelaFgts && !janelaFgts.isDestroyed()) janelaFgts.webContents.setWindowOpenHandler(() => ({ action: 'allow' }));
+    try { fs.rmSync(pasta, { recursive: true, force: true }); } catch { /* temporário */ }
+  }
+}

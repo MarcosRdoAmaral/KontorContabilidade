@@ -35,6 +35,15 @@ test('relatório consolidado da situação fiscal do cliente (PDF timbrado)', as
     const pdf = await call('GET', `/api/escritorio/monitor/${eid}/relatorio`, undefined, t);
     assert.equal(pdf.status, 200); assert.equal(pdf.tipo, 'application/pdf'); assert.equal(pdf.corpo.subarray(0, 4).toString(), '%PDF');
     assert.equal((await call('GET', '/api/escritorio/monitor/99999/relatorio', undefined, t)).status >= 400, true);
+    // guia do FGTS baixada pelo aplicativo: guardada, lida e lançada no Controle mensal
+    const PDFDocument = (await import('pdfkit')).default;
+    const guia: Buffer = await new Promise((ok) => { const p = new PDFDocument(); const b: Buffer[] = []; p.on('data', (x) => b.push(x)); p.on('end', () => ok(Buffer.concat(b))); p.text('Guia do FGTS Digital - GFD. Pagar este documento até 20/11/2026. Valor total do documento: 798,10'); p.end(); });
+    const sv = await call('POST', `/api/escritorio/fgts/${eid}/documentos`, { tipo: 'GUIA', competencia: '2026-10', nome: 'GFD 10-2026.pdf', base64: guia.toString('base64') }, t);
+    assert.equal(sv.status, 200, JSON.stringify(sv.json)); assert.deepEqual([sv.json.valor, sv.json.vencimento], [798.1, '2026-11-20']);
+    assert.equal(JSON.parse((db.prepare("SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = '2026-10' AND area = 'DP'").get(eid) as any).dados_json).fgts, 798.1);
+    assert.equal((await call('GET', `/api/escritorio/fgts/${eid}`, undefined, t)).json.documentos.length, 1);
+    assert.equal((await call('GET', `/api/escritorio/fgts/${eid}/documentos/${sv.json.id}`, undefined, t)).corpo.subarray(0, 4).toString(), '%PDF');
+    assert.equal((await call('POST', `/api/escritorio/fgts/${eid}/documentos`, { tipo: 'RECIBO', nome: 'x.pdf', base64: Buffer.alloc(200).toString('base64') }, t)).status, 400, 'só PDF');
     // pendências por cliente (carteira toda ou só os escolhidos)
     db.prepare("UPDATE empresas SET na_carteira = 1, situacao = 'ATIVO', eh_escritorio = 0 WHERE id = ?").run(eid);
     const { dadosPendencias } = await import('../src/servicos/relatorio-pendencias.js');
