@@ -3207,6 +3207,10 @@ function telaMinhaConta() {
 const TEMAS = [
   { id: 'azul-dourado', nome: 'Azul e dourado (padrão)', cores: ['#060d1d', '#091226', '#dcb25a'] },
   { id: 'azul-roxo', nome: 'Azul e roxo', cores: ['#070b22', '#0a0f2b', '#a78bfa'] },
+  { id: 'verde-esmeralda', nome: 'Verde petróleo e esmeralda', cores: ['#071918', '#091e1e', '#10B981'] },
+  { id: 'grafite-azul', nome: 'Grafite e azul elétrico', cores: ['#10131f', '#131726', '#38BDF8'] },
+  { id: 'marrom-champagne', nome: 'Marrom e champagne', cores: ['#211915', '#271e19', '#D6A77A'] },
+  { id: 'roxo-rosa', nome: 'Roxo e rosa', cores: ['#191627', '#1e1b30', '#E879A9'] },
   { id: 'preto-laranja', nome: 'Preto e laranja', cores: ['#0f0f0f', '#0a0a0a', '#fb923d'] },
   { id: 'branco-laranja', nome: 'Branco e laranja', cores: ['#ffffff', '#f6f3ef', '#d9600c'] },
 ];
