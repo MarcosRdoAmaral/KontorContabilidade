@@ -2,7 +2,7 @@
 // Não há API pública: o usuário entra no portal numa janela do Kontor, com o certificado digital do escritório
 // (gov.br), e o Kontor usa as mesmas telas do portal para, cliente a cliente, definir o perfil "Procurador" e ler as
 // competências em aberto (Emissão de Guia Rápida). Nada é emitido nem alterado no portal.
-import { app, BrowserWindow, dialog, session } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, session } from 'electron';
 
 const ORIGEM = 'https://fgtsdigital.sistema.gov.br';
 const PARTICAO = 'persist:fgts-digital';
@@ -68,114 +68,131 @@ async function esperarLogin(pai, aoAvisar) {
   throw new Error('O login no FGTS Digital não foi concluído em 10 minutos.');
 }
 
-/** Define o perfil "Procurador" para o CNPJ/CPF do cliente, pelas telas do portal. */
-async function definirProcurador(w, ni) {
-  await w.loadURL(`${ORIGEM}/portal/escolhaPerfil`);
-  // o diálogo "Definir Perfil" abre sozinho ao escolher perfil; se não abrir, usa o botão "Trocar Perfil"
-  const pronto = await js(w, `
-    const achar = () => document.querySelector('input[placeholder="Informe CNPJ ou CPF"]');
-    for (let i = 0; i < 40 && !achar(); i++) {
-      if (i === 6) [...document.querySelectorAll('button')].find((b) => /trocar perfil/i.test(b.textContent))?.click();
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    return !!achar();`);
-  if (!pronto) throw new Error('A tela de escolha de perfil do FGTS Digital não abriu.');
-  // perfil Procurador (ng-select): abre a lista e escolhe a opção, se ainda não estiver escolhida
-  const procurador = await js(w, `
-    const dlg = document.querySelector('[role=dialog]') ?? document;
-    const valor = () => (dlg.querySelector('.ng-value-label, .ng-value')?.textContent ?? '').trim();
-    if (!/procurador/i.test(valor())) {
-      const cb = dlg.querySelector('[role=combobox]') ?? dlg.querySelector('ng-select input');
-      cb?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); cb?.click();
-      for (let i = 0; i < 20; i++) {
-        const op = [...document.querySelectorAll('.ng-option, [role=option]')].find((o) => /^\\s*procurador\\s*$/i.test(o.textContent));
-        if (op) { op.click(); break; }
-        await new Promise((r) => setTimeout(r, 150));
-      }
-    }
+// Ajudantes que rodam dentro da página do portal (o campo do CNPJ e a caixa "Trocar Perfil" são redesenhados pelo portal).
+const AJUDANTES = `
+  const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+  const visivel = (el) => !!el && el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden';
+  const campoNi = () => { const l = [...document.querySelectorAll('input[placeholder*="CNPJ" i], input[placeholder*="CPF" i]')]; return l.find(visivel) ?? l[0] ?? null; };
+  const caixa = () => campoNi()?.closest('[role=dialog], .modal, .br-modal, mat-dialog-container, .cdk-overlay-pane, form') ?? document;
+  const seletorPerfil = () => caixa().querySelector('select, ng-select, .br-select, [role=combobox], [aria-haspopup=listbox]');
+  const perfilAtual = () => {
+    const el = seletorPerfil(); if (!el) return '';
+    if (el.tagName === 'SELECT') return el.selectedOptions[0]?.textContent?.trim() ?? '';
+    const inp = el.matches('input') ? el : el.querySelector('input');
+    return (el.querySelector('.ng-value-label, .ng-value, .br-tag')?.textContent || inp?.value || '').trim();
+  };
+  const ehProcurador = (t) => /^\\s*procurador\\s*$/i.test(t ?? '');
+  const alerta = () => [...document.querySelectorAll('[role=alert], .br-message.danger, .br-message.is-danger, .mensagem-erro, .alert-danger')].filter(visivel)
+    .map((x) => x.textContent.replace(/\\s+/g, ' ').replace(/^\\s*Mensagem de Erro\\s*/i, '').replace(/Fechar\\s*$/i, '').trim()).find(Boolean) ?? '';
+`;
 
-    const campoNi = async (habilitado) => {
-      let ultimo = null;
-      for (let i = 0; i < 60; i++) {
-        const l = [...document.querySelectorAll('input[placeholder="Informe CNPJ ou CPF"]')];
-        const ni = l.find((x) => x.offsetParent !== null) ?? l[0];
-        if (ni && (!habilitado || !ni.disabled)) return ni;
-        ultimo = ni ?? ultimo;
-        await new Promise((r) => setTimeout(r, 150));
+const fmtNi = (ni) => (ni.length === 14 ? ni.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : ni.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4'));
+
+/** O perfil já é o de procurador deste cliente? (cookies do portal, também os que a página não lê). */
+async function perfilConfirmado(ni, w) {
+  const c = await cookies();
+  if (c.fgtsd_tipo_perfil === '2' && String(c.fgtsd_ni_perfil ?? '').replace(/\D/g, '') === ni) return true;
+  // reserva: o cabeçalho do portal mostra "Empregador: <CNPJ> | NOME" e "Usuário (Procurador): ..." sem a caixa aberta
+  if (!w || w.isDestroyed()) return false;
+  return js(w, `${AJUDANTES}
+    const t = document.body?.innerText ?? '';
+    const emp = (t.match(/Empregador:\\s*([\\d./-]+)/) ?? [])[1]?.replace(/\\D/g, '');
+    const caixaAberta = [...document.querySelectorAll('[role=dialog], .br-modal, mat-dialog-container')].some(visivel);
+    return emp === ${JSON.stringify(ni)} && /Usu[aá]rio\\s*\\(Procurador\\)/i.test(t) && !caixaAberta;`).catch(() => false);
+}
+
+/** Tenta preencher a caixa "Trocar Perfil" sozinho: escolhe Procurador, digita o CNPJ/CPF e clica em Selecionar. */
+async function preencherPerfil(w, ni) {
+  // 1) caixa aberta (se não abrir sozinha, usa o botão "Trocar Perfil")
+  const aberta = await js(w, `${AJUDANTES}
+    for (let i = 0; i < 40 && !campoNi(); i++) {
+      if (i === 6 || i === 20) [...document.querySelectorAll('button, a')].find((b) => /trocar perfil/i.test(b.textContent))?.click();
+      await espera(250);
+    }
+    return !!campoNi();`);
+  if (!aberta) return { ok: false, motivo: 'a caixa Trocar Perfil não abriu' };
+  // 2) perfil Procurador
+  const perfil = await js(w, `${AJUDANTES}
+    if (!ehProcurador(perfilAtual())) {
+      const el = seletorPerfil();
+      if (el?.tagName === 'SELECT') {
+        const op = [...el.options].find((o) => ehProcurador(o.textContent));
+        if (op) { el.value = op.value; el.dispatchEvent(new Event('change', { bubbles: true })); }
+      } else if (el) {
+        const alvoClique = [el.querySelector('input'), el.querySelector('button'), el.querySelector('.ng-arrow-wrapper'), el].filter(Boolean);
+        for (const x of alvoClique) { x.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); x.click(); await espera(200); if ([...document.querySelectorAll('.ng-option, [role=option], .br-item, mat-option')].some(visivel)) break; }
+        for (let i = 0; i < 20; i++) {
+          const op = [...document.querySelectorAll('.ng-option, [role=option], .br-item, mat-option, .br-list li, li')].filter(visivel).find((o) => ehProcurador(o.textContent));
+          if (op) { const r = op.querySelector('input[type=radio], input[type=checkbox]'); (r ?? op).click(); if (r) op.querySelector('label')?.click(); break; }
+          await espera(150);
+        }
       }
-      return ultimo; // continua desabilitado: tenta mesmo assim, como antes
-    };
-    const ni = await campoNi(true);
-    if (!ni) return false;
-    ni.focus(); ni.select?.();
-    return true;`);
-  // preenche o CNPJ/CPF: digitação real na janela (a máscara do campo reage a teclas); se não pegar, grava o valor
-  // direto no campo e avisa o formulário do portal
+      await espera(400);
+    }
+    const ni = campoNi();
+    for (let i = 0; i < 20 && ni && ni.disabled; i++) await espera(150);
+    return { perfil: perfilAtual(), campo: !!campoNi() && !campoNi().disabled };`);
+  if (!perfil?.campo) return { ok: false, motivo: `não consegui escolher o perfil Procurador (aparece "${perfil?.perfil || 'vazio'}")` };
+  // 3) CNPJ/CPF: digitação de verdade (a máscara do campo reage ao teclado); se não pegar, grava o valor no campo
   w.focus(); w.webContents.focus();
-  const campo = await js(w, `
-    const campoNi = async (habilitado) => {
-      let ultimo = null;
-      for (let i = 0; i < 60; i++) {
-        const l = [...document.querySelectorAll('input[placeholder="Informe CNPJ ou CPF"]')];
-        const ni = l.find((x) => x.offsetParent !== null) ?? l[0];
-        if (ni && (!habilitado || !ni.disabled)) return ni;
-        ultimo = ni ?? ultimo;
-        await new Promise((r) => setTimeout(r, 150));
-      }
-      return ultimo; // continua desabilitado: tenta mesmo assim, como antes
-    };
-    const ni = await campoNi(true);
-    if (!ni) return false;
-    ni.focus(); ni.click(); return true;`);
-  if (!procurador || !campo) return { ok: false, erro: 'O campo do CNPJ/CPF não ficou disponível na tela de perfil do FGTS Digital (o portal pode ter mudado ou demorado). Tente consultar este cliente de novo.' };
-  for (const ch of ni) {
-    w.webContents.sendInputEvent({ type: 'keyDown', keyCode: ch });
-    w.webContents.sendInputEvent({ type: 'char', keyCode: ch });
-    w.webContents.sendInputEvent({ type: 'keyUp', keyCode: ch });
-  }
+  await js(w, `${AJUDANTES} const ni = campoNi(); ni.focus(); ni.click(); ni.select?.(); return true;`);
+  await w.webContents.insertText(ni);
   await dormir(300);
-  const preenchido = await js(w, `
-    const campoNi = async (habilitado) => {
-      let ultimo = null;
-      for (let i = 0; i < 60; i++) {
-        const l = [...document.querySelectorAll('input[placeholder="Informe CNPJ ou CPF"]')];
-        const ni = l.find((x) => x.offsetParent !== null) ?? l[0];
-        if (ni && (!habilitado || !ni.disabled)) return ni;
-        ultimo = ni ?? ultimo;
-        await new Promise((r) => setTimeout(r, 150));
+  let digitado = await js(w, `${AJUDANTES} return (campoNi()?.value ?? '').replace(/\\D/g, '');`);
+  if (digitado !== ni) {
+    await js(w, `${AJUDANTES} const ni = campoNi(); ni.focus(); ni.select?.(); return true;`);
+    for (const ch of ni) {
+      w.webContents.sendInputEvent({ type: 'keyDown', keyCode: ch });
+      w.webContents.sendInputEvent({ type: 'char', keyCode: ch });
+      w.webContents.sendInputEvent({ type: 'keyUp', keyCode: ch });
+    }
+    await dormir(300);
+    digitado = await js(w, `${AJUDANTES}
+      const ni = campoNi(), alvo = ${JSON.stringify(ni)};
+      if (ni.value.replace(/\\D/g, '') !== alvo) {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        set.call(ni, ${JSON.stringify(fmtNi(ni))}); ni.dispatchEvent(new Event('input', { bubbles: true })); ni.dispatchEvent(new Event('change', { bubbles: true }));
+        await espera(200);
       }
-      return ultimo; // continua desabilitado: tenta mesmo assim, como antes
-    };
-    const ni = await campoNi(false);
-    if (!ni) return false;
-    const alvo = ${JSON.stringify(ni)};
-    if (ni.value.replace(/\D/g, '') !== alvo) {
-      const fmt = alvo.length === 14 ? alvo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : alvo.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      ni.focus(); set.call(ni, fmt);
-      ni.dispatchEvent(new Event('input', { bubbles: true })); ni.dispatchEvent(new Event('change', { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 200));
-      if (ni.value.replace(/\D/g, '') !== alvo) { set.call(ni, alvo); ni.dispatchEvent(new Event('input', { bubbles: true })); }
-    }
-    ni.dispatchEvent(new Event('blur', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 300));
-    return ni.value.replace(/\D/g, '') === alvo;`);
-  if (!preenchido) return { ok: false, erro: 'Não foi possível preencher o CNPJ do cliente na tela do portal.' };
-  const r = await js(w, `
-    const dlg = document.querySelector('[role=dialog]') ?? document;
-    [...dlg.querySelectorAll('button')].find((b) => /^\\s*(definir|selecionar)\\s*$/i.test(b.textContent))?.click();
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 250));
-      const erro = document.querySelector('[role=alert]')?.textContent?.replace(/\\s+/g, ' ').replace(/^\\s*Mensagem de Erro\\s*/i, '').replace(/Fechar\\s*$/i, '').trim();
-      if (erro) return { ok: false, erro };
-      const c = Object.fromEntries(document.cookie.split(';').map((x) => x.trim().split('=')).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
-      if (c.fgtsd_tipo_perfil === '2' && c.fgtsd_ni_perfil === ${JSON.stringify(ni)}) return { ok: true };
-      // reserva: a tela inicial já mostra o empregador representado
-      const emp = (document.body.innerText.match(/Empregador:\s*([\d./-]+)/) ?? [])[1]?.replace(/\D/g, '');
-      if (emp === ${JSON.stringify(ni)} && !document.querySelector('[role=dialog]')) return { ok: true };
-    }
-    return { ok: false, erro: 'O portal não confirmou a troca de perfil.' };`);
-  return r;
+      ni.dispatchEvent(new Event('blur', { bubbles: true }));
+      return ni.value.replace(/\\D/g, '');`);
+  }
+  if (digitado !== ni) return { ok: false, motivo: 'o campo do CNPJ não aceitou o número' };
+  // 4) Selecionar e esperar o portal confirmar
+  await js(w, `${AJUDANTES} [...caixa().querySelectorAll('button')].find((b) => /^\\s*(selecionar|definir|confirmar)\\s*$/i.test(b.textContent))?.click(); return true;`);
+  for (let i = 0; i < 60; i++) {
+    await dormir(250);
+    if (await perfilConfirmado(ni, w)) return { ok: true };
+    const erro = await js(w, `${AJUDANTES} return alerta();`).catch(() => '');
+    if (erro) return { ok: false, erro };
+  }
+  return { ok: false, motivo: 'o portal não confirmou a troca de perfil' };
+}
+
+/**
+ * Define o perfil "Procurador" para o CNPJ/CPF do cliente. Se o preenchimento automático não der certo (o portal muda de
+ * tela de vez em quando), pede para o usuário fazer na janela, com o CNPJ já copiado, e segue sozinho depois.
+ */
+async function definirProcurador(w, ni, cliente, aoAvisar) {
+  ni = String(ni).replace(/\D/g, '');
+  await w.loadURL(`${ORIGEM}/portal/escolhaPerfil`);
+  let r;
+  try { r = await preencherPerfil(w, ni); } catch (e) { r = { ok: false, motivo: String(e?.message ?? e) }; }
+  if (r.ok || r.erro) return r;
+  // modo assistido
+  clipboard.writeText(fmtNi(ni));
+  if (!janelaFgts || janelaFgts.isDestroyed()) throw new Error('A janela do FGTS Digital foi fechada.');
+  w.show(); w.focus();
+  aoAvisar?.({ etapa: 'manual', cliente, mensagem: `Não consegui trocar o perfil sozinho (${r.motivo}). Na janela do FGTS Digital, em "Trocar Perfil", escolha Procurador, cole o CNPJ ${fmtNi(ni)} (${cliente}) — ele já está copiado — e clique em Selecionar. O Kontor continua sozinho em seguida.` });
+  const fim = Date.now() + 3 * 60e3;
+  while (Date.now() < fim) {
+    if (!janelaFgts || janelaFgts.isDestroyed()) throw new Error('A janela do FGTS Digital foi fechada.');
+    if (await perfilConfirmado(ni, w)) return { ok: true };
+    const erro = await js(w, `${AJUDANTES} return alerta();`).catch(() => '');
+    if (erro) return { ok: false, erro };
+    await dormir(1000);
+  }
+  return { ok: false, erro: 'A troca de perfil não foi feita em 3 minutos. Consulte este cliente de novo.' };
 }
 
 /** Competências em aberto do perfil atual (Emissão de Guia Rápida), com os valores para pagamento hoje. */
@@ -205,8 +222,8 @@ export async function consultarFgts(pai, clientes, aoAvisar) {
     aoAvisar?.({ etapa: 'cliente', atual: i + 1, total: clientes.length, cliente: c.nome });
     try {
       if (!(await logado())) throw new Error('A sessão do FGTS Digital expirou. Entre de novo e consulte os clientes que faltaram.');
-      const p = await definirProcurador(w, c.documento);
-      if (!p.ok) { resultados.push({ empresa_id: c.id, situacao: /procura/i.test(p.erro) ? 'SEM_PROCURACAO' : 'ERRO', mensagem: p.erro }); continue; }
+      const p = await definirProcurador(w, c.documento, c.nome, aoAvisar);
+      if (!p.ok) { resultados.push({ empresa_id: c.id, situacao: /procura/i.test(p.erro ?? '') ? 'SEM_PROCURACAO' : 'ERRO', mensagem: p.erro ?? p.motivo }); continue; }
       const d = await lerCompetencias(w);
       const total = Math.round(d.competencias.reduce((t, x) => t + (x.total ?? 0), 0) * 100) / 100;
       resultados.push({ empresa_id: c.id, situacao: d.competencias.length ? 'EM_ABERTO' : 'EM_DIA', total, competencias: d.competencias, notificacao: d.notificacao, mensagem: null });

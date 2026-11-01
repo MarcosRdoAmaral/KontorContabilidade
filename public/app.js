@@ -4858,7 +4858,7 @@ async function consultarFgtsDigital(clientes, selecionados) {
     const prog = dlg.querySelector('#fgts-prog');
     dlg.querySelector('#fgts-ir').onclick = async (ev) => {
       ev.target.disabled = true;
-      ponte.aoAndamentoFgts((p) => { prog.innerHTML = `<p class="sutil">${p.etapa === 'login' ? esc(p.mensagem) : `Consultando ${p.atual} de ${p.total}: ${esc(p.cliente)}…`}</p>`; });
+      ponte.aoAndamentoFgts((p) => { prog.innerHTML = p.etapa === 'manual' ? `<div class="banner teste"><strong>Sua ajuda na janela do FGTS Digital:</strong> ${esc(p.mensagem)}</div>` : `<p class="sutil">${p.etapa === 'login' ? esc(p.mensagem) : `Consultando ${p.atual} de ${p.total}: ${esc(p.cliente)}…`}</p>`; });
       prog.innerHTML = '<p class="sutil">Abrindo o FGTS Digital…</p>';
       const r = await ponte.fgtsConsultar(alvo);
       if (!r.ok) { ev.target.disabled = false; prog.innerHTML = `<p class="erro">${esc(r.erro)}</p>`; return; }

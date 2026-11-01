@@ -50,20 +50,29 @@ Section "Instalar"
   File /r "${ORIGEM}/*.*"
   WriteUninstaller "$INSTDIR\Desinstalar.exe"
 
-  CreateShortcut "$DESKTOP\${NOME}.lnk" "$INSTDIR\${EXE}"
+  ; ícone dos atalhos em arquivo próprio: trocar o nome do arquivo quando o ícone mudar obriga o Windows a
+  ; descartar o ícone guardado em cache (atalho da área de trabalho, menu Iniciar e o fixado na barra de tarefas)
+  Delete "$INSTDIR\kontor*.ico"
+  File "/oname=$INSTDIR\kontor-azul-dourado.ico" "${ICONE}"
+  CreateShortcut "$DESKTOP\${NOME}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\kontor-azul-dourado.ico" 0
   CreateDirectory "$SMPROGRAMS\${NOME}"
-  CreateShortcut "$SMPROGRAMS\${NOME}\${NOME}.lnk" "$INSTDIR\${EXE}"
+  CreateShortcut "$SMPROGRAMS\${NOME}\${NOME}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\kontor-azul-dourado.ico" 0
+  ; programa fixado na barra de tarefas: atualiza o atalho que o Windows guarda (só se já estiver fixado)
+  IfFileExists "$APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\${NOME}.lnk" 0 +2
+    CreateShortcut "$APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\${NOME}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\kontor-azul-dourado.ico" 0
   CreateShortcut "$SMPROGRAMS\${NOME}\Desinstalar.lnk" "$INSTDIR\Desinstalar.exe"
 
   WriteRegStr HKCU "Software\KontorContabilidade" "Pasta" "$INSTDIR"
   WriteRegStr HKCU "${CHAVE}" "DisplayName" "${NOME}"
   WriteRegStr HKCU "${CHAVE}" "DisplayVersion" "${VERSAO}"
   WriteRegStr HKCU "${CHAVE}" "Publisher" "${NOME}"
-  WriteRegStr HKCU "${CHAVE}" "DisplayIcon" "$INSTDIR\${EXE}"
+  WriteRegStr HKCU "${CHAVE}" "DisplayIcon" "$INSTDIR\kontor-azul-dourado.ico"
   WriteRegStr HKCU "${CHAVE}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${CHAVE}" "UninstallString" '"$INSTDIR\Desinstalar.exe"'
   WriteRegDWORD HKCU "${CHAVE}" "NoModify" 1
   WriteRegDWORD HKCU "${CHAVE}" "NoRepair" 1
+  ; avisa o Windows para redesenhar os ícones
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0x1000, p 0, p 0)'
 SectionEnd
 
 Section "Uninstall"
