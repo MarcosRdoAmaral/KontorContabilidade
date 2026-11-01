@@ -41,7 +41,10 @@ test('relatório consolidado da situação fiscal do cliente (PDF timbrado)', as
     const sv = await call('POST', `/api/escritorio/fgts/${eid}/documentos`, { tipo: 'GUIA', competencia: '2026-10', nome: 'GFD 10-2026.pdf', base64: guia.toString('base64') }, t);
     assert.equal(sv.status, 200, JSON.stringify(sv.json)); assert.deepEqual([sv.json.valor, sv.json.vencimento], [798.1, '2026-11-20']);
     assert.equal(JSON.parse((db.prepare("SELECT dados_json FROM controle_mensal WHERE empresa_id = ? AND competencia = '2026-10' AND area = 'DP'").get(eid) as any).dados_json).fgts, 798.1);
-    assert.equal((await call('GET', `/api/escritorio/fgts/${eid}`, undefined, t)).json.documentos.length, 1);
+    const rc2 = await call('POST', `/api/escritorio/fgts/${eid}/documentos`, { tipo: 'GUIA', recalculo: true, competencia: '2026-10', nome: 'GFD recalculada.pdf', base64: guia.toString('base64').replace(/^/, '') }, t);
+    assert.equal(rc2.status, 200);
+    assert.equal((await call('GET', `/api/escritorio/fgts/${eid}`, undefined, t)).json.documentos.length, 2);
+    assert.equal((await call('GET', `/api/escritorio/fgts/${eid}`, undefined, t)).json.documentos[0].recalculo, 1);
     assert.equal((await call('GET', `/api/escritorio/fgts/${eid}/documentos/${sv.json.id}`, undefined, t)).corpo.subarray(0, 4).toString(), '%PDF');
     assert.equal((await call('POST', `/api/escritorio/fgts/${eid}/documentos`, { tipo: 'RECIBO', nome: 'x.pdf', base64: Buffer.alloc(200).toString('base64') }, t)).status, 400, 'só PDF');
     // pendências por cliente (carteira toda ou só os escolhidos)

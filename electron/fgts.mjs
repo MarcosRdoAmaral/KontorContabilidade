@@ -272,6 +272,147 @@ export async function consultarFgts(pai, clientes, aoAvisar) {
  * à tela certa e guarda o primeiro PDF que o portal baixar. Quem escolhe a competência e a data de pagamento é o
  * usuário, no próprio portal (é ali que o FGTS Digital recalcula encargos para outra data).
  */
+/** Clica no elemento visível cujo texto (ou aria-label/title) bate com a expressão; o menor texto ganha. */
+const CLICAR = (re, onde = 'document') => `const re = ${re}; const raiz = ${onde}; if (!raiz) return false;
+  const vis = (x) => !!(x.offsetWidth || x.offsetHeight || x.getClientRects().length);
+  const txt = (x) => ((x.textContent || '') + ' ' + (x.getAttribute('aria-label') || '') + ' ' + (x.getAttribute('title') || '')).replace(/\\s+/g, ' ').trim();
+  const l = [...raiz.querySelectorAll('button, a, [role=button], [role=option], li, .card, .br-card, h2, h3, h4, h5, p, span, div')].filter((x) => vis(x) && re.test(txt(x)) && txt(x).length < 70);
+  const fundo = (x) => { let n = 0; for (let p = x; p; p = p.parentElement) n++; return n; };
+  // menor texto; no empate, o elemento mais interno (o clique sobe até o card ou botão que trata o evento)
+  const b = l.sort((x, y) => txt(x).length - txt(y).length || fundo(y) - fundo(x))[0]; if (!b) return false;
+  b.scrollIntoView({ block: 'center' }); b.click(); return true;`;
+
+async function esperar(w, codigo, ms = 20000) {
+  const fim = Date.now() + ms;
+  while (Date.now() < fim) {
+    if (!janelaFgts || janelaFgts.isDestroyed()) throw new Error('janela fechada');
+    try { const r = await js(w, codigo); if (r) return r; } catch { /* página trocando */ }
+    await dormir(600);
+  }
+  return false;
+}
+const texto = (re) => `return ${re}.test(document.body.innerText || '');`;
+
+/** Ícone PDF (ao lado de "FGTS") da guia mostrada: sobe do título "Vencimento da Guia" até achar o botão. */
+const PDF_DA_SECAO = `const vis = (x) => !!(x.offsetWidth || x.offsetHeight);
+  const ehPdf = (x) => vis(x) && /pdf/i.test((x.textContent || '') + (x.getAttribute('aria-label') || '') + (x.getAttribute('title') || '') + (x.querySelector('img')?.alt || '') + (x.querySelector('img')?.src || '') + (/pdf/i.test(x.innerHTML) ? 'pdf' : ''));
+  const h = [...document.querySelectorAll('h1, h2, h3, h4, h5, div, span')].filter((x) => vis(x) && /Vencimento da Guia/i.test(x.textContent || '') && (x.textContent || '').length < 80)
+    .sort((a, b) => (a.textContent || '').length - (b.textContent || '').length)[0];
+  for (let s = h; s; s = s.parentElement) { const b = [...s.querySelectorAll('button, a')].find(ehPdf); if (b) { b.scrollIntoView({ block: 'center' }); b.click(); return true; } }
+  return false;`;
+
+async function emitirNaGuiaRapida(w, competencia, tipo, dataPagamento, aoAvisar) {
+  if (!competencia) return { ok: false, passo: 'competência não informada' };
+  const [aaaa, mm] = competencia.split('-'), comp = `${mm}/${aaaa}`;
+  aoAvisar?.({ etapa: 'documento', mensagem: `Abrindo a Emissão de Guia Rápida (${comp})…` });
+  if (!(await js(w, texto('/Compet[eê]ncia de Apura[cç][aã]o/i')).catch(() => false))) {
+    if (!(await esperar(w, CLICAR('/^gest[aã]o de guias$/i')))) return { ok: false, passo: 'card Gestão de Guias' };
+    if (!(await esperar(w, CLICAR('/^emiss[aã]o de guia r[aá]pida$/i')))) return { ok: false, passo: 'card Emissão de Guia Rápida' };
+    if (!(await esperar(w, texto('/Compet[eê]ncia de Apura[cç][aã]o/i')))) return { ok: false, passo: 'tela de pesquisa' };
+  }
+  // competência: o campo é um select com busca; digita e escolhe a opção
+  if (!(await escolherCompetencia(w, '/^Compet[eê]ncia de Apura[cç][aã]o$/i', comp)))
+    return { ok: false, passo: `competência ${comp} não encontrada na lista (pode estar sem débito em aberto)` };
+  if (!(await esperar(w, CLICAR('/^pesquisar$/i'), 8000))) return { ok: false, passo: 'botão Pesquisar' };
+  const res = await esperar(w, `const t = document.body.innerText || ''; if (/Vencimento da Guia/i.test(t)) return 'ok'; if (/nenhum (d[eé]bito|registro|resultado)|n[aã]o (foram|h[aá]) (encontrad|d[eé]bito)/i.test(t)) return 'vazio'; return false;`, 30000);
+  if (res === 'vazio') return { erro: `O FGTS Digital não tem débito em aberto na competência ${comp} para este cliente.` };
+  if (!res) return { ok: false, passo: 'resultado da pesquisa' };
+  // seção "Mensal - Vencimento da Guia"
+  const secao = `(() => { const h = [...document.querySelectorAll('h1, h2, h3, h4, h5, div, span')].filter((x) => /^Mensal\\s*-\\s*Vencimento da Guia/i.test((x.textContent || '').trim()) && (x.textContent || '').length < 60)[0];
+    let s = h; for (let i = 0; s && i < 6; i++) { if (s.querySelectorAll('button').length >= 2) return s; s = s.parentElement; } return document; })()`;
+  if (tipo === 'RECIBO') {
+    if (!(await js(w, PDF_DA_SECAO).catch(() => false))) return { ok: false, passo: 'ícone PDF do recibo' };
+    return { ok: true };
+  }
+  if (!(await js(w, `const s = ${secao}; const b = [...s.querySelectorAll('button')].find((x) => /emitir guia/i.test(x.textContent || '')); if (!b) return false; b.click(); return true;`).catch(() => false)))
+    return { ok: false, passo: 'botão Emitir guia' };
+  // emissão com outra data de pagamento (recálculo): se o portal abrir a caixa com a data, preenche e confirma
+  await dormir(1500);
+  const modal = `document.querySelector('[role=dialog], .br-modal, .modal.show, .p-dialog, .mat-dialog-container')`;
+  if (await js(w, `return !!${modal};`).catch(() => false)) {
+    if (dataPagamento) {
+      const br = dataPagamento.split('-').reverse().join('/');
+      await js(w, `const m = ${modal}; const inp = [...m.querySelectorAll('input')].find((x) => x.type === 'date' || /data|dd\\/mm/i.test((x.placeholder || '') + (x.name || '') + (x.id || '')));
+        if (!inp) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        set.call(inp, inp.type === 'date' ? ${JSON.stringify(dataPagamento)} : ${JSON.stringify(br)}); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); inp.dispatchEvent(new Event('blur', { bubbles: true })); return true;`).catch(() => false);
+      await dormir(800);
+    }
+    if (!(await esperar(w, CLICAR('/^(emitir( guia)?|gerar( guia)?|confirmar|ok)$/i', modal), 8000))) return { ok: false, passo: 'confirmação da emissão' };
+  }
+  return { ok: true };
+}
+
+/** Escreve num campo (com máscara) como se fosse digitado: seleciona tudo e insere o texto. */
+async function digitar(w, seletorJs, valor) {
+  const ok = await js(w, `const inp = ${seletorJs}; if (!inp) return false; inp.scrollIntoView({ block: 'center' }); inp.focus(); inp.select?.(); return true;`).catch(() => false);
+  if (!ok) return false;
+  if (w.webContents.insertText) { await w.webContents.insertText(valor); }
+  await js(w, `const inp = document.activeElement; if (!inp || inp.tagName !== 'INPUT') return false;
+    if (inp.value !== ${JSON.stringify(valor)}) { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(inp, ${JSON.stringify(valor)}); inp.dispatchEvent(new Event('input', { bubbles: true })); }
+    inp.dispatchEvent(new Event('change', { bubbles: true })); inp.blur(); return true;`).catch(() => false);
+  return true;
+}
+/** Campo de competência (select com busca) logo abaixo do rótulo; escolhe a opção MM/AAAA. */
+async function escolherCompetencia(w, rotulo, comp) {
+  const achar = `(() => { const lab = [...document.querySelectorAll('label, span, div, p')].filter((x) => ${rotulo}.test((x.textContent || '').trim()) && (x.textContent || '').trim().length < 40)
+    .sort((a, b) => (a.textContent || '').length - (b.textContent || '').length)[0]; let s = lab; for (let i = 0; s && i < 4; i++) { const inp = s.querySelector('input'); if (inp) return inp; s = s.parentElement; } return null; })()`;
+  if ((await js(w, `return ${achar}?.value?.trim() ?? '';`).catch(() => '')) === comp) return true;
+  if (!(await digitar(w, achar, comp))) return false;
+  const esc = comp.replace('/', '\\/');
+  await esperar(w, CLICAR(`/^${esc}$/`, `document.querySelector('[role=listbox], .br-list, .dropdown-menu, .p-dropdown-panel, .options') ?? document`), 6000);
+  await dormir(400);
+  return (await js(w, `return ${achar}?.value?.trim() ?? '';`).catch(() => '')) === comp;
+}
+
+/**
+ * Recálculo (guia em atraso): Gestão de Guias > Emissão de Guia Parametrizada > competência inicial e final >
+ * Pesquisar > marca os débitos da competência > Adicionar à guia > Avançar > Avançar (consignado) > Definir
+ * Vencimento (data de pagamento) > Avançar > Emitir Guia.
+ */
+async function recalcularNaParametrizada(w, competencia, dataPagamento, aoAvisar) {
+  if (!competencia) return { ok: false, passo: 'competência não informada' };
+  const [aaaa, mm] = competencia.split('-'), comp = `${mm}/${aaaa}`;
+  aoAvisar?.({ etapa: 'documento', mensagem: `Abrindo a Emissão de Guia Parametrizada (${comp})…` });
+  if (!(await js(w, texto('/Emiss[aã]o de Guia Parametrizada[\\s\\S]*Inicial/i')).catch(() => false))) {
+    if (!(await js(w, texto('/EMISS[AÃ]O DE GUIA PARAMETRIZADA/i')).catch(() => false)))
+      if (!(await esperar(w, CLICAR('/^gest[aã]o de guias$/i')))) return { ok: false, passo: 'card Gestão de Guias' };
+    if (!(await esperar(w, CLICAR('/^emiss[aã]o de guia parametrizada$/i')))) return { ok: false, passo: 'card Emissão de Guia Parametrizada' };
+    if (!(await esperar(w, texto('/Inicial[\\s\\S]*Final/')))) return { ok: false, passo: 'tela de pesquisa' };
+  }
+  // limita a pesquisa à competência (se o campo não aceitar, pesquisa o período padrão e marca só as linhas dela)
+  await escolherCompetencia(w, '/^Inicial$/i', comp);
+  await escolherCompetencia(w, '/^Final$/i', comp);
+  if (!(await esperar(w, CLICAR('/^pesquisar$/i'), 8000))) return { ok: false, passo: 'botão Pesquisar' };
+  const linhas = `[...document.querySelectorAll('tbody tr')].filter((tr) => [...tr.cells].some((td) => (td.textContent || '').trim() === ${JSON.stringify(comp)}))`;
+  const res = await esperar(w, `if (${linhas}.length) return 'ok'; const t = document.body.innerText || ''; if (/nenhum (d[eé]bito|registro|resultado)|n[aã]o (foram|h[aá]) (encontrad|d[eé]bito)/i.test(t)) return 'vazio'; return false;`, 30000);
+  if (res === 'vazio' || !res) return res === 'vazio' ? { erro: `O FGTS Digital não tem débito da competência ${comp} para recalcular.` } : { ok: false, passo: `débitos de ${comp} na lista` };
+  const marcadas = await js(w, `let n = 0; for (const tr of ${linhas}) {
+      const inp = tr.querySelector('input[type=checkbox]'); if (inp?.checked) { n++; continue; }
+      const alvo = tr.querySelector('label') ?? tr.querySelector('[role=checkbox], .p-checkbox-box, .br-checkbox') ?? inp; if (alvo) { alvo.click(); n++; } }
+    return n;`).catch(() => 0);
+  if (!marcadas) return { ok: false, passo: 'marcar os débitos' };
+  await dormir(600);
+  if (!(await esperar(w, CLICAR('/^adicionar [aà] guia$/i'), 8000))) return { ok: false, passo: 'Adicionar à guia' };
+  if (!(await esperar(w, texto('/Resumo dos d[eé]bitos adicionados/i'), 15000))) return { ok: false, passo: 'resumo dos débitos' };
+  // Avançar até "Definir Vencimento" (passa pela tela de consignado)
+  for (let i = 0; i < 3 && !(await js(w, texto('/Definir Vencimento/i')).catch(() => false)); i++) {
+    if (!(await esperar(w, CLICAR('/^avan[cç]ar$/i'), 8000))) return { ok: false, passo: 'Avançar' };
+    await esperar(w, texto('/Definir Vencimento|Selecionar D[eé]bitos Consignado/i'), 15000);
+    await dormir(800);
+  }
+  if (!(await js(w, texto('/Definir Vencimento/i')).catch(() => false))) return { ok: false, passo: 'tela Definir Vencimento' };
+  if (dataPagamento) {
+    const br = dataPagamento.split('-').reverse().join('/');
+    const campo = `(() => { const lab = [...document.querySelectorAll('label, span, div, th')].filter((x) => /^Vencimento da/i.test((x.textContent || '').trim()) && (x.textContent || '').length < 40)[0];
+      let s = lab; for (let i = 0; s && i < 4; i++) { const inp = s.querySelector('input'); if (inp) return inp; s = s.parentElement; } return null; })()`;
+    if (!(await digitar(w, campo, br))) return { ok: false, passo: 'campo Vencimento da guia' };
+    await dormir(1500); // o portal recalcula multa e juros para a nova data
+  }
+  if (!(await esperar(w, CLICAR('/^avan[cç]ar$/i'), 8000))) return { ok: false, passo: 'Avançar (vencimento)' };
+  if (!(await esperar(w, CLICAR('/^emitir guia$/i'), 20000))) return { ok: false, passo: 'botão Emitir Guia' };
+  return { ok: true };
+}
+
 export async function documentoFgts(pai, cliente, tipo, aoAvisar) {
   const w = await esperarLogin(pai, aoAvisar);
   if (!(await logado())) throw new Error('A sessão do FGTS Digital expirou. Entre de novo.');
@@ -281,7 +422,7 @@ export async function documentoFgts(pai, cliente, tipo, aoAvisar) {
   const pasta = fs.mkdtempSync(path.join(app.getPath('temp'), 'kontor-fgts-'));
   let pronto = null, falhou = null;
   const aoBaixar = (_e, item) => {
-    const nome = item.getFilename() || `${tipo === 'GUIA' ? 'Guia_FGTS' : 'Recibo_FGTS'}.pdf`;
+    const nome = item.getFilename() || `${tipo === 'RECIBO' ? 'Recibo_FGTS' : 'Guia_FGTS'}.pdf`;
     const destino = path.join(pasta, nome.replace(/[^\w.\- ]+/g, '_'));
     item.setSavePath(destino);
     item.once('done', (_ev, estado) => {
@@ -300,13 +441,14 @@ export async function documentoFgts(pai, cliente, tipo, aoAvisar) {
     return { action: 'deny' };
   });
   try {
-    // leva à tela: o menu do portal é procurado pelo texto (sem achar, o usuário navega)
-    const alvo = tipo === 'GUIA' ? 'emiss[aã]o de guia r[aá]pida|guia r[aá]pida' : 'recibo|comprovante|consulta de pagamento|pagamentos';
-    await js(w, `const re = new RegExp(${JSON.stringify(alvo)}, 'i'); const l = [...document.querySelectorAll('a, button, [role=menuitem], li')].filter((x) => re.test(x.textContent ?? '') && (x.textContent ?? '').length < 80);
-      const b = l.sort((x, y) => x.textContent.length - y.textContent.length)[0]; if (b) (b.closest('a, button') ?? b).click(); return !!b;`).catch(() => false);
-    aoAvisar?.({ etapa: 'documento', mensagem: tipo === 'GUIA'
-      ? `Perfil de ${cliente.nome} aberto. Na Emissão de Guia Rápida, marque a competência, escolha a data de pagamento (outra data recalcula multa e juros) e clique em Emitir. O Kontor guarda a guia sozinho.`
-      : `Perfil de ${cliente.nome} aberto. Abra a guia paga (Gestão de Guias) e baixe o recibo/comprovante. O Kontor guarda o PDF sozinho.` });
+    // Emissão de Guia Rápida: Gestão de Guias > Emissão de Guia Rápida > competência > Pesquisar > "Emitir guia"
+    // (guia) ou o ícone PDF ao lado de "FGTS" (recibo). Se algum passo não for achado, o usuário termina na mão.
+    const auto = await (tipo === 'RECALCULO' ? recalcularNaParametrizada(w, cliente.competencia, cliente.dataPagamento, aoAvisar) : emitirNaGuiaRapida(w, cliente.competencia, tipo, cliente.dataPagamento, aoAvisar))
+      .catch((e) => ({ ok: false, passo: String(e?.message ?? e) }));
+    if (auto.erro) return { ok: false, erro: auto.erro };
+    aoAvisar?.({ etapa: 'documento', mensagem: auto.ok
+      ? `${tipo === 'RECIBO' ? 'Recibo pedido' : 'Guia pedida'} ao FGTS Digital. Aguardando o PDF…`
+      : `Não consegui fazer sozinho (${auto.passo}). Termine na janela do FGTS Digital: ${tipo === 'RECALCULO' ? 'na Emissão de Guia Parametrizada, marque os débitos da competência, Adicionar à guia, Avançar, defina o vencimento e clique em Emitir Guia' : tipo === 'GUIA' ? 'na Emissão de Guia Rápida, pesquise a competência e clique em Emitir guia' : 'na Emissão de Guia Rápida, pesquise a competência e clique no ícone PDF ao lado de FGTS'}. O Kontor guarda o PDF sozinho.` });
     w.show(); w.focus();
     const fim = Date.now() + 15 * 60e3;
     while (Date.now() < fim) {

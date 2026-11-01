@@ -204,9 +204,9 @@ ipcMain.handle('fgts:consultar', async (e, clientes) => {
 });
 ipcMain.handle('fgts:documento', async (e, cliente, tipo) => {
   if (fgtsEmAndamento) return { ok: false, erro: 'Já há uma consulta ao FGTS Digital em andamento.' };
-  if (!cliente?.documento || !['GUIA', 'RECIBO'].includes(tipo)) return { ok: false, erro: 'Pedido inválido.' };
+  if (!cliente?.documento || !['GUIA', 'RECALCULO', 'RECIBO'].includes(tipo)) return { ok: false, erro: 'Pedido inválido.' };
   fgtsEmAndamento = true;
-  try { return await documentoFgts(janela, { documento: String(cliente.documento).replace(/\D/g, ''), nome: String(cliente.nome ?? '') }, tipo, (p) => { if (!e.sender.isDestroyed()) e.sender.send('fgts:andamento', p); }); }
+  try { return await documentoFgts(janela, { documento: String(cliente.documento).replace(/\D/g, ''), nome: String(cliente.nome ?? ''), competencia: /^\d{4}-\d{2}$/.test(cliente.competencia ?? '') ? cliente.competencia : null, dataPagamento: /^\d{4}-\d{2}-\d{2}$/.test(cliente.dataPagamento ?? '') ? cliente.dataPagamento : null }, tipo, (p) => { if (!e.sender.isDestroyed()) e.sender.send('fgts:andamento', p); }); }
   catch (err) { return { ok: false, erro: String(err?.message ?? err) }; }
   finally { fgtsEmAndamento = false; }
 });

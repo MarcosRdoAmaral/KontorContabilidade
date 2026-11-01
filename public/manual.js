@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.39.0';
+export const MANUAL_VERSAO = '1.40.0';
 
 export const MANUAL = [
   {
@@ -154,7 +154,13 @@ export const MANUAL = [
       <p><strong>Competência:</strong> o escritório processa sempre o mês anterior (em novembro, a competência outubro). O Monitor olha essa competência e as anteriores; obrigações de competências seguintes ainda não aparecem. O que o <strong>Controle mensal</strong> já dá como feito (guia emitida ou enviada, sem movimento, DP enviado ou sem folha) e o que foi transmitido pelo Kontor contam como entregues. No alto da tela dá para escolher outra competência.</p>
       <p><strong>FGTS Digital:</strong> só conta como valor em aberto a guia que já passou do vencimento. A guia do mês, ainda no prazo, aparece como aviso <em>a vencer</em> (com o valor e a data), como a DARF previdenciária da DCTFWeb, e não entra nos totais em aberto.</p>
       <h3>Guia e recibo do FGTS pelo Kontor</h3>
-      <p>No aplicativo instalado, clique no FGTS Digital de um cliente (coluna FGTS Digital do Monitor) e use <em>Emitir ou recalcular guia</em> ou <em>Baixar recibo</em>. O Kontor entra no FGTS Digital, troca para o perfil de procurador do cliente e leva você à tela. Você marca a competência e a data de pagamento (outra data recalcula multa e juros) e emite. O PDF baixado fica guardado no cliente (lista <em>Guias e recibos</em>), e o valor da guia vai para o Controle mensal (DP &gt; FGTS) da competência escolhida.</p>
+      <p>No aplicativo instalado, clique no FGTS Digital de um cliente (coluna FGTS Digital do Monitor), escolha a competência e use um dos botões. O Kontor entra no FGTS Digital no perfil de procurador do cliente e faz o caminho sozinho:</p>
+      <ul>
+        <li><strong>Emitir guia do mês:</strong> Gestão de Guias &gt; Emissão de Guia Rápida &gt; competência &gt; Pesquisar &gt; Emitir guia. O valor vai para o Controle mensal (DP &gt; FGTS).</li>
+        <li><strong>Recalcular guia em atraso:</strong> Gestão de Guias &gt; Emissão de Guia Parametrizada &gt; competência &gt; Pesquisar &gt; marca os débitos &gt; Adicionar à guia &gt; Avançar &gt; Definir Vencimento na data de pagamento informada &gt; Emitir Guia. Não muda o valor do mês no Controle mensal.</li>
+        <li><strong>Baixar recibo:</strong> o ícone PDF ao lado de FGTS na Emissão de Guia Rápida.</li>
+      </ul>
+      <p>O PDF fica guardado no cliente (lista <em>Guias e recibos</em>). Se o portal mudar e algum passo não for achado, o Kontor avisa qual e você termina na própria janela; o PDF continua sendo guardado. A consulta do FGTS Digital é feita <strong>um cliente por vez</strong>: marque só um na lista.</p>
       <ul>
         <li><strong>Visão geral dos clientes:</strong> cada cliente entra na pior situação entre os processos: <em>Atenção</em> (algo vencido, em aberto ou com erro), <em>Pendentes</em> (algo a fazer ou conferir), <em>Processando</em>, <em>Em dia</em> ou <em>Sem informação</em>.</li>
         <li><strong>Por processo:</strong> PGDAS-D e PGMEI (obrigações DAS e DAS do MEI e o fechamento), DCTFWeb (DCTFWeb e DARF previdenciário), FGTS Digital (última consulta), Situação fiscal (último relatório da Receita/PGFN), Parcelamentos e Caixa postal (última consulta), Certificados (A1 e procurações vencidos ou vencendo em 30 dias) e Demais obrigações. Clique no nome do processo, num pedaço da barra ou numa situação para listar os clientes.</li>

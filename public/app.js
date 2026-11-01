@@ -4966,9 +4966,10 @@ function celulaFgts(c) {
 async function consultarFgtsDigital(clientes, selecionados) {
   const ponte = window.nfseDesktop;
   if (!ponte?.fgtsConsultar) return aviso('A consulta ao FGTS Digital funciona no aplicativo instalado (Windows): é nele que você entra no portal com o certificado.');
-  const alvo = (selecionados.length ? clientes.filter((c) => selecionados.includes(c.empresa_id)) : clientes.filter((c) => c.tem_funcionarios))
-    .map((c) => ({ id: c.empresa_id, documento: c.documento, nome: c.cliente }));
-  if (!alvo.length) return aviso('Marque os clientes a consultar (ou cadastre na Carteira quem tem funcionários).');
+  // um cliente por vez: o portal troca de perfil a cada cliente e, em sequência, a troca falha
+  if (selecionados.length !== 1) return aviso(selecionados.length ? 'Marque só um cliente para consultar o FGTS Digital (um por vez).' : 'Marque na lista o cliente que vai consultar no FGTS Digital (um por vez).');
+  const alvo = clientes.filter((c) => selecionados.includes(c.empresa_id)).map((c) => ({ id: c.empresa_id, documento: c.documento, nome: c.cliente }));
+  if (!alvo.length) return aviso('Cliente não encontrado na lista da situação fiscal.');
   abrirDialogo(`<div><h2>Consultar FGTS Digital</h2>
     <p>${alvo.length} cliente(s) ${selecionados.length ? 'selecionado(s)' : 'com funcionários'}.</p>
     <ol class="dicas"><li>Abre uma janela do FGTS Digital: clique em <strong>Entrar com GOV.BR</strong> e escolha o <strong>certificado do escritório</strong>.</li>
@@ -5014,13 +5015,16 @@ async function detalheFgtsCliente(empresaId) {
       <p class="dica">A guia é emitida no próprio FGTS Digital (Gestão de Guias &gt; Emissão de Guia Rápida), com a data de pagamento que o cliente escolher.</p>`}
     <h3>Guias e recibos</h3>
     ${d.documentos?.length ? `<table class="tabela"><thead><tr><th>Baixado em</th><th>Documento</th><th>Competência</th><th>Vencimento</th><th class="num">Valor</th><th></th></tr></thead><tbody>
-      ${d.documentos.map((x) => `<tr><td>${dhBr(x.criado_em)}${x.usuario ? `<br><span class="dica">${esc(x.usuario)}</span>` : ''}</td><td>${x.tipo === 'GUIA' ? 'Guia' : 'Recibo'}<br><span class="dica">${esc(x.nome)}</span></td>
+      ${d.documentos.map((x) => `<tr><td>${dhBr(x.criado_em)}${x.usuario ? `<br><span class="dica">${esc(x.usuario)}</span>` : ''}</td><td>${x.tipo === 'GUIA' ? (x.recalculo ? 'Guia recalculada' : 'Guia') : 'Recibo'}<br><span class="dica">${esc(x.nome)}</span></td>
         <td>${x.competencia ? rotuloMes(x.competencia) : '—'}</td><td>${dataBr(x.vencimento) || '—'}</td><td class="num">${x.valor != null ? brl(x.valor) : '—'}</td>
         <td><button type="button" data-doc="${x.id}">Abrir</button></td></tr>`).join('')}</tbody></table>` : '<p class="dica">Nenhuma guia ou recibo baixado pelo Kontor ainda.</p>'}
     ${window.nfseDesktop?.fgtsDocumento ? `<div class="filtros grade fgts-doc">
-      <label>Competência da guia <select id="fg-comp">${(() => { const l = []; for (let i = 0, m = mesAnterior(mesAtual()); i < 13; i++, m = mesAnterior(m)) l.push(m); return l.map((m) => `<option value="${m}">${rotuloMes(m)}</option>`).join(''); })()}</select></label>
-      <div class="acoes"><button type="button" class="primario" id="fg-guia">Emitir ou recalcular guia</button><button type="button" id="fg-recibo">Baixar recibo</button></div>
-      <p class="dica largo" id="fg-msg">O Kontor abre o FGTS Digital no perfil de procurador deste cliente. Lá você escolhe a competência e a data de pagamento (outra data recalcula multa e juros) e emite; o PDF fica guardado aqui e o valor da guia vai para o Controle mensal (DP &gt; FGTS) da competência escolhida.</p></div>`
+      <label>Competência <select id="fg-comp">${(() => { const l = new Set(); for (let i = 0, m = mesAnterior(mesAtual()); i < 13; i++, m = mesAnterior(m)) l.add(m);
+        for (const c of u?.competencias ?? []) { const x = /^(\d{4})-(\d{2})/.exec(c.competencia ?? '') ?? /^(\d{2})\/(\d{4})/.exec(c.competencia ?? ''); if (x) l.add(x[1].length === 4 ? `${x[1]}-${x[2]}` : `${x[2]}-${x[1]}`); }
+        return [...l].sort().reverse().map((m) => `<option value="${m}">${rotuloMes(m)}</option>`).join(''); })()}</select></label>
+      <label>Pagamento em (recálculo) <input type="date" id="fg-data" value="${new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10)}"></label>
+      <div class="acoes"><button type="button" class="primario" id="fg-guia" title="Emissão de Guia Rápida: a guia do mês, com o vencimento normal">Emitir guia do mês</button><button type="button" id="fg-recalc" title="Emissão de Guia Parametrizada: guia em atraso recalculada para a data de pagamento">Recalcular guia em atraso</button><button type="button" id="fg-recibo" title="Ícone PDF ao lado de FGTS na Emissão de Guia Rápida">Baixar recibo</button></div>
+      <p class="dica largo" id="fg-msg">O Kontor abre o FGTS Digital no perfil de procurador do cliente e faz o caminho sozinho: <em>guia do mês</em> pela Emissão de Guia Rápida; <em>recálculo</em> pela Emissão de Guia Parametrizada (marca os débitos da competência, define o vencimento na data de pagamento e emite); <em>recibo</em> pelo ícone PDF. O PDF fica guardado aqui; a guia do mês também vai para o Controle mensal (DP &gt; FGTS).</p></div>`
       : '<p class="dica">Emitir ou recalcular a guia e baixar o recibo funciona no aplicativo instalado (Windows), que entra no FGTS Digital com o certificado.</p>'}
     ${d.anteriores.length ? `<h3>Consultas anteriores</h3><ul class="dicas">${d.anteriores.map((a) => `<li>${dhBr(a.consultado_em)} — ${esc(SIT_FGTS[a.situacao]?.[0] ?? a.situacao)}${a.situacao === 'EM_ABERTO' ? ` (${brl(a.total ?? 0)})` : ''}</li>`).join('')}</ul>` : ''}
     <div class="acoes"><button data-fechar class="primario">Fechar</button></div></div>`, (dlg) => {
@@ -5033,15 +5037,18 @@ async function detalheFgtsCliente(empresaId) {
       ponte.aoAndamentoFgts?.((p) => { if (p?.mensagem) msg.textContent = p.mensagem; });
       msg.textContent = 'Abrindo o FGTS Digital…';
       try {
-        const r = await ponte.fgtsDocumento({ documento: d.documento, nome: d.cliente }, tipo);
+        const competencia = dlg.querySelector('#fg-comp').value, dataPagamento = dlg.querySelector('#fg-data').value || null;
+        if (tipo === 'RECALCULO' && !dataPagamento) throw new Error('Informe a data de pagamento para recalcular.');
+        const r = await ponte.fgtsDocumento({ documento: d.documento, nome: d.cliente, competencia, dataPagamento: tipo === 'RECALCULO' ? dataPagamento : null }, tipo);
         if (!r?.ok) throw new Error(r?.erro ?? 'Não foi possível baixar o PDF.');
-        const s = await api('POST', `/api/escritorio/fgts/${empresaId}/documentos`, { tipo, competencia: tipo === 'GUIA' ? dlg.querySelector('#fg-comp').value : null, nome: r.nome, base64: r.base64 });
-        aviso(tipo === 'GUIA' ? `Guia guardada${s.valor != null ? `: ${brl(s.valor)}${s.vencimento ? `, vence ${dataBr(s.vencimento)}` : ''} (lançada no Controle mensal)` : ''}.` : 'Recibo guardado.');
+        const s = await api('POST', `/api/escritorio/fgts/${empresaId}/documentos`, { tipo: tipo === 'RECIBO' ? 'RECIBO' : 'GUIA', recalculo: tipo === 'RECALCULO', competencia, nome: r.nome, base64: r.base64 });
+        aviso(tipo === 'RECIBO' ? 'Recibo guardado.' : `Guia ${tipo === 'RECALCULO' ? 'recalculada ' : ''}guardada${s.valor != null ? `: ${brl(s.valor)}${s.vencimento ? `, vence ${dataBr(s.vencimento)}` : ''}${tipo === 'GUIA' ? ' (lançada no Controle mensal)' : ''}` : ''}.`);
         detalheFgtsCliente(empresaId);
       } catch (e) { msg.textContent = mensagemErro(e); msg.classList.add('erro'); dlg.querySelectorAll('.fgts-doc button').forEach((x) => (x.disabled = false)); }
     };
     dlg.querySelector('#fg-guia') && (dlg.querySelector('#fg-guia').onclick = (ev) => pedir('GUIA', ev.target));
     dlg.querySelector('#fg-recibo') && (dlg.querySelector('#fg-recibo').onclick = (ev) => pedir('RECIBO', ev.target));
+    dlg.querySelector('#fg-recalc') && (dlg.querySelector('#fg-recalc').onclick = (ev) => pedir('RECALCULO', ev.target));
   });
 }
 

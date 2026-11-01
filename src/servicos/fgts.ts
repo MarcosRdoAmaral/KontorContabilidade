@@ -115,6 +115,7 @@ export function fgtsNaData<T extends Record<string, any>>(f: T | null | undefine
 export const DocumentoFgts = z.object({
   tipo: z.enum(['GUIA', 'RECIBO']),
   competencia: z.string().regex(/^\d{4}-\d{2}$/).nullish(),
+  recalculo: z.boolean().nullish(),
   nome: z.string().trim().min(1).max(160),
   base64: z.string().min(100).max(14_000_000),
 });
@@ -124,16 +125,16 @@ export async function salvarDocumentoFgts(escritorioId: number, usuarioId: numbe
   if (pdf.subarray(0, 4).toString() !== '%PDF') throw new ErroNegocio('O arquivo baixado do FGTS Digital não é um PDF.');
   const { lerGuia } = await import('./fechamento.js');
   const lido = d.tipo === 'GUIA' ? await lerGuia(pdf) : { valor: null, vencimento: null };
-  const id = Number(db.prepare('INSERT INTO fgts_documentos (empresa_id, tipo, competencia, nome, pdf, valor, vencimento, usuario_id) VALUES (?,?,?,?,?,?,?,?)')
-    .run(empresaId, d.tipo, d.competencia ?? null, d.nome.replace(/[^\w.\- ]+/g, '_'), pdf, lido.valor, lido.vencimento, usuarioId).lastInsertRowid);
-  if (d.tipo === 'GUIA' && d.competencia && lido.valor != null) {
+  const id = Number(db.prepare('INSERT INTO fgts_documentos (empresa_id, tipo, competencia, nome, pdf, valor, vencimento, usuario_id, recalculo) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(empresaId, d.tipo, d.competencia ?? null, d.nome.replace(/[^\w.\- ]+/g, '_'), pdf, lido.valor, lido.vencimento, usuarioId, d.recalculo ? 1 : 0).lastInsertRowid);
+  if (d.tipo === 'GUIA' && !d.recalculo && d.competencia && lido.valor != null) { // o recálculo de atraso não troca o valor do mês
     const { lancarNoControle } = await import('./controle-mensal.js');
     lancarNoControle(empresaId, d.competencia, 'DP', 'fgts', lido.valor, usuarioId, true);
   }
   return { id, valor: lido.valor, vencimento: lido.vencimento };
 }
 export function listarDocumentosFgts(empresaId: number) {
-  return db.prepare(`SELECT d.id, d.tipo, d.competencia, d.nome, d.valor, d.vencimento, d.criado_em, u.nome AS usuario FROM fgts_documentos d LEFT JOIN usuarios u ON u.id = d.usuario_id
+  return db.prepare(`SELECT d.id, d.tipo, d.recalculo, d.competencia, d.nome, d.valor, d.vencimento, d.criado_em, u.nome AS usuario FROM fgts_documentos d LEFT JOIN usuarios u ON u.id = d.usuario_id
     WHERE d.empresa_id = ? ORDER BY d.id DESC LIMIT 50`).all(empresaId);
 }
 export function documentoFgts(empresaId: number, id: number) {
