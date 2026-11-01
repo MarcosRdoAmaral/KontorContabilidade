@@ -1,9 +1,10 @@
 import PDFDocument from 'pdfkit';
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
-import { monitorFiscal } from './monitor.js';
+import { feitasNoControle, fimDaCompetencia, monitorFiscal, prazoComControle } from './monitor.js';
 import { ultimasCaixas, ultimosParcelamentos } from './parcelamentos-caixa.js';
 import { situacaoPrazo } from './obrigacoes.js';
+import { fgtsNaData } from './fgts.js';
 import { COR, MM, brl, cabecalho, dataBr, docFmt, emitenteDoEscritorio, rodapes, secao } from '../pdf/timbrado.js';
 
 /**
@@ -36,12 +37,13 @@ export function dadosSituacaoCliente(escritorioId: number, empresaId: number) {
     if (i.periodo) g.periodos.push(i.periodo); g.total += i.saldo ?? 0; porTributo.set(k, g);
   }
   const inscricoes = secoes.filter((s: any) => s.tipo === 'PENDENCIA' && s.orgao === 'PGFN').flatMap((s: any) => s.itens).filter((i: any) => i.tipo === 'INSCRICAO');
-  const fg = db.prepare('SELECT * FROM fgts_consultas WHERE empresa_id = ? ORDER BY id DESC LIMIT 1').get(empresaId) as any;
+  const fg = fgtsNaData(db.prepare('SELECT * FROM fgts_consultas WHERE empresa_id = ? ORDER BY id DESC LIMIT 1').get(empresaId) as any, hoje) as any;
   const parc = ultimosParcelamentos([empresaId]).get(empresaId) ?? null;
   const caixa = ultimasCaixas([empresaId]).get(empresaId) ?? null;
-  const tarefas = (db.prepare(`SELECT t.status, t.vencimento, t.competencia, o.nome, o.antecedencia FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id
-    WHERE t.empresa_id = ? AND t.status IN ('PENDENTE','ANDAMENTO') AND t.vencimento <= ? ORDER BY t.vencimento`).all(empresaId, somaDias(hoje, 30)) as any[])
-    .map((t) => ({ ...t, prazo: situacaoPrazo(t, hoje) }));
+  const lt = (db.prepare(`SELECT t.empresa_id, t.status, t.vencimento, t.competencia, o.codigo, o.nome, o.antecedencia FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id
+    WHERE t.empresa_id = ? AND t.status IN ('PENDENTE','ANDAMENTO') AND t.vencimento <= ? ORDER BY t.vencimento`).all(empresaId, somaDias(hoje, 30)) as any[]).filter((t) => fimDaCompetencia(t.competencia) <= mon.competencia);
+  const feitas = feitasNoControle([empresaId], [...new Set(lt.map((t) => t.competencia))]);
+  const tarefas = lt.map((t) => ({ ...t, prazo: prazoComControle(t, feitas, hoje) })).filter((t) => t.prazo !== 'ENTREGUE');
   const certs = [...(db.prepare('SELECT tipo, titular, validade FROM certificados WHERE empresa_id = ? AND renovado = 0 ORDER BY validade').all(empresaId) as any[])
     .map((x) => ({ nome: x.tipo === 'PROCURACAO' ? `Procuração eletrônica${x.titular ? ` (${x.titular})` : ''}` : `Certificado ${x.tipo}${x.titular ? ` (${x.titular})` : ''}`, validade: String(x.validade).slice(0, 10) })),
     ...(c.cert_pfx_enc && c.cert_validade ? [{ nome: 'Certificado A1 enviado ao Kontor', validade: String(c.cert_validade).slice(0, 10) }] : [])];
@@ -49,7 +51,7 @@ export function dadosSituacaoCliente(escritorioId: number, empresaId: number) {
   const fgTotal = fg?.situacao === 'EM_ABERTO' ? Number(fg.total ?? 0) : 0;
   const parcAtraso = parc?.situacao === 'EM_ATRASO' ? Number(parc.valor_atrasado ?? 0) : 0;
   return {
-    hoje, cliente: { nome: c.razao_social, fantasia: c.nome_fantasia, documento: c.documento, regime: REGIME[c.regime] ?? c.regime ?? '', responsavel: c.responsavel ?? null },
+    hoje, competencia: mon.competencia as string, cliente: { nome: c.razao_social, fantasia: c.nome_fantasia, documento: c.documento, regime: REGIME[c.regime] ?? c.regime ?? '', responsavel: c.responsavel ?? null },
     geral: linha?.geral ?? null, processos: linha?.processos ?? {}, notificacoes: mon.notificacoes,
     sf: sf ? { consultada: sf.concluida_em, situacao: sf.situacao, total: Number(sf.total_aberto ?? 0), certidao: resumo?.certidao ?? null, certidaoValidade: resumo?.certidaoValidade ?? null,
       tributos: [...porTributo.values()].sort((a, b) => b.total - a.total), inscricoes } : null,
@@ -67,7 +69,7 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     const partes: Buffer[] = []; pdf.on('data', (b) => partes.push(b)); pdf.on('end', () => ok({ pdf: Buffer.concat(partes), nome: `Situacao_Fiscal_${d.cliente.nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_').slice(0, 40)}_${d.hoje}.pdf` }));
     pdf.on('error', falha);
     const X = 16 * MM, W = pdf.page.width - 2 * X, LIM = pdf.page.height - 20 * MM;
-    let y = cabecalho(pdf, em, { titulo: 'Situação fiscal do cliente', subtitulo: `Posição em ${dataBr(d.hoje)}` });
+    let y = cabecalho(pdf, em, { titulo: 'Situação fiscal do cliente', subtitulo: `Posição em ${dataBr(d.hoje)} · competência ${d.competencia.slice(5)}/${d.competencia.slice(0, 4)}` });
     const garantir = (h: number) => { if (y + h > LIM) { pdf.addPage({ size: 'A4', margin: 0 }); pdf.rect(0, 0, pdf.page.width, 3 * MM).fill(COR.escuro); pdf.rect(0, 0, 32 * MM, 3 * MM).fill(COR.destaque); y = 12 * MM; } };
     const texto = (t: string, x: number, yy: number, o: any = {}) => pdf.fillColor(o.cor ?? COR.texto).font(o.negrito ? 'Helvetica-Bold' : o.italico ? 'Helvetica-Oblique' : 'Helvetica').fontSize(o.tam ?? 8.5).text(t, x, yy, { width: o.w, align: o.align, lineBreak: o.quebra ?? true });
     const selo = (estado: string | null, x: number, yy: number) => {
@@ -165,10 +167,10 @@ export function situacaoClientePdf(escritorioId: number, empresaId: number): Pro
     garantir(24 * MM); y = secao(pdf, 'FGTS Digital', X, y);
     if (!d.fgts) { texto('Ainda não consultado.', X, y, { cor: COR.cinza, italico: true }); y = pdf.y + 6 * MM; }
     else {
-      const comps = d.fgts.competencias_json ? JSON.parse(d.fgts.competencias_json) : [];
+      const comps = d.fgts.competencias ?? [];
       texto(`Consulta de ${dataBr(d.fgts.consultado_em)}`, X, y, { cor: COR.cinza, tam: 7.8 }); y = pdf.y + 2 * MM;
-      tabela([{ nome: 'Competência', w: 0.5 }, { nome: 'Total para pagamento na data da consulta', w: 0.5, align: 'right' }],
-        comps.map((x: any) => [String(x.competencia ?? ''), x.total != null ? brl(x.total) : '—']),
+      tabela([{ nome: 'Competência', w: 0.3 }, { nome: 'Vencimento', w: 0.2 }, { nome: 'Situação', w: 0.25 }, { nome: 'Valor na data da consulta', w: 0.25, align: 'right' }],
+        comps.map((x: any) => [String(x.competencia ?? ''), dataBr(x.vencimento), x.a_vencer ? 'A vencer (não é débito)' : 'Vencida', x.total != null ? brl(x.total) : '—']),
         d.fgts.situacao === 'EM_DIA' ? 'Nenhuma competência em aberto.' : d.fgts.situacao === 'SEM_PROCURACAO' ? 'Sem procuração no FGTS Digital.' : (d.fgts.mensagem ?? 'Sem informação.'));
     }
 

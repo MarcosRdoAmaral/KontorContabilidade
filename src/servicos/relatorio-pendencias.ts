@@ -1,7 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { db } from '../db.js';
-import { monitorFiscal, PROCESSOS } from './monitor.js';
-import { situacaoPrazo } from './obrigacoes.js';
+import { feitasNoControle, fimDaCompetencia, monitorFiscal, prazoComControle, PROCESSOS } from './monitor.js';
+import { fgtsNaData } from './fgts.js';
 import { COR, MM, brl, cabecalho, dataBr, docFmt, emitenteDoEscritorio, rodapes, secao } from '../pdf/timbrado.js';
 
 /**
@@ -18,29 +18,33 @@ const somaDias = (d: string, n: number) => new Date(Date.parse(d) + n * 864e5).t
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const NOME_PROC = Object.fromEntries(PROCESSOS.map((p) => [p.id, p.nome])) as Record<string, string>;
 
-export function dadosPendencias(escritorioId: number, empresas: number[] | null) {
+export function dadosPendencias(escritorioId: number, empresas: number[] | null, competencia: string | null = null) {
   const hoje = hojeBr();
-  const mon = monitorFiscal(escritorioId, empresas, Infinity);
+  const mon = monitorFiscal(escritorioId, empresas, Infinity, competencia);
   const ids = mon.clientes.map((c) => c.empresa_id);
   const em = ids.length ? ids.join(',') : 'NULL';
   const mapa = (sql: string, ...p: any[]) => new Map((db.prepare(sql).all(...p) as any[]).map((r) => [r.empresa_id, r]));
   const sf = mapa(`SELECT empresa_id, situacao, total_aberto FROM situacao_fiscal WHERE id IN (SELECT MAX(id) FROM situacao_fiscal WHERE empresa_id IN (${em}) AND status = 'PRONTA' GROUP BY empresa_id)`);
-  const fg = mapa(`SELECT empresa_id, situacao, total FROM fgts_consultas WHERE id IN (SELECT MAX(id) FROM fgts_consultas WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
+  const fg = mapa(`SELECT empresa_id, situacao, total, competencias_json FROM fgts_consultas WHERE id IN (SELECT MAX(id) FROM fgts_consultas WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
   const pc = mapa(`SELECT empresa_id, situacao, qtd_atrasadas, valor_atrasado FROM parcelamentos_consultas WHERE id IN (SELECT MAX(id) FROM parcelamentos_consultas WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
   const cx = mapa(`SELECT empresa_id, situacao, nao_lidas, relevantes FROM caixa_postal_consultas WHERE id IN (SELECT MAX(id) FROM caixa_postal_consultas WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
   const resp = new Map((db.prepare(`SELECT e.id, u.nome FROM empresas e LEFT JOIN usuarios u ON u.id = e.responsavel_id WHERE e.id IN (${em})`).all() as any[]).map((r) => [r.id, r.nome]));
   const fimMes = (() => { const [a, m] = hoje.split('-').map(Number); return new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10); })();
   const atrasadas = new Map<number, number>(), noMes = new Map<number, any[]>();
-  for (const t of db.prepare(`SELECT t.empresa_id, t.status, t.vencimento, o.nome, o.antecedencia FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id
-    WHERE t.empresa_id IN (${em}) AND t.status IN ('PENDENTE','ANDAMENTO') AND t.vencimento <= ? ORDER BY t.vencimento`).all(fimMes) as any[]) {
-    if (situacaoPrazo(t, hoje) === 'ATRASADA') atrasadas.set(t.empresa_id, (atrasadas.get(t.empresa_id) ?? 0) + 1);
+  const lt = (db.prepare(`SELECT t.empresa_id, t.status, t.vencimento, t.competencia, o.codigo, o.nome, o.antecedencia FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id
+    WHERE t.empresa_id IN (${em}) AND t.status IN ('PENDENTE','ANDAMENTO') AND t.vencimento <= ? ORDER BY t.vencimento`).all(fimMes) as any[]).filter((t) => fimDaCompetencia(t.competencia) <= mon.competencia);
+  const feitas = feitasNoControle(ids, [...new Set(lt.map((t) => t.competencia))]);
+  for (const t of lt) {
+    const prazo = prazoComControle(t, feitas, hoje);
+    if (prazo === 'ENTREGUE') continue;
+    if (prazo === 'ATRASADA') atrasadas.set(t.empresa_id, (atrasadas.get(t.empresa_id) ?? 0) + 1);
     else { const l = noMes.get(t.empresa_id) ?? []; l.push(t); noMes.set(t.empresa_id, l); }
   }
   const notifs = new Map<number, any[]>();
   for (const n of mon.notificacoes) { const l = notifs.get(n.empresa_id) ?? []; l.push(n); notifs.set(n.empresa_id, l); }
   const limite = somaDias(hoje, 30);
   const linhas = mon.clientes.map((c) => {
-    const s = sf.get(c.empresa_id), f = fg.get(c.empresa_id), p = pc.get(c.empresa_id), x = cx.get(c.empresa_id);
+    const s = sf.get(c.empresa_id), f = fgtsNaData(fg.get(c.empresa_id), hoje), p = pc.get(c.empresa_id), x = cx.get(c.empresa_id);
     const receita = s?.situacao === 'PENDENCIAS' ? Number(s.total_aberto ?? 0) : 0;
     const fgts = f?.situacao === 'EM_ABERTO' ? Number(f.total ?? 0) : 0;
     const parcelas = p?.situacao === 'EM_ATRASO' ? Number(p.valor_atrasado ?? 0) : 0;
@@ -60,14 +64,14 @@ export function dadosPendencias(escritorioId: number, empresas: number[] | null)
     .sort((a, b) => (PESO[b.geral ?? ''] ?? 0) - (PESO[a.geral ?? ''] ?? 0) || b.total - a.total || a.cliente.localeCompare(b.cliente));
   const soma = (k: 'receita' | 'fgts' | 'parcelas' | 'total' | 'obrigacoes' | 'a_entregar' | 'nao_lidas' | 'certificados') => r2(comPendencia.reduce((t, l) => t + l[k], 0));
   return {
-    hoje, limite, carteira: linhas.length, linhas: comPendencia, semPendencia: linhas.length - comPendencia.length,
+    hoje, limite, competencia: mon.competencia, carteira: linhas.length, linhas: comPendencia, semPendencia: linhas.length - comPendencia.length,
     atencao: comPendencia.filter((l) => l.geral === 'ATENCAO').length,
     totais: { receita: soma('receita'), fgts: soma('fgts'), parcelas: soma('parcelas'), total: soma('total'), obrigacoes: soma('obrigacoes'), a_entregar: soma('a_entregar'), nao_lidas: soma('nao_lidas'), certificados: soma('certificados') },
   };
 }
 
-export function pendenciasPdf(escritorioId: number, empresas: number[] | null): Promise<{ pdf: Buffer; nome: string }> {
-  const d = dadosPendencias(escritorioId, empresas);
+export function pendenciasPdf(escritorioId: number, empresas: number[] | null, competencia: string | null = null): Promise<{ pdf: Buffer; nome: string }> {
+  const d = dadosPendencias(escritorioId, empresas, competencia);
   const em = emitenteDoEscritorio(escritorioId);
   return new Promise((ok, falha) => {
     const pdf = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 0, bufferPages: true, info: { Title: 'Pendências por cliente' } });
@@ -75,7 +79,7 @@ export function pendenciasPdf(escritorioId: number, empresas: number[] | null): 
     pdf.on('end', () => ok({ pdf: Buffer.concat(partes), nome: `Pendencias_por_cliente_${d.hoje}.pdf` }));
     const X = 16 * MM, W = pdf.page.width - 2 * X, LIM = pdf.page.height - 18 * MM;
     const txt = (t: string, x: number, y: number, o: any = {}) => pdf.fillColor(o.cor ?? COR.texto).font(o.negrito ? 'Helvetica-Bold' : o.italico ? 'Helvetica-Oblique' : 'Helvetica').fontSize(o.tam ?? 8).text(t, x, y, { width: o.w, align: o.align, lineBreak: o.quebra ?? true, ellipsis: o.quebra === false ? true : undefined, height: o.h });
-    const titulo = { titulo: 'Pendências por cliente', subtitulo: `Posição em ${dataBr(d.hoje)} · ${d.linhas.length} de ${d.carteira} cliente(s) com pendências`, compacto: true };
+    const titulo = { titulo: 'Pendências por cliente', subtitulo: `Competência ${d.competencia.slice(5)}/${d.competencia.slice(0, 4)} · posição em ${dataBr(d.hoje)} · ${d.linhas.length} de ${d.carteira} cliente(s) com pendências`, compacto: true };
     const novaPagina = () => { pdf.addPage({ size: 'A4', layout: 'landscape', margin: 0 }); return cabecalho(pdf, em, titulo); };
     let y = cabecalho(pdf, em, titulo);
 

@@ -66,11 +66,11 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/tabelas', async () => ({ regimes: ROTULO_REGIME, tiposCertificado: TIPOS_CERT, indices: ROTULO_INDICE, camposModelo: CAMPOS_MODELO, escopoPadrao: ESCOPO_PADRAO }));
     api.get('/api/escritorio/equipe', async (req) => db.prepare('SELECT id, nome, login FROM usuarios WHERE escritorio_id = ? AND ativo = 1 AND mestre = 0 ORDER BY nome').all(u(req).escritorio_id));
     api.get('/api/escritorio/monitor/pendencias', async (req, reply) => {
-      const q = z.object({ ids: z.string().regex(/^\d+(,\d+)*$/).max(20000).optional() }).parse(req.query);
+      const q = z.object({ ids: z.string().regex(/^\d+(,\d+)*$/).max(20000).optional(), competencia: z.string().regex(/^\d{4}-\d{2}$/).optional() }).parse(req.query);
       const permitidas = empresasDoUsuario(u(req));
       let ids: number[] | null = q.ids ? q.ids.split(',').map(Number) : permitidas;
       if (q.ids && permitidas) ids = ids!.filter((i) => permitidas.includes(i));
-      const r = await pendenciasPdf(u(req).escritorio_id, ids);
+      const r = await pendenciasPdf(u(req).escritorio_id, ids, q.competencia ?? null);
       return reply.type('application/pdf').header('content-disposition', `inline; filename="${r.nome}"`).send(r.pdf);
     });
     api.get('/api/escritorio/monitor/:id/relatorio', async (req, reply) => {
@@ -96,7 +96,10 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.put('/api/escritorio/envio-dp/cliente/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return salvarClienteDp(u(req).escritorio_id, id, ClienteDp.parse(req.body)); });
     api.post('/api/escritorio/envio-dp/verificar', async (req) => varrerPastaDp(u(req).escritorio_id, !!(req.body as any)?.enviar));
     api.get('/api/inicio', async (req) => ({ lembretes: lembretesDoDia(u(req).escritorio_id, modulosDoUsuario(u(req)), empresasDoUsuario(u(req))) }));
-    api.get('/api/escritorio/monitor', async (req) => { await atualizarReceitas(u(req).escritorio_id); return monitorFiscal(u(req).escritorio_id, empresasDoUsuario(u(req))); });
+    api.get('/api/escritorio/monitor', async (req) => {
+      const comp = z.object({ competencia: z.string().regex(/^\d{4}-\d{2}$/).optional() }).parse(req.query).competencia ?? null;
+      await atualizarReceitas(u(req).escritorio_id); return monitorFiscal(u(req).escritorio_id, empresasDoUsuario(u(req)), 300, comp);
+    });
     api.get('/api/escritorio/resumo-financeiro/:id', async (req) => { const id = Number((req.params as any).id); checar(req, id); return resumoFinanceiro(u(req).escritorio_id, id, mesDe(req.query)); });
     api.get('/api/escritorio/visao', async (req) => visaoGeral(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))));
 

@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.37.3';
+export const MANUAL_VERSAO = '1.38.0';
 
 export const MANUAL = [
   {
@@ -151,6 +151,8 @@ export const MANUAL = [
     id: 'monitor', titulo: 'Monitor fiscal', resumo: 'Pendências de cada cliente por processo, notificações e sublimites do Simples.',
     corpo: `
       <p>Em Escritório &gt; Monitor fiscal, uma tela com a situação de toda a carteira no que o Kontor acompanha. Nada é consultado na Receita ao abrir: a tela lê o que já está no sistema.</p>
+      <p><strong>Competência:</strong> o escritório processa sempre o mês anterior (em novembro, a competência outubro). O Monitor olha essa competência e as anteriores; obrigações de competências seguintes ainda não aparecem. O que o <strong>Controle mensal</strong> já dá como feito (guia emitida ou enviada, sem movimento, DP enviado ou sem folha) e o que foi transmitido pelo Kontor contam como entregues. No alto da tela dá para escolher outra competência.</p>
+      <p><strong>FGTS Digital:</strong> só conta como valor em aberto a guia que já passou do vencimento. A guia do mês, ainda no prazo, aparece como aviso <em>a vencer</em> (com o valor e a data), como a DARF previdenciária da DCTFWeb, e não entra nos totais em aberto.</p>
       <ul>
         <li><strong>Visão geral dos clientes:</strong> cada cliente entra na pior situação entre os processos: <em>Atenção</em> (algo vencido, em aberto ou com erro), <em>Pendentes</em> (algo a fazer ou conferir), <em>Processando</em>, <em>Em dia</em> ou <em>Sem informação</em>.</li>
         <li><strong>Por processo:</strong> PGDAS-D e PGMEI (obrigações DAS e DAS do MEI e o fechamento), DCTFWeb (DCTFWeb e DARF previdenciário), FGTS Digital (última consulta), Situação fiscal (último relatório da Receita/PGFN), Parcelamentos e Caixa postal (última consulta), Certificados (A1 e procurações vencidos ou vencendo em 30 dias) e Demais obrigações. Clique no nome do processo, num pedaço da barra ou numa situação para listar os clientes.</li>

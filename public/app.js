@@ -18,6 +18,7 @@ const dhBr = (s) => {
 };
 const dataBr = (s) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '');
 const mesAtual = () => new Date().toISOString().slice(0, 7);
+const mesAnterior = (m) => { const [a, b] = m.split('-').map(Number); return b === 1 ? `${a - 1}-12` : `${a}-${String(b - 1).padStart(2, '0')}`; };
 const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 const fmtDoc = (d) => !d ? '' : d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d;
 const numero = (v) => (v === '' || v == null ? null : Number(String(v).replace(/\./g, '').replace(',', '.')));
@@ -4953,12 +4954,12 @@ async function telaIntegra() {
 const SIT_FISCAL = { REGULAR: ['Regular', 'PZ-ENTREGUE'], PENDENCIAS: ['Com pendências', 'PZ-ATRASADA'], VERIFICAR: ['Conferir o PDF', 'PZ-BREVE'] };
 
 // ---------- FGTS Digital ----------
-const SIT_FGTS = { EM_DIA: ['Em dia', 'cor-verde'], EM_ABERTO: ['Em aberto', 'cor-vermelho'], SEM_PROCURACAO: ['Sem procuração', 'cor-ambar'], ERRO: ['Erro', 'cor-vermelho'] };
+const SIT_FGTS = { EM_DIA: ['Em dia', 'cor-verde'], EM_ABERTO: ['Em aberto', 'cor-vermelho'], A_VENCER: ['Guia a vencer', 'cor-ambar'], SEM_PROCURACAO: ['Sem procuração', 'cor-ambar'], ERRO: ['Erro', 'cor-vermelho'] };
 function celulaFgts(c) {
   const f = c.fgts;
   if (!f) return c.tem_funcionarios ? '<span class="dica">não consultado</span>' : '<span class="dica">—</span>';
   const [rot, cor] = SIT_FGTS[f.situacao] ?? [f.situacao, ''];
-  return `<a href="#" data-fgts="${c.empresa_id}" class="${cor}">${f.situacao === 'EM_ABERTO' ? `<strong>${brl(f.total ?? 0)}</strong><br><span class="dica">${f.qtd_competencias} competência(s)</span>` : rot}</a>${f.notificacao ? '<br><span class="cor-vermelho dica">notificação de débito</span>' : ''}<br><span class="dica">${dataBr(f.consultado_em)}</span>`;
+  return `<a href="#" data-fgts="${c.empresa_id}" class="${cor}">${f.situacao === 'EM_ABERTO' ? `<strong>${brl(f.total ?? 0)}</strong><br><span class="dica">${f.qtd_competencias} competência(s) vencida(s)</span>` : rot}</a>${f.qtd_a_vencer ? `<br><span class="dica cor-ambar" title="Guia ainda no prazo: não é débito">a vencer ${brl(f.a_vencer)} em ${dataBr(f.proximo_vencimento)}</span>` : ''}${f.notificacao ? '<br><span class="cor-vermelho dica">notificação de débito</span>' : ''}<br><span class="dica">${dataBr(f.consultado_em)}</span>`;
 }
 
 /** Consulta pelo aplicativo instalado: o usuário entra no portal com o certificado do escritório e o Kontor lê cada cliente. */
@@ -5002,11 +5003,12 @@ async function detalheFgtsCliente(empresaId) {
   abrirDialogo(`<div class="dlg-largo"><h2>FGTS Digital — ${esc(d.cliente)}</h2>
     <p class="sutil">${fmtDoc(d.documento)}${u ? ` · consultado em ${dhBr(u.consultado_em)}${u.usuario ? ` por ${esc(u.usuario)}` : ''}` : ''}</p>
     ${!u ? '<p>Ainda não consultado.</p>' : u.situacao === 'EM_DIA' ? '<div class="cartao"><strong class="cor-verde">Nenhuma competência em aberto</strong> na Emissão de Guia Rápida.</div>'
-      : u.situacao !== 'EM_ABERTO' ? `<div class="banner teste">${esc(SIT_FGTS[u.situacao]?.[0] ?? u.situacao)}: ${esc(u.mensagem ?? '')}</div>` : `
-      <div class="resumo"><div class="cartao alerta-cartao"><div class="sutil">Em aberto (valor para pagamento no dia da consulta)</div><div class="valor cor-vermelho">${brl(u.total ?? 0)}</div><div class="dica">${u.qtd_competencias} competência(s)</div></div></div>
+      : u.situacao !== 'EM_ABERTO' && u.situacao !== 'A_VENCER' ? `<div class="banner teste">${esc(SIT_FGTS[u.situacao]?.[0] ?? u.situacao)}: ${esc(u.mensagem ?? '')}</div>` : `
+      <div class="resumo"><div class="cartao ${u.total ? 'alerta-cartao' : ''}"><div class="sutil">Vencido (valor para pagamento no dia da consulta)</div><div class="valor ${u.total ? 'cor-vermelho' : 'cor-verde'}">${brl(u.total ?? 0)}</div><div class="dica">${u.qtd_competencias} competência(s) vencida(s)</div></div>
+        ${u.qtd_a_vencer ? `<div class="cartao"><div class="sutil">Guia a vencer (não é débito)</div><div class="valor cor-ambar">${brl(u.a_vencer)}</div><div class="dica">vence em ${dataBr(u.proximo_vencimento)}</div></div>` : ''}</div>
       ${u.notificacao ? '<div class="banner teste">O empregador tem <strong>notificação de débito</strong> de FGTS no portal.</div>' : ''}
       <table class="tabela"><thead><tr><th>Competência</th><th>Tipo</th><th>Vencimento</th><th class="num">Trab.</th><th class="num">FGTS</th><th class="num">Encargos</th><th class="num">Total</th></tr></thead><tbody>
-      ${u.competencias.flatMap((c) => (c.detalhes?.length ? c.detalhes : [{ competencia: c.competencia, vlTotal: c.total, tipo: c.erro ? 'não lido' : '' }]).map((x) => `<tr><td>${esc(x.competencia ?? c.competencia)}</td><td>${esc(x.tipo ?? '')}</td><td>${esc(x.vencimento ?? '')}</td>
+      ${u.competencias.flatMap((c) => (c.detalhes?.length ? c.detalhes : [{ competencia: c.competencia, vlTotal: c.total, tipo: c.erro ? 'não lido' : '' }]).map((x) => `<tr><td>${esc(x.competencia ?? c.competencia)}</td><td>${esc(x.tipo ?? '')}</td><td>${esc(x.vencimento ?? dataBr(c.vencimento))}${c.a_vencer ? ' <span class="dica cor-ambar">a vencer</span>' : ''}</td>
         <td class="num">${x.qtdTrabalhadores ?? ''}</td><td class="num">${v((x.vlMensal ?? 0) + (x.vlRescisorio ?? 0) + (x.vlCompensatorio ?? 0) + (x.vlProcessoTrabalhista ?? 0))}</td>
         <td class="num">${v((x.vlEncargos ?? 0) + (x.vlAtualizacaoMonetaria ?? 0) + (x.vlJuros ?? 0) + (x.vlMulta ?? 0))}</td><td class="num"><strong>${v(x.vlTotal)}</strong></td></tr>`)).join('')}</tbody></table>
       <p class="dica">A guia é emitida no próprio FGTS Digital (Gestão de Guias &gt; Emissão de Guia Rápida), com a data de pagamento que o cliente escolher.</p>`}
@@ -5586,7 +5588,8 @@ function celulaSf(x) {
 
 async function telaMonitor() {
   const podeSf = estado.usuario.modulos.includes('situacao');
-  const [d, sf, ag] = await Promise.all([api('GET', '/api/escritorio/monitor'),
+  const fc = telaMonitor.comp ?? '';
+  const [d, sf, ag] = await Promise.all([api('GET', `/api/escritorio/monitor${fc ? `?competencia=${fc}` : ''}`),
     podeSf ? api('GET', '/api/escritorio/situacao-fiscal') : null, podeSf ? api('GET', '/api/escritorio/situacao-fiscal/agenda') : null]);
   const f = telaMonitor.filtro ??= { estado: null, processo: null, q: '', qc: '', sit: '' };
   const sfDe = telaMonitor.sf = new Map((sf?.clientes ?? []).map((c) => [c.empresa_id, c]));
@@ -5594,7 +5597,7 @@ async function telaMonitor() {
   const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
-      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-pend-pdf" class="primario" title="PDF com as pendências de cada cliente: os marcados na lista ou, sem marcação, todos os da lista">Pendências por cliente (PDF)</button> <button id="mon-atualizar">Atualizar</button></div></div>
+      <div class="mon-atual"><label class="mon-comp" title="O escritório processa o mês anterior: em novembro, a competência outubro. O Monitor olha esta competência e as anteriores.">Competência <select id="mon-comp">${(() => { const base = mesAnterior(mesAtual()); const l = []; for (let i = 0, m = base; i < 6; i++, m = mesAnterior(m)) l.push(m); if (!l.includes(d.competencia)) l.push(d.competencia); return l.map((m) => `<option value="${m}" ${m === d.competencia ? 'selected' : ''}>${rotuloMes(m)}${m === base ? ' (em processamento)' : ''}</option>`).join(''); })()}</select></label> <span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-pend-pdf" class="primario" title="PDF com as pendências de cada cliente: os marcados na lista ou, sem marcação, todos os da lista">Pendências por cliente (PDF)</button> <button id="mon-atualizar">Atualizar</button></div></div>
     ${sf && !sf.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado: as consultas à Receita (situação fiscal, parcelamentos e caixa postal) não funcionam. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador.'}</div>` : ''}
     ${sf ? `<div class="mon-kpis sf-kpis">
       <button type="button" class="cartao kpi ${sf.resumo.comPendencias ? 'kpi-alerta' : ''}" data-sit="PENDENCIAS"><span class="dica">Débitos na Receita e PGFN</span><strong class="${sf.resumo.comPendencias ? 'cor-vermelho' : 'cor-verde'}">${sf.resumo.comPendencias} ${sf.resumo.comPendencias === 1 ? 'cliente' : 'clientes'}</strong><span class="dica">${brl(sf.resumo.totalAberto)} em aberto na Receita</span></button>
@@ -5710,11 +5713,12 @@ async function telaMonitor() {
     ligarAgendaSituacao(ag, telaMonitor);
   }
   $('#mon-atualizar').onclick = () => telaMonitor();
+  $('#mon-comp').onchange = (e) => { telaMonitor.comp = e.target.value === mesAnterior(mesAtual()) ? '' : e.target.value; telaMonitor(); };
   $('#mon-pend-pdf').onclick = async (ev) => {
     const ids = alvo().map((c) => c.empresa_id);
     if (!ids.length) return aviso('Nenhum cliente na lista.');
     const b = ev.target; b.disabled = true;
-    try { await baixar(`/api/escritorio/monitor/pendencias${ids.length === d.clientes.length ? '' : `?ids=${ids.join(',')}`}`, 'Pendencias_por_cliente.pdf', true); } finally { b.disabled = false; }
+    try { await baixar(`/api/escritorio/monitor/pendencias?${new URLSearchParams({ ...(ids.length === d.clientes.length ? {} : { ids: ids.join(',') }), ...(fc ? { competencia: fc } : {}) })}`, 'Pendencias_por_cliente.pdf', true); } finally { b.disabled = false; }
   };
   $('#mon-decl') && ($('#mon-decl').onclick = () => loteFechamento(`Buscar as declarações do Simples de ${rotuloMes(MES_DECL)}`, d.clientes.filter((c) => c.regime === 'SIMPLES'),
     'Para cada cliente do Simples, o Kontor busca a declaração do PGDAS-D já transmitida (sem gerar DAS) e lê o faturamento do mês, o acumulado do ano e o RBT12. O faturamento do mês também vai para o Controle mensal. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',

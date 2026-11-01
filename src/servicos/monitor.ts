@@ -2,6 +2,7 @@ import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
 import { situacaoPrazo } from './obrigacoes.js';
 import { ultimasCaixas, ultimosParcelamentos } from './parcelamentos-caixa.js';
+import { fgtsNaData } from './fgts.js';
 
 /**
  * Monitor fiscal: situação de cada cliente da carteira por processo (PGDAS-D, PGMEI, DCTFWeb, FGTS Digital,
@@ -36,19 +37,58 @@ const mesesAntes = (mes: string, n: number) => { const [a, m] = mes.split('-').m
 
 type Notif = { nivel: Estado; processo: Proc; empresa_id: number; cliente: string; titulo: string; texto: string; data: string };
 
-export function monitorFiscal(escritorioId: number, empresas: number[] | null = null, limiteNotificacoes = 300) {
-  const hoje = hojeBr(), mes = hoje.slice(0, 7), ate = fimDoMes(mes);
+/**
+ * Competência em processamento: o escritório fecha sempre o mês anterior (em novembro processa outubro). O Monitor
+ * olha para ela e para as anteriores; obrigações de competências posteriores ainda não começaram.
+ */
+export const competenciaEmProcessamento = (hoje = hojeBr()) => mesesAntes(hoje.slice(0, 7), 1);
+/** Último mês de uma competência (AAAA-MM, AAAA-Tn ou AAAA), para comparar com a competência de referência. */
+export function fimDaCompetencia(c: string): string {
+  if (/^\d{4}-\d{2}$/.test(c)) return c;
+  const t = /^(\d{4})-T([1-4])$/.exec(c); if (t) return `${t[1]}-${String(Number(t[2]) * 3).padStart(2, '0')}`;
+  if (/^\d{4}$/.test(c)) return `${c}-12`;
+  return c;
+}
+const FISCAL_FEITO = (d: any) => !!(d?.sem_movimento || d?.enviado || d?.emissao);
+const DP_FEITO = (d: any) => !!(d?.sem_folha || d?.enviado);
+/** Tarefas que o Controle mensal (ou a transmissão pelo Kontor) já dá como feitas, mesmo sem a baixa em Obrigações. */
+export function feitasNoControle(ids: number[], competencias: string[]) {
+  const feitas = new Set<string>(); // empresa:competência:FISCAL|DP
+  if (!ids.length || !competencias.length) return feitas;
+  const cs = competencias.map(() => '?').join(',');
+  for (const c of db.prepare(`SELECT empresa_id, competencia, area, dados_json FROM controle_mensal WHERE empresa_id IN (${ids.join(',')}) AND competencia IN (${cs}) AND area IN ('FISCAL','DP')`).all(...competencias) as any[]) {
+    const d = c.dados_json ? JSON.parse(c.dados_json) : {};
+    if (c.area === 'FISCAL' ? FISCAL_FEITO(d) : DP_FEITO(d)) feitas.add(`${c.empresa_id}:${c.competencia}:${c.area}`);
+  }
+  for (const f of db.prepare(`SELECT empresa_id, competencia, tipo FROM fechamentos WHERE empresa_id IN (${ids.join(',')}) AND competencia IN (${cs}) AND situacao = 'TRANSMITIDA'`).all(...competencias) as any[])
+    feitas.add(`${f.empresa_id}:${f.competencia}:${f.tipo === 'DCTFWEB' ? 'DP' : 'FISCAL'}`);
+  return feitas;
+}
+const AREA_DO_CODIGO: Record<string, 'FISCAL' | 'DP'> = { DAS: 'FISCAL', DASMEI: 'FISCAL', DCTFWEB: 'DP', DARFPREV: 'DP', FGTS: 'DP' };
+/** Situação da tarefa considerando o Controle mensal. */
+export function prazoComControle(t: any, feitas: Set<string>, hoje = hojeBr()) {
+  const area = AREA_DO_CODIGO[t.codigo];
+  if (area && t.status !== 'ENTREGUE' && feitas.has(`${t.empresa_id}:${t.competencia}:${area}`)) return 'ENTREGUE';
+  return situacaoPrazo(t, hoje);
+}
+
+export function monitorFiscal(escritorioId: number, empresas: number[] | null = null, limiteNotificacoes = 300, competencia: string | null = null) {
+  const hoje = hojeBr();
+  const ref = competencia ?? competenciaEmProcessamento(hoje);
+  const ate = fimDoMes(mesesAntes(ref, -1)); // vencimentos até o fim do mês seguinte à competência
   const filtro = empresas ? `AND e.id IN (${empresas.map(() => '?').join(',') || 'NULL'})` : '';
   const clientes = db.prepare(`SELECT e.id, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento, e.regime, e.tem_funcionarios, e.cert_validade, (e.cert_pfx_enc IS NOT NULL) AS tem_a1
     FROM empresas e WHERE e.escritorio_id = ? AND e.na_carteira = 1 AND e.eh_escritorio = 0 AND e.situacao = 'ATIVO' ${filtro} ORDER BY cliente`).all(escritorioId, ...(empresas ?? [])) as any[];
   const ids = clientes.map((c) => c.id);
   const em = ids.length ? ids.join(',') : 'NULL';
 
-  // obrigações vencidas ou que vencem até o fim deste mês (dispensadas não contam)
-  const tarefas = db.prepare(`SELECT t.empresa_id, t.status, t.vencimento, t.competencia, o.codigo, o.nome, o.antecedencia FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id
-    WHERE t.empresa_id IN (${em}) AND t.vencimento <= ? AND t.status != 'DISPENSADA'`).all(ate) as any[];
+  // obrigações da competência em processamento e anteriores, vencidas ou vencendo até o fim do mês seguinte a ela
+  // (dispensadas não contam; o que o Controle mensal já dá como feito conta como entregue)
+  const tarefas = (db.prepare(`SELECT t.empresa_id, t.status, t.vencimento, t.competencia, o.codigo, o.nome, o.antecedencia FROM tarefas t JOIN obrigacoes o ON o.id = t.obrigacao_id
+    WHERE t.empresa_id IN (${em}) AND t.vencimento <= ? AND t.status != 'DISPENSADA'`).all(ate) as any[]).filter((t) => fimDaCompetencia(t.competencia) <= ref);
+  const feitas = feitasNoControle(ids, [...new Set(tarefas.map((t) => t.competencia))]);
   const porEmpresa = new Map<number, any[]>();
-  for (const t of tarefas) { const l = porEmpresa.get(t.empresa_id) ?? []; l.push({ ...t, prazo: situacaoPrazo(t, hoje) }); porEmpresa.set(t.empresa_id, l); }
+  for (const t of tarefas) { const l = porEmpresa.get(t.empresa_id) ?? []; l.push({ ...t, prazo: prazoComControle(t, feitas, hoje) }); porEmpresa.set(t.empresa_id, l); }
   const estadoTarefas = (l: any[]): Estado | null => {
     if (!l.length) return null;
     if (l.some((t) => t.prazo === 'ATRASADA')) return 'ATENCAO';
@@ -59,7 +99,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
   const fgts = ultimo(`SELECT f.* FROM fgts_consultas f WHERE f.id IN (SELECT MAX(id) FROM fgts_consultas WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
   const sit = ultimo(`SELECT s.id, s.empresa_id, s.status, s.situacao, s.qtd_pendencias, s.total_aberto, s.erro, s.solicitada_em, s.concluida_em FROM situacao_fiscal s
     WHERE s.id IN (SELECT MAX(id) FROM situacao_fiscal WHERE empresa_id IN (${em}) GROUP BY empresa_id)`);
-  const fech = db.prepare(`SELECT empresa_id, tipo, situacao, erro, competencia, atualizado_em FROM fechamentos WHERE empresa_id IN (${em}) AND competencia >= ?`).all(mesesAntes(mes, 2)) as any[];
+  const fech = db.prepare(`SELECT empresa_id, tipo, situacao, erro, competencia, atualizado_em FROM fechamentos WHERE empresa_id IN (${em}) AND competencia BETWEEN ? AND ?`).all(mesesAntes(ref, 1), ref) as any[];
   const parcs = ultimosParcelamentos(ids), caixas = ultimasCaixas(ids);
   const certs = db.prepare(`SELECT empresa_id, tipo, titular, validade FROM certificados WHERE escritorio_id = ? AND renovado = 0 AND empresa_id IN (${em})`).all(escritorioId) as any[];
 
@@ -79,9 +119,10 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
       if (f.situacao === 'ERRO') { proc[p] = pior([proc[p], 'ATENCAO']); n('ATENCAO', p, `${f.tipo === 'PGDASD' ? 'PGDAS-D' : 'DCTFWeb'} com erro na transmissão`, f.erro ?? 'A Receita recusou a transmissão.', f.atualizado_em.slice(0, 10)); }
       else if (f.situacao === 'CALCULADO') proc[p] = pior([proc[p], 'PROCESSANDO']);
     }
-    const fg = fgts.get(c.id);
+    const fg = fgtsNaData(fgts.get(c.id), hoje);
     proc.FGTS = !fg ? null : fg.situacao === 'EM_DIA' ? 'EM_DIA' : fg.situacao === 'EM_ABERTO' ? 'ATENCAO' : 'PENDENTE';
-    if (fg && fg.situacao !== 'EM_DIA') n(proc.FGTS!, 'FGTS', fg.situacao === 'EM_ABERTO' ? `FGTS Digital: ${fg.qtd_competencias} competência(s) em aberto` : fg.situacao === 'SEM_PROCURACAO' ? 'FGTS Digital: sem procuração' : 'FGTS Digital: erro na consulta',
+    if (fg?.qtd_a_vencer) n('PENDENTE', 'FGTS', `FGTS Digital: ${fg.qtd_a_vencer === 1 ? 'guia a vencer' : `${fg.qtd_a_vencer} guias a vencer`}`, `${Number(fg.a_vencer).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} com vencimento em ${String(fg.proximo_vencimento).split('-').reverse().join('/')}. Não é débito: só pagar até o vencimento.`, fg.consultado_em.slice(0, 10));
+    if (fg && fg.situacao !== 'EM_DIA' && fg.situacao !== 'A_VENCER') n(proc.FGTS!, 'FGTS', fg.situacao === 'EM_ABERTO' ? `FGTS Digital: ${fg.qtd_competencias} competência(s) em aberto` : fg.situacao === 'SEM_PROCURACAO' ? 'FGTS Digital: sem procuração' : 'FGTS Digital: erro na consulta',
       fg.situacao === 'EM_ABERTO' ? `Total em aberto ${Number(fg.total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.` : (fg.mensagem ?? ''), fg.consultado_em.slice(0, 10));
     const s = sit.get(c.id);
     proc.SITFIS = !s ? null : s.status === 'SOLICITADA' ? 'PROCESSANDO' : s.status === 'ERRO' ? 'PENDENTE' : s.situacao === 'REGULAR' ? 'EM_DIA' : s.situacao === 'PENDENCIAS' ? 'ATENCAO' : 'PENDENTE';
@@ -114,6 +155,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
   notificacoes.sort((a, b) => PESO[b.nivel] - PESO[a.nivel] || b.data.localeCompare(a.data));
   return {
     atualizado_em: new Date().toISOString(),
+    competencia: ref,
     total: linhas.length,
     geral: contar(linhas.map((l) => l.geral)),
     processos: PROCESSOS.map((p) => ({ ...p, contagem: contar(linhas.map((l) => l.processos[p.id])) })),
