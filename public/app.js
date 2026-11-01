@@ -3206,6 +3206,7 @@ function telaMinhaConta() {
 
 const TEMAS = [
   { id: 'azul-dourado', nome: 'Azul e dourado (padrão)', cores: ['#060d1d', '#091226', '#dcb25a'] },
+  { id: 'azul-roxo', nome: 'Azul e roxo', cores: ['#070b22', '#0a0f2b', '#a78bfa'] },
   { id: 'preto-laranja', nome: 'Preto e laranja', cores: ['#0f0f0f', '#0a0a0a', '#fb923d'] },
   { id: 'branco-laranja', nome: 'Branco e laranja', cores: ['#ffffff', '#f6f3ef', '#d9600c'] },
 ];
