@@ -2,12 +2,18 @@
 // Não há API pública: o usuário entra no portal numa janela do Kontor, com o certificado digital do escritório
 // (gov.br), e o Kontor usa as mesmas telas do portal para, cliente a cliente, definir o perfil "Procurador" e ler as
 // competências em aberto (Emissão de Guia Rápida). Nada é emitido nem alterado no portal.
+import fs from 'node:fs';
+import path from 'node:path';
 import { app, BrowserWindow, clipboard, dialog, session } from 'electron';
 
 const ORIGEM = 'https://fgtsdigital.sistema.gov.br';
 const PARTICAO = 'persist:fgts-digital';
 let janelaFgts = null;
-let certificadoEscolhido = null; // fingerprint escolhido nesta abertura do programa
+// certificado escolhido para o FGTS: lembrado entre aberturas do programa (só o fingerprint, nunca a chave)
+const arqCert = () => path.join(app.getPath('userData'), 'fgts-certificado.json');
+let certificadoEscolhido; // lido na primeira vez que o gov.br pede o certificado
+const certificadoSalvo = () => { if (certificadoEscolhido === undefined) { try { certificadoEscolhido = JSON.parse(fs.readFileSync(arqCert(), 'utf8')).fingerprint ?? null; } catch { certificadoEscolhido = null; } } return certificadoEscolhido; };
+const lembrarCertificado = (fp) => { certificadoEscolhido = fp; try { fs.writeFileSync(arqCert(), JSON.stringify({ fingerprint: fp })); } catch { /* só nesta abertura */ } };
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -15,16 +21,17 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 app.on('select-client-certificate', async (event, webContents, url, lista, callback) => {
   if (!janelaFgts || janelaFgts.isDestroyed() || webContents !== janelaFgts.webContents) return;
   event.preventDefault();
-  const salvo = lista.find((c) => c.fingerprint === certificadoEscolhido);
+  const salvo = lista.find((c) => c.fingerprint === certificadoSalvo());
   if (salvo) return callback(salvo);
   if (!lista.length) return callback();
+  if (lista.length === 1) { lembrarCertificado(lista[0].fingerprint); return callback(lista[0]); }
   const nomes = lista.map((c) => `${c.subjectName}${c.validExpiry ? ` (válido até ${new Date(c.validExpiry * 1000).toLocaleDateString('pt-BR')})` : ''}`);
   const r = await dialog.showMessageBox(janelaFgts, {
     type: 'question', title: 'Certificado digital', message: 'Escolha o certificado para entrar no FGTS Digital',
     detail: 'Use o certificado do escritório (e-CNPJ): o Kontor consulta os clientes como procurador.', buttons: [...nomes, 'Cancelar'], cancelId: nomes.length, noLink: true,
   });
   if (r.response >= lista.length) return callback();
-  certificadoEscolhido = lista[r.response].fingerprint;
+  lembrarCertificado(lista[r.response].fingerprint);
   callback(lista[r.response]);
 });
 
@@ -58,11 +65,24 @@ async function esperarLogin(pai, aoAvisar) {
   const w = janela(pai);
   w.show(); w.focus();
   if (await logado()) return w;
-  aoAvisar?.({ etapa: 'login', mensagem: 'Entre no FGTS Digital com o certificado do escritório na janela que abriu.' });
+  aoAvisar?.({ etapa: 'login', mensagem: 'Entrando no FGTS Digital pelo gov.br com certificado digital. Quando aparecer a lista, escolha o certificado do escritório (e-CNPJ).' });
+  // o Kontor clica sozinho em "Entrar com GOV.BR" e em "Seu certificado digital"; a escolha do certificado fica com o usuário
+  const clicados = new Set();
   const fim = Date.now() + 10 * 60e3;
   while (Date.now() < fim) {
     if (!janelaFgts || janelaFgts.isDestroyed()) throw new Error('A janela do FGTS Digital foi fechada.');
     if (await logado()) return w;
+    try {
+      const url = w.webContents.getURL();
+      const chave = url.includes('acesso.gov.br') ? 'govbr' : url.startsWith(ORIGEM) ? 'portal' : null;
+      if (chave && !clicados.has(chave)) {
+        const ok = await js(w, chave === 'portal'
+          ? `const b = [...document.querySelectorAll('button, a')].find((x) => /entrar com gov\\.?br/i.test(x.textContent)); if (!b) return false; b.click(); return true;`
+          : `const l = [...document.querySelectorAll('a, button, li, [role=button], [tabindex]')].filter((x) => /seu certificado digital/i.test(x.textContent) && !/nuvem/i.test(x.textContent));
+             const b = l.sort((x, y) => x.textContent.length - y.textContent.length)[0]; if (!b) return false; (b.closest('a, button') ?? b).click(); return true;`);
+        if (ok) clicados.add(chave);
+      }
+    } catch { /* página ainda carregando */ }
     await dormir(1500);
   }
   throw new Error('O login no FGTS Digital não foi concluído em 10 minutos.');
@@ -159,7 +179,19 @@ async function preencherPerfil(w, ni) {
   }
   if (digitado !== ni) return { ok: false, motivo: 'o campo do CNPJ não aceitou o número' };
   // 4) Selecionar e esperar o portal confirmar
-  await js(w, `${AJUDANTES} [...caixa().querySelectorAll('button')].find((b) => /^\\s*(selecionar|definir|confirmar)\\s*$/i.test(b.textContent))?.click(); return true;`);
+  // botão Selecionar: procura subindo a partir do campo (o rodapé da caixa fica fora do formulário) e, por último, na página
+  const clicou = await js(w, `${AJUDANTES}
+    const eh = (b) => visivel(b) && !b.disabled && /^\\s*(selecionar|definir|confirmar)\\s*$/i.test(b.textContent);
+    campoNi()?.dispatchEvent(new Event('blur', { bubbles: true }));
+    for (let i = 0; i < 20; i++) {
+      let el = campoNi(), b = null;
+      while (el && !b) { b = [...el.querySelectorAll?.('button') ?? []].find(eh) ?? null; el = el.parentElement; }
+      b ??= [...document.querySelectorAll('button')].find(eh);
+      if (b) { b.click(); return true; }
+      await espera(150);
+    }
+    return false;`);
+  if (!clicou) return { ok: false, motivo: 'não encontrei o botão Selecionar' };
   for (let i = 0; i < 60; i++) {
     await dormir(250);
     if (await perfilConfirmado(ni, w)) return { ok: true };
