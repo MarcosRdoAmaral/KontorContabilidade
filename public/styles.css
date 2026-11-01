@@ -686,3 +686,13 @@ main:focus, main:focus-visible { outline: none; }
 .inicio-dica-sino { display: flex; align-items: center; gap: 6px; margin: 0 4px; }
 @media (max-width: 1180px) { .inicio2 { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .inicio-hero { grid-template-columns: 1fr; } .inicio-hero .inicio-hero-logo { justify-self: start; max-width: 240px; } .inicio-banner { flex-wrap: wrap; } }
+
+/* Rodapé fixo do menu: Configurações (com a licença) e Sair */
+.lateral-rodape { position: sticky; bottom: -20px; z-index: 2; margin: auto -16px -20px; padding: 10px 16px 16px; background: var(--lateral); border-top: 1px solid var(--lateral-borda); display: grid; gap: 2px; }
+.rodape-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 11px; border-radius: var(--raio); border: 0; border-left: 3px solid transparent; background: transparent; color: var(--menu); text-decoration: none; font: inherit; text-align: left; cursor: pointer; }
+.rodape-item:hover { background: var(--superficie-2); }
+.rodape-item .ico { opacity: .8; width: 17px; height: 17px; }
+.rodape-item:hover .ico, .rodape-item.ativo .ico { opacity: 1; color: var(--laranja); }
+.rodape-item.ativo { background: var(--laranja-fundo); color: var(--laranja); border-left-color: var(--laranja); font-weight: 600; }
+.rodape-item > span:first-of-type { flex: 1; }
+.lateral-rodape .licenca-info { margin: 0; padding: 2px 7px; letter-spacing: -.01em; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }

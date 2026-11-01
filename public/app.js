@@ -444,7 +444,7 @@ function rotear() {
   const nome = nomeHash || telaInicial();
   if ($('#dialogo').open) $('#dialogo').close(); // trocar de tela fecha a janela aberta
   document.querySelectorAll('#menu details.grupo').forEach((g) => { const ativo = [...g.querySelectorAll('a')].some((a) => a.getAttribute('href') === `#/${nome}` && !a.hidden); g.classList.toggle('tem-ativo', ativo); if (ativo) g.open = true; });
-  document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === `#/${nome}` || (a.id === 'menu-doc' && nome === 'relatorios' && param === 'documentacao')));
+  document.querySelectorAll('nav a, .lateral-rodape a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === `#/${nome}` || (a.id === 'menu-doc' && nome === 'relatorios' && param === 'documentacao') || (a.closest('.lateral-rodape') && a.getAttribute('href') === '#/config' && nome === 'config')));
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
@@ -2339,7 +2339,7 @@ async function atualizarLicenca() {
     if (s.estado === 'livre') { el.hidden = true; return s; }
     el.hidden = false;
     el.className = 'licenca-info' + (!s.permitido ? ' bloqueada' : s.aviso ? ' aviso' : '');
-    el.textContent = !s.permitido ? 'Licença: emissão bloqueada' : s.estado === 'teste' ? `Teste: ${s.diasRestantes} dia(s)` : s.aviso ? `Licença vence em ${s.diasRestantes} dia(s)` : `Licença até ${dataBr(s.ate)}`;
+    el.textContent = !s.permitido ? 'Licença: emissão bloqueada' : s.estado === 'teste' ? `Teste: ${s.diasRestantes} ${s.diasRestantes === 1 ? 'dia' : 'dias'}` : s.aviso ? `Licença vence em ${s.diasRestantes} dia(s)` : `Licença até ${dataBr(s.ate)}`;
     avisarVencimentoLicenca(s);
     return s;
   } catch { return null; }
@@ -5946,6 +5946,10 @@ function iconesMenu() {
     const chave = a.id === 'menu-doc' ? 'documentacao' : (a.getAttribute('href') || '').replace('#/', '').split('/')[0];
     if (ICONES[chave]) a.insertAdjacentHTML('afterbegin', icone(chave));
   });
+  document.querySelectorAll('.lateral-rodape [data-icone]').forEach((el) => { if (!el.querySelector('svg.ico')) el.insertAdjacentHTML('afterbegin', icone(el.dataset.icone)); });
+  // a etiqueta da licença fica junto de Configurações e leva direto à aba Licença
+  const lic = $('#licenca-info');
+  if (lic) lic.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); location.hash = '#/config/licenca'; };
 }
 
 /** Barra do topo: sininho com os lembretes do usuário e o menu do usuário. */
