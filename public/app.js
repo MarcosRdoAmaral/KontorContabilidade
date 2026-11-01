@@ -3200,12 +3200,14 @@ function telaMinhaConta() {
   corpoConfig().innerHTML = `
     <h2>Minha conta</h2>
     <div class="cartao">
+      <div class="conta-avatar">${avatarSvg(u.avatar, 56) || `<span class="avatar-iniciais">${esc(iniciaisDoUsuario())}</span>`}<div>
       <p><strong>${esc(u.nome)}</strong> · usuário <strong>${esc(u.login)}</strong></p>
-      <p class="sutil">Perfil: ${u.tipo === 'adm' ? 'Administrador (acesso total)' : 'Normal'}${u.email ? ' · ' + esc(u.email) : ' · sem e-mail cadastrado (a recuperação de senha por e-mail não fica disponível)'}</p>
+      <p class="sutil">Perfil: ${u.tipo === 'adm' ? 'Administrador (acesso total)' : 'Normal'}${u.email ? ' · ' + esc(u.email) : ' · sem e-mail cadastrado (a recuperação de senha por e-mail não fica disponível)'}</p></div></div>
       ${u.tipo === 'adm' ? '' : `<p class="sutil">Funcionalidades liberadas: ${u.modulos.length ? u.modulos.map((m) => esc(u.todosModulos[m])).join(', ') : 'nenhuma'}.</p>`}
-      <div class="acoes"><button class="primario" id="alterar-senha">Alterar minha senha</button></div>
+      <div class="acoes"><button class="primario" id="alterar-senha">Alterar minha senha</button><button type="button" id="trocar-avatar">Escolher avatar</button></div>
     </div>`;
   $('#alterar-senha').onclick = () => trocarSenha();
+  $('#trocar-avatar').onclick = () => escolherAvatar(() => telaMinhaConta());
 }
 
 const TEMAS = [
@@ -5958,9 +5960,10 @@ function iniciarTopo() {
   coluna.insertAdjacentHTML('afterbegin', `<header class="barra-topo" id="barra-topo">
     <div class="topo-sino-caixa"><button type="button" class="topo-sino" id="topo-sino" aria-label="Lembretes" aria-haspopup="true" aria-expanded="false">${icone('sino')}<span class="topo-badge" id="topo-badge" hidden></span></button>
       <div class="topo-painel" id="topo-painel" hidden></div></div>
-    <div class="topo-usuario-caixa"><button type="button" class="topo-usuario" id="topo-usuario" aria-haspopup="true" aria-expanded="false"><span class="topo-avatar">${esc(iniciais)}</span><span class="topo-ola">Olá, <b>${esc(nome.split(' ')[0] || 'usuário')}</b></span>${icone('chevron', 'ico ico-p')}</button>
+    <div class="topo-usuario-caixa"><button type="button" class="topo-usuario" id="topo-usuario" aria-haspopup="true" aria-expanded="false"><span class="topo-avatar" id="topo-avatar">${esc(iniciais)}</span><span class="topo-ola">Olá, <b>${esc(nome.split(' ')[0] || 'usuário')}</b></span>${icone('chevron', 'ico ico-p')}</button>
       <div class="topo-menu" id="topo-menu" hidden>
         <p class="topo-menu-nome">${esc(nome)}<br><span class="dica">${esc(estado.usuario?.login ?? '')}</span></p>
+        <button type="button" id="topo-trocar-avatar">${icone('usuario')}Trocar avatar</button>
         <a href="#/config/conta">${icone('usuario')}Minha conta</a><a href="#/config/aparencia">${icone('sol')}Aparência</a>
         <button type="button" id="topo-sair">${icone('sair')}Sair</button>
       </div></div>
@@ -5975,6 +5978,8 @@ function iniciarTopo() {
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu'), false); } });
   $('#topo-menu').querySelectorAll('a').forEach((a) => (a.onclick = () => alternar($('#topo-usuario'), $('#topo-menu'), false)));
   $('#topo-sair').onclick = () => $('#sair').click();
+  $('#topo-trocar-avatar').onclick = () => { alternar($('#topo-usuario'), $('#topo-menu'), false); escolherAvatar(); };
+  pintarAvatarTopo();
   window.addEventListener('hashchange', () => { alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu'), false); atualizarSino(); });
   atualizarSino(true);
 }
@@ -6052,3 +6057,89 @@ const INICIO = {
   dicas: DICAS_KONTOR,
   mensagens: MENSAGENS_DIA,
 };
+
+// ---------------------------------------------------------------------------
+// Avatares: desenhos próprios (pessoas variadas e alguns bichos e personagens), escolhidos pelo usuário
+// ---------------------------------------------------------------------------
+const PELE = ['#f6d3b3', '#e8b48e', '#c68863', '#9a6142', '#6b4029', '#f1c7a5'];
+const PESSOAS = [
+  // fundo, pele, cabelo, cor do cabelo, roupa, extras
+  ['#3b82f6', 1, 'curto', '#2b1d14', '#1e3a8a', ''],
+  ['#ec4899', 0, 'longo', '#8b4513', '#9d174d', 'brinco'],
+  ['#10b981', 3, 'cacheado', '#1a120c', '#065f46', ''],
+  ['#f59e0b', 2, 'coque', '#3b2414', '#92400e', 'oculos'],
+  ['#8b5cf6', 4, 'careca', '#1a120c', '#4c1d95', 'barba'],
+  ['#ef4444', 0, 'franja', '#e0b04a', '#7f1d1d', ''],
+  ['#14b8a6', 5, 'curto', '#5a3a22', '#134e4a', 'oculos barba'],
+  ['#6366f1', 3, 'longo', '#120c08', '#312e81', ''],
+  ['#f97316', 1, 'cacheado', '#a0522d', '#7c2d12', 'oculos'],
+  ['#0ea5e9', 4, 'coque', '#120c08', '#0c4a6e', 'brinco'],
+  ['#84cc16', 0, 'curto', '#b9b9b9', '#365314', 'oculos barba'],
+  ['#d946ef', 2, 'franja', '#2b1d14', '#701a75', ''],
+];
+const BICHOS = ['gato', 'cachorro', 'raposa', 'coruja', 'panda', 'robo', 'astronauta', 'leao'];
+const AVATARES = [...PESSOAS.map((_, i) => `pessoa-${i + 1}`), ...BICHOS];
+const NOME_AVATAR = { gato: 'Gato', cachorro: 'Cachorro', raposa: 'Raposa', coruja: 'Coruja', panda: 'Panda', robo: 'Robô', astronauta: 'Astronauta', leao: 'Leão' };
+
+function svgPessoa([fundo, pele, cabelo, corCabelo, roupa, extras]) {
+  const sk = PELE[pele];
+  const atras = cabelo === 'longo' ? `<path fill="${corCabelo}" d="M17 30c0-12 6-19 15-19s15 7 15 19v20h-7V32H24v18h-7z"/>` : '';
+  const topo = {
+    curto: `<path fill="${corCabelo}" d="M19.5 27c0-10 5.5-16 12.5-16s12.5 6 12.5 16c-2-5-6-8-12.5-8s-10.5 3-12.5 8z"/>`,
+    longo: `<path fill="${corCabelo}" d="M19.5 27c1-9 6-14.5 12.5-14.5S43.5 18 44.5 27c-4-5-8-7-12.5-7s-8.5 2-12.5 7z"/>`,
+    coque: `<circle cx="32" cy="10.5" r="6" fill="${corCabelo}"/><path fill="${corCabelo}" d="M19.5 27c0-10 5.5-15.5 12.5-15.5S44.5 17 44.5 27c-2-5-6-7.5-12.5-7.5S21.5 22 19.5 27z"/>`,
+    cacheado: [[21, 22], [25, 16], [31, 13.5], [37.5, 15], [42.5, 20.5], [44, 27], [20, 28]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5.6" fill="${corCabelo}"/>`).join(''),
+    careca: `<path fill="${corCabelo}" opacity=".55" d="M19.8 29c0-3 .5-5 1.5-7l1 6zM44.2 29c0-3-.5-5-1.5-7l-1 6z"/>`,
+    franja: `<path fill="${corCabelo}" d="M19.5 28c0-11 5.5-17 12.5-17s12.5 6 12.5 16c-7 0-15-3-19-9-1.6 3.6-3.6 7.2-6 10z"/>`,
+  }[cabelo];
+  const oculos = extras.includes('oculos') ? `<g fill="none" stroke="#1f2937" stroke-width="1.6"><circle cx="26.8" cy="29.5" r="4"/><circle cx="37.2" cy="29.5" r="4"/><path d="M30.8 29.5h2.4"/></g>` : '';
+  const barba = extras.includes('barba') ? `<path fill="${corCabelo}" d="M20.5 31c1 9 5.5 13.5 11.5 13.5S42.5 40 43.5 31c-2.5 3.6-6.4 5.4-11.5 5.4S23 34.6 20.5 31z"/>` : '';
+  const brinco = extras.includes('brinco') ? `<circle cx="19.6" cy="34" r="1.6" fill="#fbbf24"/><circle cx="44.4" cy="34" r="1.6" fill="#fbbf24"/>` : '';
+  return `<circle cx="32" cy="32" r="32" fill="${fundo}"/>${atras}
+    <path fill="${roupa}" d="M9 64c2-12 11-19 23-19s21 7 23 19z"/><rect x="27.5" y="38" width="9" height="9" rx="3" fill="${sk}"/><path fill="#000" opacity=".12" d="M27.5 41h9v3c-3 1.4-6 1.4-9 0z"/>
+    <ellipse cx="32" cy="29" rx="12.5" ry="14" fill="${sk}"/><ellipse cx="19.8" cy="30" rx="2" ry="3" fill="${sk}"/><ellipse cx="44.2" cy="30" rx="2" ry="3" fill="${sk}"/>
+    ${topo}${barba}<circle cx="26.8" cy="29.5" r="1.7" fill="#1f2937"/><circle cx="37.2" cy="29.5" r="1.7" fill="#1f2937"/>
+    <path d="M28.2 36q3.8 3 7.6 0" fill="none" stroke="#7a3b2e" stroke-width="1.6" stroke-linecap="round"/><circle cx="24.5" cy="34" r="2.2" fill="#f87171" opacity=".25"/><circle cx="39.5" cy="34" r="2.2" fill="#f87171" opacity=".25"/>
+    ${oculos}${brinco}`;
+}
+const olhos = (y = 30, d = 6, r = 2) => `<circle cx="${32 - d}" cy="${y}" r="${r}" fill="#1f2937"/><circle cx="${32 + d}" cy="${y}" r="${r}" fill="#1f2937"/>`;
+const SVG_BICHO = {
+  gato: `<circle cx="32" cy="32" r="32" fill="#fde68a"/><path fill="#f59e0b" d="M15 22l4-12 9 7zM49 22l-4-12-9 7z"/><circle cx="32" cy="34" r="17" fill="#f59e0b"/><path fill="#fcd9a5" d="M22 40c2-6 6-8 10-8s8 2 10 8c-3 5-7 7-10 7s-7-2-10-7z"/>${olhos(31, 6.5, 2.2)}<path fill="#be185d" d="M30 37h4l-2 2.4z"/><path stroke="#92400e" stroke-width="1" d="M18 38h8M18 41l8-1.5M46 38h-8M46 41l-8-1.5" fill="none"/>`,
+  cachorro: `<circle cx="32" cy="32" r="32" fill="#bfdbfe"/><ellipse cx="17" cy="30" rx="6" ry="11" fill="#78350f"/><ellipse cx="47" cy="30" rx="6" ry="11" fill="#78350f"/><circle cx="32" cy="33" r="16" fill="#d6a067"/><ellipse cx="32" cy="40" rx="8" ry="6" fill="#f3d3ac"/>${olhos(30, 6, 2.2)}<ellipse cx="32" cy="37" rx="3" ry="2.2" fill="#1f2937"/><path d="M29 42q3 2 6 0" stroke="#1f2937" stroke-width="1.4" fill="none" stroke-linecap="round"/>`,
+  raposa: `<circle cx="32" cy="32" r="32" fill="#fed7aa"/><path fill="#ea580c" d="M14 14l12 10-4 6zM50 14L38 24l4 6z"/><path fill="#ea580c" d="M14 26c4-6 10-9 18-9s14 3 18 9l-18 24z"/><path fill="#fff" d="M18 31l14 19-6-17zM46 31L32 50l6-17z"/>${olhos(31, 6, 2)}<circle cx="32" cy="46" r="2.4" fill="#1f2937"/>`,
+  coruja: `<circle cx="32" cy="32" r="32" fill="#c7d2fe"/><path fill="#7c5a3a" d="M16 22l6 4 10-4 10 4 6-4v24c0 8-7 12-16 12s-16-4-16-12z"/><circle cx="25" cy="31" r="7" fill="#fff"/><circle cx="39" cy="31" r="7" fill="#fff"/><circle cx="25" cy="31" r="3.4" fill="#1f2937"/><circle cx="39" cy="31" r="3.4" fill="#1f2937"/><path fill="#f59e0b" d="M30 37h4l-2 4z"/><path fill="#a0784f" d="M24 46q8 4 16 0-8 8-16 0z"/>`,
+  panda: `<circle cx="32" cy="32" r="32" fill="#bbf7d0"/><circle cx="19" cy="19" r="6" fill="#111827"/><circle cx="45" cy="19" r="6" fill="#111827"/><circle cx="32" cy="34" r="17" fill="#fff"/><ellipse cx="25" cy="32" rx="4.5" ry="5.5" fill="#111827" transform="rotate(-20 25 32)"/><ellipse cx="39" cy="32" rx="4.5" ry="5.5" fill="#111827" transform="rotate(20 39 32)"/><circle cx="25.5" cy="32" r="1.6" fill="#fff"/><circle cx="38.5" cy="32" r="1.6" fill="#fff"/><ellipse cx="32" cy="39" rx="2.6" ry="1.8" fill="#111827"/><path d="M29.5 42q2.5 1.8 5 0" stroke="#111827" stroke-width="1.3" fill="none"/>`,
+  robo: `<circle cx="32" cy="32" r="32" fill="#a5f3fc"/><path stroke="#475569" stroke-width="2" d="M32 10v7"/><circle cx="32" cy="9" r="3" fill="#ef4444"/><rect x="16" y="17" width="32" height="28" rx="8" fill="#94a3b8"/><rect x="20" y="23" width="24" height="12" rx="5" fill="#0f172a"/><circle cx="26.5" cy="29" r="2.8" fill="#22d3ee"/><circle cx="37.5" cy="29" r="2.8" fill="#22d3ee"/><rect x="25" y="38" width="14" height="3" rx="1.5" fill="#475569"/><rect x="12" y="26" width="4" height="10" rx="2" fill="#64748b"/><rect x="48" y="26" width="4" height="10" rx="2" fill="#64748b"/><path fill="#64748b" d="M22 64v-14h20v14z"/>`,
+  astronauta: `<circle cx="32" cy="32" r="32" fill="#1e293b"/><circle cx="12" cy="14" r="1" fill="#fff"/><circle cx="52" cy="10" r="1.2" fill="#fff"/><circle cx="50" cy="50" r="1" fill="#fff"/><path fill="#e5e7eb" d="M12 64c2-11 10-16 20-16s18 5 20 16z"/><circle cx="32" cy="30" r="17" fill="#f3f4f6"/><rect x="19" y="21" width="26" height="18" rx="9" fill="#0f172a"/><path fill="#60a5fa" opacity=".55" d="M24 25c3-2 7-2 9-1-4 1-7 3-9 6z"/><circle cx="32" cy="55" r="3" fill="#f97316"/>`,
+  leao: `<circle cx="32" cy="32" r="32" fill="#fef3c7"/><circle cx="32" cy="32" r="22" fill="#b45309"/>${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => `<circle cx="${32 + 20 * Math.cos(a * Math.PI / 180)}" cy="${32 + 20 * Math.sin(a * Math.PI / 180)}" r="6" fill="#92400e"/>`).join('')}<circle cx="32" cy="33" r="14" fill="#fbbf24"/><circle cx="21" cy="22" r="3.5" fill="#fbbf24"/><circle cx="43" cy="22" r="3.5" fill="#fbbf24"/>${olhos(31, 5, 1.9)}<path fill="#78350f" d="M29.5 36h5l-2.5 2.6z"/><path d="M29 40q3 2 6 0" stroke="#78350f" stroke-width="1.3" fill="none"/>`,
+};
+function avatarSvg(id, tam = 36) {
+  const m = /^pessoa-(\d+)$/.exec(id ?? '');
+  const corpo = m ? (PESSOAS[Number(m[1]) - 1] && svgPessoa(PESSOAS[Number(m[1]) - 1])) : SVG_BICHO[id];
+  if (!corpo) return '';
+  return `<svg class="avatar-svg" viewBox="0 0 64 64" width="${tam}" height="${tam}" aria-hidden="true"><defs><clipPath id="av-${id}-${tam}"><circle cx="32" cy="32" r="32"/></clipPath></defs><g clip-path="url(#av-${id}-${tam})">${corpo}</g></svg>`;
+}
+const iniciaisDoUsuario = () => String(estado.usuario?.nome ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+function pintarAvatarTopo() {
+  const el = $('#topo-avatar'); if (!el) return;
+  const svg = avatarSvg(estado.usuario?.avatar, 34);
+  el.innerHTML = svg || esc(iniciaisDoUsuario());
+  el.classList.toggle('com-desenho', !!svg);
+}
+function escolherAvatar(aoMudar) {
+  const atual = estado.usuario?.avatar ?? null;
+  abrirDialogo(`<div class="dlg-largo"><h2>Escolha o seu avatar</h2>
+    <p class="sutil">Aparece no alto da tela, ao lado do sininho. Vale só para o seu usuário.</p>
+    <div class="avatares-grade">
+      <button type="button" class="avatar-opcao ${!atual ? 'ativo' : ''}" data-av=""><span class="avatar-iniciais">${esc(iniciaisDoUsuario())}</span><span>Iniciais</span></button>
+      ${AVATARES.map((id) => `<button type="button" class="avatar-opcao ${id === atual ? 'ativo' : ''}" data-av="${id}" aria-label="${esc(NOME_AVATAR[id] ?? 'Pessoa')}">${avatarSvg(id, 60)}<span>${esc(NOME_AVATAR[id] ?? '')}</span></button>`).join('')}
+    </div>
+    <p class="erro" id="erro-avatar"></p>
+    <div class="acoes"><button type="button" data-fechar>Fechar</button></div></div>`, (d) => {
+    d.querySelectorAll('[data-av]').forEach((b) => (b.onclick = async () => {
+      const avatar = b.dataset.av || null;
+      try { await api('PUT', '/api/me/avatar', { avatar }); estado.usuario.avatar = avatar; pintarAvatarTopo(); d.close(); aviso('Avatar atualizado.'); aoMudar?.(); }
+      catch (e) { $('#erro-avatar').textContent = mensagemErro(e); }
+    }));
+  });
+}

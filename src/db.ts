@@ -1099,6 +1099,8 @@ const migracoes: string[] = [
   ALTER TABLE cobrancas ADD COLUMN forma TEXT NOT NULL DEFAULT 'BOLETO' CHECK (forma IN ('BOLETO','PIX'));
   ALTER TABLE cobrancas ADD COLUMN pix_copia_cola TEXT;
   ALTER TABLE empresas ADD COLUMN demonstrativo_rodape TEXT;`,
+  // avatar escolhido pelo usuário (Configurações > Minha conta)
+  `ALTER TABLE usuarios ADD COLUMN avatar TEXT;`,
 ];
 
 export function migrar(): void {

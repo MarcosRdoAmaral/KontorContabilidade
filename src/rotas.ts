@@ -241,6 +241,11 @@ export async function rotas(app: FastifyInstance) {
       trocarMinhaSenha(u(req), d.atual, d.nova);
       return { ok: true, token: gerarToken(u(req).id) };
     });
+    api.put('/api/me/avatar', async (req) => {
+      const { avatar } = z.object({ avatar: z.string().regex(/^[a-z0-9-]{1,24}$/, 'Avatar inválido.').nullable() }).parse(req.body);
+      db.prepare('UPDATE usuarios SET avatar = ? WHERE id = ?').run(avatar, u(req).id);
+      return { ok: true, avatar };
+    });
     api.put('/api/me/empresa', async (req) => {
       const { id } = z.object({ id: z.number().int() }).parse(req.body);
       if (!empresaPermitida(u(req), id)) throw new ErroNegocio('Empresa não permitida.', 403);

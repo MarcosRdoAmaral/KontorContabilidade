@@ -74,7 +74,7 @@ const REGRAS: Regra[] = [
   { m: 'PUT', r: /^\/api\/escritorio\/situacao-fiscal\/agenda$/, mod: 'adm' },
   { r: /^\/api\/escritorio\/situacao-fiscal(\/consultar|\/agenda|\/\d+(\/pdf)?|\/guias\/\d+|\/avisar\/\d+|\/aviso\/\d+|\/marcar-aviso)?$|^\/api\/escritorio\/guias\/\d+\/pdf$|^\/api\/escritorio\/fgts\/(resultados|\d+)$/, mod: ['situacao'] },
   { r: /^\/api\/escritorio\/integra\/(previa|conferir)$/, mod: ['obrigacoes'] },
-  { r: /^\/api\/me(\/empresa|\/senha)?$/, mod: 'livre' },
+  { r: /^\/api\/me(\/empresa|\/senha|\/avatar)?$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/inicio$/, mod: 'livre' }, // os lembretes já saem filtrados pelos módulos do usuário
   { m: 'GET', r: /^\/api\/licenca$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/consulta\/cnpj\//, mod: 'livre' },

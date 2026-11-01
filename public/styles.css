@@ -696,3 +696,15 @@ main:focus, main:focus-visible { outline: none; }
 .rodape-item.ativo { background: var(--laranja-fundo); color: var(--laranja); border-left-color: var(--laranja); font-weight: 600; }
 .rodape-item > span:first-of-type { flex: 1; }
 .lateral-rodape .licenca-info { margin: 0; padding: 2px 7px; letter-spacing: -.01em; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+/* Avatares */
+.topo-avatar { overflow: hidden; }
+.topo-avatar.com-desenho { background: none; border-color: var(--borda-botao); }
+.avatar-svg { display: block; border-radius: 50%; }
+.avatares-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; margin: 14px 0; }
+.avatar-opcao { display: grid; justify-items: center; gap: 6px; padding: 12px 6px 10px; border-radius: 14px; background: var(--superficie-2); border: 2px solid transparent; color: var(--tinta-2); font-size: .78rem; min-height: 104px; align-content: start; }
+.avatar-opcao:hover { border-color: var(--borda-botao-hover); }
+.avatar-opcao.ativo { border-color: var(--laranja); background: var(--laranja-fundo); color: var(--laranja); }
+.avatar-iniciais { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; background: var(--laranja-fundo); color: var(--laranja); font-weight: 700; font-size: 1.3rem; border: 1px solid var(--laranja-forte); }
+.conta-avatar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.conta-avatar .avatar-iniciais { width: 56px; height: 56px; font-size: 1.15rem; }
