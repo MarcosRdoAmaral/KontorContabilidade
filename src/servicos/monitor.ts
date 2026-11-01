@@ -36,7 +36,7 @@ const mesesAntes = (mes: string, n: number) => { const [a, m] = mes.split('-').m
 
 type Notif = { nivel: Estado; processo: Proc; empresa_id: number; cliente: string; titulo: string; texto: string; data: string };
 
-export function monitorFiscal(escritorioId: number, empresas: number[] | null = null) {
+export function monitorFiscal(escritorioId: number, empresas: number[] | null = null, limiteNotificacoes = 300) {
   const hoje = hojeBr(), mes = hoje.slice(0, 7), ate = fimDoMes(mes);
   const filtro = empresas ? `AND e.id IN (${empresas.map(() => '?').join(',') || 'NULL'})` : '';
   const clientes = db.prepare(`SELECT e.id, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento, e.regime, e.tem_funcionarios, e.cert_validade, (e.cert_pfx_enc IS NOT NULL) AS tem_a1
@@ -118,7 +118,7 @@ export function monitorFiscal(escritorioId: number, empresas: number[] | null = 
     geral: contar(linhas.map((l) => l.geral)),
     processos: PROCESSOS.map((p) => ({ ...p, contagem: contar(linhas.map((l) => l.processos[p.id])) })),
     clientes: linhas,
-    notificacoes: notificacoes.slice(0, 300),
+    notificacoes: notificacoes.slice(0, limiteNotificacoes),
     sublimites: subl,
   };
 }

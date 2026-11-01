@@ -3,6 +3,7 @@ import { ClienteDp, ConfigDp, painelDp, salvarClienteDp, salvarConfigDp, varrerP
 import { abrirMensagem, consultarCaixaPostal, consultarParcelamentos, detalheCliente, emitirDasParcela } from './servicos/parcelamentos-caixa.js';
 import { monitorFiscal, resumoFinanceiro } from './servicos/monitor.js';
 import { situacaoClientePdf } from './servicos/relatorio-cliente.js';
+import { pendenciasPdf } from './servicos/relatorio-pendencias.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db.js';
@@ -64,6 +65,14 @@ export async function rotasEscritorio(app: FastifyInstance) {
 
     api.get('/api/escritorio/tabelas', async () => ({ regimes: ROTULO_REGIME, tiposCertificado: TIPOS_CERT, indices: ROTULO_INDICE, camposModelo: CAMPOS_MODELO, escopoPadrao: ESCOPO_PADRAO }));
     api.get('/api/escritorio/equipe', async (req) => db.prepare('SELECT id, nome, login FROM usuarios WHERE escritorio_id = ? AND ativo = 1 AND mestre = 0 ORDER BY nome').all(u(req).escritorio_id));
+    api.get('/api/escritorio/monitor/pendencias', async (req, reply) => {
+      const q = z.object({ ids: z.string().regex(/^\d+(,\d+)*$/).max(20000).optional() }).parse(req.query);
+      const permitidas = empresasDoUsuario(u(req));
+      let ids: number[] | null = q.ids ? q.ids.split(',').map(Number) : permitidas;
+      if (q.ids && permitidas) ids = ids!.filter((i) => permitidas.includes(i));
+      const r = await pendenciasPdf(u(req).escritorio_id, ids);
+      return reply.type('application/pdf').header('content-disposition', `inline; filename="${r.nome}"`).send(r.pdf);
+    });
     api.get('/api/escritorio/monitor/:id/relatorio', async (req, reply) => {
       const id = Number((req.params as any).id); checar(req, id);
       const r = await situacaoClientePdf(u(req).escritorio_id, id);

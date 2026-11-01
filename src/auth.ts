@@ -53,7 +53,7 @@ const REGRAS: Regra[] = [
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
-  { m: 'GET', r: /^\/api\/escritorio\/monitor(\/\d+(\/relatorio)?)?$/, mod: ['visao', 'situacao'] },
+  { m: 'GET', r: /^\/api\/escritorio\/monitor(\/\d+(\/relatorio)?|\/pendencias)?$/, mod: ['visao', 'situacao'] },
   { m: 'POST', r: /^\/api\/escritorio\/(parcelamentos\/\d+\/(consultar|das)|caixa-postal\/\d+\/(consultar|mensagem))$/, mod: ['situacao'] },
   { m: 'GET', r: /^\/api\/escritorio\/resumo-financeiro\/\d+$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/controle(\/linha|\/planilha\/(analisar|importar))?$/, mod: ['controle'] },

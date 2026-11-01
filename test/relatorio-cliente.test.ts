@@ -35,6 +35,18 @@ test('relatório consolidado da situação fiscal do cliente (PDF timbrado)', as
     const pdf = await call('GET', `/api/escritorio/monitor/${eid}/relatorio`, undefined, t);
     assert.equal(pdf.status, 200); assert.equal(pdf.tipo, 'application/pdf'); assert.equal(pdf.corpo.subarray(0, 4).toString(), '%PDF');
     assert.equal((await call('GET', '/api/escritorio/monitor/99999/relatorio', undefined, t)).status >= 400, true);
+    // pendências por cliente (carteira toda ou só os escolhidos)
+    db.prepare("UPDATE empresas SET na_carteira = 1, situacao = 'ATIVO', eh_escritorio = 0 WHERE id = ?").run(eid);
+    const { dadosPendencias } = await import('../src/servicos/relatorio-pendencias.js');
+    const pd = dadosPendencias(1, null);
+    const lin = pd.linhas.find((l) => l.empresa_id === eid)!;
+    assert.ok(lin, 'cliente com débitos aparece');
+    assert.deepEqual([lin.receita, lin.fgts, lin.total, lin.geral], [1800.5, 200, 2000.5, 'ATENCAO']);
+    assert.ok(lin.itens.some((n: any) => n.processo === 'SITFIS'));
+    assert.equal(dadosPendencias(1, []).linhas.length, 0, 'seleção vazia');
+    const pp = await call('GET', `/api/escritorio/monitor/pendencias?ids=${eid}`, undefined, t);
+    assert.equal(pp.status, 200); assert.equal(pp.corpo.subarray(0, 4).toString(), '%PDF');
+    assert.equal((await call('GET', '/api/escritorio/monitor/pendencias?ids=1;drop', undefined, t)).status, 400);
     // relatórios novos (carteira, cidade/UF, cadastro incompleto) e carta de cobrança
     const tid = Number(db.prepare("INSERT INTO tomadores (empresa_id, tipo_doc, documento, nome, cidade, uf, cod_municipio) VALUES (?, 'CNPJ', '36128844000160', 'ABM TRANSPORTES', 'Blumenau', 'SC', '4202404')").run(eid).lastInsertRowid);
     const cob = (venc: string, forma: string, status: string) => Number(db.prepare("INSERT INTO cobrancas (empresa_id, tomador_id, descricao, valor, vencimento, status, forma, multa_pct, juros_pct_mes) VALUES (?, ?, 'Honorários', 100, ?, ?, ?, 2, 1)").run(eid, tid, venc, status, forma).lastInsertRowid);

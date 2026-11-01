@@ -5561,7 +5561,7 @@ async function telaMonitor() {
   const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
   conteudo.innerHTML = `
     <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
-      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-atualizar">Atualizar</button></div></div>
+      <div class="mon-atual"><span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-pend-pdf" class="primario" title="PDF com as pendências de cada cliente: os marcados na lista ou, sem marcação, todos os da lista">Pendências por cliente (PDF)</button> <button id="mon-atualizar">Atualizar</button></div></div>
     ${sf && !sf.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado: as consultas à Receita (situação fiscal, parcelamentos e caixa postal) não funcionam. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador.'}</div>` : ''}
     ${sf ? `<div class="mon-kpis sf-kpis">
       <button type="button" class="cartao kpi ${sf.resumo.comPendencias ? 'kpi-alerta' : ''}" data-sit="PENDENCIAS"><span class="dica">Débitos na Receita e PGFN</span><strong class="${sf.resumo.comPendencias ? 'cor-vermelho' : 'cor-verde'}">${sf.resumo.comPendencias} ${sf.resumo.comPendencias === 1 ? 'cliente' : 'clientes'}</strong><span class="dica">${brl(sf.resumo.totalAberto)} em aberto na Receita</span></button>
@@ -5677,6 +5677,12 @@ async function telaMonitor() {
     ligarAgendaSituacao(ag, telaMonitor);
   }
   $('#mon-atualizar').onclick = () => telaMonitor();
+  $('#mon-pend-pdf').onclick = async (ev) => {
+    const ids = alvo().map((c) => c.empresa_id);
+    if (!ids.length) return aviso('Nenhum cliente na lista.');
+    const b = ev.target; b.disabled = true;
+    try { await baixar(`/api/escritorio/monitor/pendencias${ids.length === d.clientes.length ? '' : `?ids=${ids.join(',')}`}`, 'Pendencias_por_cliente.pdf', true); } finally { b.disabled = false; }
+  };
   $('#mon-decl') && ($('#mon-decl').onclick = () => loteFechamento(`Buscar as declarações do Simples de ${rotuloMes(MES_DECL)}`, d.clientes.filter((c) => c.regime === 'SIMPLES'),
     'Para cada cliente do Simples, o Kontor busca a declaração do PGDAS-D já transmitida (sem gerar DAS) e lê o faturamento do mês, o acumulado do ano e o RBT12. O faturamento do mês também vai para o Controle mensal. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
     (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/declaracao`, { mes: MES_DECL }).then((r) => `${r.faturamento != null ? `faturamento do mês ${brl(r.faturamento)}` : 'declaração encontrada'}${r.rba != null ? ` · acumulado ${brl(r.rba + (r.faturamento ?? 0))}` : ''}`), telaMonitor));
