@@ -5,12 +5,12 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db.js';
 import { cifrar, cifrarTexto } from './cofre.js';
-import { MODULOS, conferirSenha, configurarPrimeiroAcesso, empresaPermitida, exigirLogin, exigirPapel, gerarToken, modulosDoUsuario, restritoAEmpresas, sistemaConfigurado, type Usuario } from './auth.js';
+import { MODULOS, conferirSenha, configurarPrimeiroAcesso, empresaPermitida, exigirLogin, exigirPapel, gerarToken, modulosDoUsuario, modulosPermitidos, restritoAEmpresas, sistemaConfigurado, type Usuario } from './auth.js';
 import { EdicaoUsuario, NovoUsuario, confirmarRecuperacao, criarUsuario, editarUsuario, limparFalhas, listarUsuarios, loginBloqueado, redefinirSenha, registrarFalha, solicitarRecuperacao, trocarMinhaSenha } from './servicos/usuarios.js';
 import { config } from './config.js';
 import { camposDesconhecidos, exemplo, listarModelos, ModeloEditado, renderizar, restaurarModelo, salvarModelo } from './servicos/modelos-email.js';
 import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
-import { ativarLicenca, exigirLicenca, exigirLimite, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual } from './licenca.js';
+import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
@@ -211,7 +211,10 @@ export async function rotas(app: FastifyInstance) {
     api.get('/api/me', async (req) => {
       const { senha_hash, permissoes, sessao_v, ...resto } = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u(req).id) as any;
       const email = /@(sem-email|kontor)\.local$/.test(resto.email) ? '' : resto.email;
-      return { ...resto, email, modulos: modulosDoUsuario(u(req)), todosModulos: MODULOS };
+      // módulos vendidos à parte que o usuário teria, mas a licença não traz: o menu mostra "contratar"
+      const lib = modulosLiberados();
+      const naoContratados = modulosPermitidos(u(req)).filter((m) => MODULOS_PAGOS[m] && !lib.includes(m)).map((m) => ({ id: m, nome: MODULOS_PAGOS[m].nome, resumo: MODULOS_PAGOS[m].resumo }));
+      return { ...resto, email, modulos: modulosDoUsuario(u(req)), todosModulos: MODULOS, naoContratados };
     });
     // ---------- Exclusão de empresa: só o usuário master, confirmando com a senha dele ----------
     const soMaster = (req: any) => { if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode excluir empresas.', 403); };
@@ -799,7 +802,7 @@ export async function rotas(app: FastifyInstance) {
       return processarRetorno(id, d.conteudo);
     });
 
-    api.get('/api/licenca', async () => ({ ...statusLicenca(), planos: PLANOS, uso: usoAtual(), suporteWhatsapp: SUPORTE_WHATSAPP }));
+    api.get('/api/licenca', async () => ({ ...statusLicenca(), modulosPagos: Object.fromEntries(Object.entries(MODULOS_PAGOS).filter(([, m]) => !m.emBreve).map(([k, m]) => [k, { nome: m.nome, resumo: m.resumo }])), planos: PLANOS, uso: usoAtual(), suporteWhatsapp: SUPORTE_WHATSAPP }));
     api.post('/api/licenca', { preHandler: exigirPapel('admin') }, async (req) => {
       const d = z.object({ codigo: z.string().min(10) }).parse(req.body);
       return ativarLicenca(d.codigo);

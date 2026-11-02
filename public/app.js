@@ -395,6 +395,11 @@ async function iniciar() {
   $('#app').hidden = false;
   $('#nome-usuario').textContent = `${estado.usuario.nome} (${estado.usuario.login})`;
   document.querySelectorAll('[data-modulo]').forEach((a) => (a.hidden = !a.dataset.modulo.split(' ').some((m) => estado.usuario.modulos.includes(m))));
+  // módulos vendidos à parte e ainda não contratados: o item fica no menu, com a marca "contratar"
+  for (const m of estado.usuario.naoContratados ?? []) {
+    const a = document.querySelector(`#menu a[data-modulo="${m.id}"]`);
+    if (a) { a.hidden = false; a.classList.add('nao-contratado'); if (!a.querySelector('.selo-contratar')) a.insertAdjacentHTML('beforeend', '<span class="selo-contratar">contratar</span>'); }
+  }
   // grupos do menu: somem se nenhum item é permitido; a abertura de cada um fica guardada neste navegador
   document.querySelectorAll('#menu details.grupo').forEach((g) => {
     g.hidden = ![...g.querySelectorAll('a')].some((a) => !a.hidden);
@@ -449,6 +454,8 @@ function rotear() {
   document.querySelectorAll('nav a, .lateral-rodape a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === `#/${nome}` || (a.id === 'menu-doc' && nome === 'relatorios' && param === 'documentacao') || (a.closest('.lateral-rodape') && a.getAttribute('href') === '#/config' && nome === 'config')));
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos
+  const naoContratado = (estado.usuario.naoContratados ?? []).find((m) => m.id === nome);
+  if (naoContratado) return telaNaoContratado(naoContratado);
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
   const precisaEmpresa = !manual && !['inicio', 'painel', 'empresas', 'nota', 'config', 'visao', 'monitor', 'resumo', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
   if (precisaEmpresa && !empresa()) {
@@ -2456,6 +2463,20 @@ function planosHtml(s) {
   }).join('')}</div><p class="dica">O pedido abre o WhatsApp do suporte já com o código deste computador. Depois do pagamento você recebe o novo código de ativação e o cola abaixo.</p>`;
 }
 
+/** Módulo vendido à parte ainda não contratado: apresenta o módulo e abre o pedido no WhatsApp do suporte. */
+async function telaNaoContratado(m) {
+  const s = estado.licenca ?? await api('GET', '/api/licenca').catch(() => null);
+  conteudo.innerHTML = `<div class="topo"><div><h1>${esc(m.nome)}</h1><p class="sutil">Módulo adicional</p></div></div>
+    <section class="cartao modulo-contratar"><p>${esc(m.resumo)}</p>
+      <p>Este módulo não está incluído na licença deste computador. Depois de contratado, ele é liberado na hora pelo novo código de ativação, sem reinstalar o sistema.</p>
+      <div class="acoes"><button class="primario" id="mod-contratar">Quero contratar</button><a href="#/config/licenca"><button type="button">Ver minha licença</button></a></div></section>`;
+  $('#mod-contratar').onclick = () => pedirModulo(s, m.nome);
+}
+function pedirModulo(s, nome) {
+  const msg = `Olá! Quero contratar o módulo ${nome} do Kontor Gestão Contabilidade.\nPlano atual: ${s?.planoNome ?? ''}\nCliente: ${s?.cliente || '(a informar)'}\nCódigo do computador: ${s?.codigoComputador ?? ''}`;
+  window.open(`https://wa.me/${s?.suporteWhatsapp ?? '5547999017034'}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
 async function telaLicenca() {
   const s = await atualizarLicenca() ?? await api('GET', '/api/licenca');
   const admin = estado.usuario.papel === 'admin';
@@ -2469,15 +2490,21 @@ async function telaLicenca() {
       <p><strong>${esc(s.planoNome)}</strong> · ${esc(textoLimites(s))} <button type="button" class="primario" id="alterar-plano">Alterar plano</button></p>
       <div id="planos" hidden>${planosHtml(s)}</div>
     </fieldset>
+    ${Object.keys(s.modulosPagos ?? {}).length ? `<fieldset><legend>Módulos adicionais</legend>
+      <ul class="lista-modulos">${Object.entries(s.modulosPagos).map(([id, m]) => {
+        const lib = s.modulos.includes(id);
+        const sit = lib ? (s.estado === 'teste' ? 'Liberado durante o teste' : 'Contratado') : 'Não contratado';
+        return `<li><div><strong>${esc(m.nome)}</strong><span class="dica">${esc(m.resumo)}</span></div><span class="etiqueta ${lib ? 'ok' : ''}">${sit}</span>${lib && s.estado !== 'teste' ? '' : `<button type="button" data-modulo-pedir="${id}">Quero contratar</button>`}</li>`;
+      }).join('')}</ul></fieldset>` : ''}
     <fieldset><legend>Código deste computador</legend>
       <p class="dica">Para renovar, envie este código ao suporte. Você receberá um código de ativação válido apenas neste computador.</p>
       <p><span class="codigo-copia" id="cod-pc">${esc(s.codigoComputador)}</span> <button type="button" id="copiar-cod">Copiar</button></p>
     </fieldset>
     <fieldset><legend>Inserir código de ativação</legend>
-      ${admin ? `<form id="form-lic"><label>Código recebido <textarea name="codigo" required placeholder="KG2.…"></textarea></label>
+      ${admin ? `<form id="form-lic"><label>Código recebido <textarea name="codigo" required placeholder="KG3.…"></textarea></label>
         <p class="erro" id="erro-lic"></p><div class="acoes"><button class="primario" type="submit">Ativar</button></div></form>` : '<p class="dica">Peça a um administrador para inserir o código.</p>'}
     </fieldset>
-    <p class="dica">Com a licença vencida, apenas a emissão é bloqueada: consultas, downloads de PDF/XML e backup continuam funcionando.</p>`}`;
+    <p class="dica">Com a licença vencida, a emissão e os módulos adicionais são bloqueados: consultas, downloads de PDF/XML e backup continuam funcionando.</p>`}`;
   const ap = $('#alterar-plano');
   if (ap) ap.onclick = () => { const b = $('#planos'); b.hidden = !b.hidden; };
   document.querySelectorAll('[data-plano]').forEach((b) => b.onclick = () => {
@@ -2485,6 +2512,7 @@ async function telaLicenca() {
     const msg = `Olá! Quero ${s.plano === 'teste' ? 'contratar' : 'alterar para'} o plano ${p.nome} do Kontor Gestão Contabilidade.\nPlano atual: ${s.planoNome}\nCliente: ${s.cliente || '(a informar)'}\nCódigo do computador: ${s.codigoComputador}`;
     window.open(`https://wa.me/${s.suporteWhatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
   });
+  document.querySelectorAll('[data-modulo-pedir]').forEach((b) => b.onclick = () => pedirModulo(s, s.modulosPagos[b.dataset.moduloPedir].nome));
   const copiar = $('#copiar-cod');
   if (copiar) copiar.onclick = async () => { try { await navigator.clipboard.writeText(s.codigoComputador); aviso('Código copiado.'); } catch { aviso('Selecione o código e copie com Ctrl+C.'); } };
   const fl = $('#form-lic');

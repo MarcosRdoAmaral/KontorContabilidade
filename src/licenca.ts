@@ -21,6 +21,15 @@ export const PLANOS: Record<Plano, DadosPlano> = {
   diamante: { nome: 'Diamante', empresas: null, clientes: null, preco: null, resumo: 'Quantidade ilimitada, sob encomenda' },
 };
 export const PLANOS_PAGOS: Plano[] = ['bronze', 'prata', 'ouro', 'diamante'];
+
+/**
+ * Módulos vendidos à parte: vêm em todas as versões, mas só funcionam quando o código de ativação os traz (KG3).
+ * No período de teste ficam liberados para o cliente conhecer; com a licença vencida, ficam bloqueados.
+ */
+export const MODULOS_PAGOS: Record<string, { nome: string; resumo: string; rotas: RegExp; emBreve?: boolean }> = {
+  radar: { nome: 'Radar de Oportunidades', resumo: 'Pesquisa de empresas novas e da região, com CRM de prospecção.', rotas: /^\/api\/radar(\/|$)/ },
+  cnd: { nome: 'Gestão de CND', resumo: 'Consulta, guarda e acompanhamento da validade das certidões dos clientes.', rotas: /^\/api\/cnd(\/|$)/, emBreve: true },
+};
 export const SUPORTE_WHATSAPP = '5547999017034';
 
 export type EstadoLicenca = 'livre' | 'teste' | 'ativa' | 'vencida' | 'relogio';
@@ -90,14 +99,14 @@ export function codigoDoComputador(): string {
 
 const soHex = (s: string) => s.replace(/[^0-9a-f]/gi, '').toUpperCase();
 
-export interface DadosCodigo { maquina: string; ate: string; cliente: string; plano: Plano }
+export interface DadosCodigo { maquina: string; ate: string; cliente: string; plano: Plano; modulos: string[] }
 
 /** Confere a assinatura e devolve os dados, ou lança ErroNegocio. */
 export function lerCodigo(codigo: string): DadosCodigo {
   const chave = _teste.chave();
   if (!chave) throw new ErroNegocio('Controle de licença ainda não configurado nesta versão.');
   const partes = codigo.trim().split('.');
-  if (partes.length !== 3 || (partes[0] !== 'KG1' && partes[0] !== 'KG2')) throw new ErroNegocio('Código de ativação inválido.');
+  if (partes.length !== 3 || !['KG1', 'KG2', 'KG3'].includes(partes[0])) throw new ErroNegocio('Código de ativação inválido.');
   let ok = false;
   try {
     const pub = crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: chave }, format: 'jwk' });
@@ -107,18 +116,21 @@ export function lerCodigo(codigo: string): DadosCodigo {
   const campos = Buffer.from(partes[1], 'base64url').toString('utf8').split('|');
   const [maquina, ate] = campos;
   if (!maquina || !/^\d{4}-\d{2}-\d{2}$/.test(ate ?? '')) throw new ErroNegocio('Código de ativação inválido.');
-  // KG1 (anterior aos planos) segue sem limites; KG2 traz o plano antes do nome do cliente
-  if (partes[0] === 'KG1') return { maquina, ate, cliente: campos.slice(2).join('|'), plano: 'diamante' };
+  // KG1 (anterior aos planos) segue sem limites; KG2 traz o plano antes do nome do cliente; KG3 traz também os módulos contratados
+  if (partes[0] === 'KG1') return { maquina, ate, cliente: campos.slice(2).join('|'), plano: 'diamante', modulos: [] };
   const plano = campos[2] as Plano;
   if (!PLANOS_PAGOS.includes(plano)) throw new ErroNegocio('Código de ativação inválido.');
-  return { maquina, ate, cliente: campos.slice(3).join('|'), plano };
+  if (partes[0] === 'KG2') return { maquina, ate, cliente: campos.slice(3).join('|'), plano, modulos: [] };
+  const modulos = String(campos[3] ?? '').split(',').map((m) => m.trim()).filter((m) => /^[a-z0-9_]{1,30}$/.test(m));
+  return { maquina, ate, cliente: campos.slice(4).join('|'), plano, modulos };
 }
 
 const dias = (de: string, ate: string) => Math.round((Date.parse(ate) - Date.parse(de)) / 86400e3);
 
 export function statusLicenca() {
-  const base = { codigoComputador: codigoDoComputador(), diasTeste: DIAS_TESTE, plano: 'teste' as Plano, planoNome: PLANOS.teste.nome, limites: { empresas: PLANOS.teste.empresas, clientes: PLANOS.teste.clientes } };
-  if (!_teste.chave()) return { ...base, plano: 'diamante' as Plano, planoNome: 'Sem controle', limites: { empresas: null as number | null, clientes: null as number | null }, estado: 'livre' as EstadoLicenca, permitido: true, mensagem: 'Controle de licença desativado.' };
+  const todos = Object.keys(MODULOS_PAGOS);
+  const base = { codigoComputador: codigoDoComputador(), diasTeste: DIAS_TESTE, plano: 'teste' as Plano, planoNome: PLANOS.teste.nome, limites: { empresas: PLANOS.teste.empresas, clientes: PLANOS.teste.clientes }, modulos: [] as string[] };
+  if (!_teste.chave()) return { ...base, modulos: todos, plano: 'diamante' as Plano, planoNome: 'Sem controle', limites: { empresas: null as number | null, clientes: null as number | null }, estado: 'livre' as EstadoLicenca, permitido: true, mensagem: 'Controle de licença desativado.' };
 
   const l = linha();
   const hoje = hojeBr();
@@ -145,7 +157,7 @@ export function statusLicenca() {
         const pl = PLANOS[d.plano];
         const dp = { plano: d.plano, planoNome: pl.nome, limites: { empresas: pl.empresas, clientes: pl.clientes } };
         if (resta >= 0) {
-          return { ...base, ...dp, estado: 'ativa' as EstadoLicenca, permitido: true, ate: d.ate, cliente: d.cliente, diasRestantes: resta,
+          return { ...base, ...dp, modulos: d.modulos.filter((m) => todos.includes(m)), estado: 'ativa' as EstadoLicenca, permitido: true, ate: d.ate, cliente: d.cliente, diasRestantes: resta,
             aviso: resta <= AVISO_DIAS, mensagem: `Licença válida até ${d.ate.split('-').reverse().join('/')}.` };
         }
         return { ...base, ...dp, estado: 'vencida' as EstadoLicenca, permitido: false, ate: d.ate, cliente: d.cliente, diasRestantes: resta,
@@ -159,7 +171,7 @@ export function statusLicenca() {
   }
   const resta = DIAS_TESTE - dias(inicio, hoje);
   if (resta > 0) {
-    return { ...base, estado: 'teste' as EstadoLicenca, permitido: true, diasRestantes: resta, aviso: resta <= AVISO_DIAS,
+    return { ...base, modulos: todos, estado: 'teste' as EstadoLicenca, permitido: true, diasRestantes: resta, aviso: resta <= AVISO_DIAS,
       mensagem: `Período de teste: ${resta} dia(s) restante(s).` };
   }
   return { ...base, estado: 'vencida' as EstadoLicenca, permitido: false, diasRestantes: 0,
@@ -172,7 +184,32 @@ export function ativarLicenca(codigo: string) {
   if (dias(hojeBr(), d.ate) < 0) throw new ErroNegocio('Este código de ativação já está vencido.');
   linha();
   db.prepare("UPDATE licenca SET codigo = ?, cliente = ?, ate = ?, ativada_em = datetime('now') WHERE id = 1").run(codigo.trim(), d.cliente, d.ate);
+  cacheModulos = null;
   return statusLicenca();
+}
+
+// ---- Módulos vendidos à parte ----
+let cacheModulos: { ate: number; lista: string[] } | null = null;
+/** Módulos pagos liberados neste computador (guardado por 1 minuto: a conferência roda a cada requisição). */
+export function modulosLiberados(): string[] {
+  const agora = Date.now();
+  if (cacheModulos && cacheModulos.ate > agora) return cacheModulos.lista;
+  let lista: string[];
+  try { lista = statusLicenca().modulos; } catch { return []; } // banco indisponível: nenhum módulo pago
+  cacheModulos = { ate: agora + 60e3, lista };
+  return lista;
+}
+export const _limparCacheModulos = () => { cacheModulos = null; };
+
+/** Módulo pago ainda não contratado (ou null). */
+export const moduloNaoContratado = (m: string) => (MODULOS_PAGOS[m] && !modulosLiberados().includes(m) ? MODULOS_PAGOS[m].nome : null);
+
+/** Recusa de uma rota de módulo pago não contratado (ou null). */
+export function recusaModuloPago(caminho: string): string | null {
+  for (const [id, m] of Object.entries(MODULOS_PAGOS)) {
+    if (m.rotas.test(caminho) && !modulosLiberados().includes(id)) return `O módulo ${m.nome} não está contratado nesta licença. Fale com o suporte para contratar (Configurações > Licença).`;
+  }
+  return null;
 }
 
 /** Bloqueia apenas ações que emitem/alteram notas. Consultas, downloads e backup seguem liberados. */

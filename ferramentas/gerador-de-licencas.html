@@ -22,6 +22,7 @@ textarea{min-height:80px;font-family:ui-monospace,monospace;font-size:13px} butt
 <label>Código do computador (informado pelo cliente)</label><input id="maq" placeholder="XXXX-XXXX-XXXX-XXXX">
 <label>Nome do cliente / escritório</label><input id="cli">
 <label>Plano</label><select id="plano"><option value="bronze">Bronze (até 30 clientes)</option><option value="prata">Prata (até 100 clientes)</option><option value="ouro">Ouro (até 300 clientes)</option><option value="diamante">Diamante (ilimitado, sob encomenda)</option></select>
+<label>Módulos adicionais (vendidos à parte)</label><div id="modulos"></div>
 <label>Válida até</label><input id="ate" type="date">
 <button id="emitir">Gerar código</button>
 <label>Código de ativação (envie ao cliente)</label><textarea id="saida" readonly></textarea>
@@ -70,7 +71,11 @@ function lerChavePrivada(texto) {
   }
   return { x, d, pkcs8 };
 }
-async function emitirCodigo(privada, maquina, ate, cliente, plano) {
+// Módulos vendidos à parte (mesma lista de src/licenca.ts, MODULOS_PAGOS). Código com módulo exige o sistema na versão 1.45.0 ou posterior.
+const MODULOS_PAGOS = { radar: 'Radar de Oportunidades', cnd: 'Gestão de CND (em desenvolvimento: pode ir no código, aparece quando for lançado)' };
+async function emitirCodigo(privada, maquina, ate, cliente, plano, modulos) {
+  modulos = (modulos ?? []).filter((m) => m in MODULOS_PAGOS);
+  if (modulos.length && !plano) throw new Error('Escolha o plano.');
   if (plano && !['bronze', 'prata', 'ouro', 'diamante'].includes(plano)) throw new Error('Escolha o plano.');
   if (!/^[0-9A-Fa-f]{4}(-?[0-9A-Fa-f]{4}){3}$/.test(maquina.trim())) throw new Error('Código do computador inválido.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ate)) throw new Error('Informe a data de validade.');
@@ -82,9 +87,9 @@ async function emitirCodigo(privada, maquina, ate, cliente, plano) {
       : await crypto.subtle.importKey('jwk', { kty: 'OKP', crv: 'Ed25519', x: k.x, d: k.d }, { name: 'Ed25519' }, false, ['sign']);
   } catch (e) { throw new Error('Esta chave privada não corresponde à chave pública do aplicativo (' + PUBLICA_APP + ') ou está corrompida. Use a chave privada gerada junto com essa chave pública. (' + (e.message || e) + ')'); }
   const nome = cliente.replace(/\|/g, ' ').trim();
-  const carga = new TextEncoder().encode((plano ? [maquina.trim().toUpperCase(), ate, plano, nome] : [maquina.trim().toUpperCase(), ate, nome]).join('|'));
+  const carga = new TextEncoder().encode((modulos.length ? [maquina.trim().toUpperCase(), ate, plano, modulos.join(','), nome] : plano ? [maquina.trim().toUpperCase(), ate, plano, nome] : [maquina.trim().toUpperCase(), ate, nome]).join('|'));
   const sig = await crypto.subtle.sign({ name: 'Ed25519' }, chave, carga);
-  const codigo = (plano ? 'KG2.' : 'KG1.') + b64u(carga) + '.' + b64u(sig);
+  const codigo = (modulos.length ? 'KG3.' : plano ? 'KG2.' : 'KG1.') + b64u(carga) + '.' + b64u(sig);
   // confere se a chave privada e a pública formam um par (impede gerar códigos que nenhum cliente aceitaria)
   if (k.x) {
     const pub = await crypto.subtle.importKey('jwk', { kty: 'OKP', crv: 'Ed25519', x: k.x }, { name: 'Ed25519' }, false, ['verify']);
@@ -97,7 +102,9 @@ function avisoChave(privada) { try { const k = lerChavePrivada(privada); return 
 <script>
 const $ = (i) => document.getElementById(i);
 $('ate').value = somaMeses(new Date(), 3);
+$('modulos').innerHTML = Object.entries(MODULOS_PAGOS).map(([k, n]) => `<label style="display:flex;gap:8px;align-items:center;color:#eee"><input type="checkbox" name="mod" value="${k}" style="width:auto"> ${n}</label>`).join('');
+const modulosMarcados = () => [...document.querySelectorAll('#modulos input:checked')].map((i) => i.value);
 $('gerar').onclick = async () => { try { const k = await gerarChaves(); $('pub').value = k.publica; $('priv').value = k.privada; $('priv2').value = k.privada; } catch (e) { $('msg').className='erro'; $('msg').textContent = 'Seu navegador não suporta Ed25519: use um Chrome/Edge atualizado. ' + e.message; } };
 $('arqchave').onchange = async (ev) => { const f = ev.target.files[0]; if (f) { $('priv2').value = (await f.text()).trim(); $('msg').className='ok'; $('msg').textContent = 'Chave carregada do arquivo.'; } };
-$('emitir').onclick = async () => { try { $('saida').value = await emitirCodigo($('priv2').value, $('maq').value, $('ate').value, $('cli').value, $('plano').value); const av = avisoChave($('priv2').value); $('msg').className = av ? 'erro' : 'ok'; $('msg').textContent = av || 'Código gerado.'; } catch (e) { $('msg').className='erro'; $('msg').textContent = e.message; } };
+$('emitir').onclick = async () => { try { $('saida').value = await emitirCodigo($('priv2').value, $('maq').value, $('ate').value, $('cli').value, $('plano').value, modulosMarcados()); const av = avisoChave($('priv2').value); $('msg').className = av ? 'erro' : 'ok'; $('msg').textContent = av || 'Código gerado.'; } catch (e) { $('msg').className='erro'; $('msg').textContent = e.message; } };
 </script></body></html>
