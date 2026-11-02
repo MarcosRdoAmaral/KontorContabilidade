@@ -13,7 +13,7 @@ import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, confi
 import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
-import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
+import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, ConfigPix, configPixPublica, gerarPixCobranca, gerarPixPendentes, salvarConfigPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
 import { Despesa, criarDespesa, editarDespesa, excluirDespesa, listarCategorias, listarDespesas, painelFinanceiro, salvarCategorias } from './servicos/financeiro.js';
 import { ClassificacaoCartao, classificarCartao, excluirFatura, faturasDoMes, importarFatura } from './servicos/cartao.js';
 import { Classificacao, balancoExtrato, candidatosBoleto, candidatosDespesa, classificar, conciliar, excluirImportacao, extratoDoMes, importarExtrato, ligarDespesa } from './servicos/extrato.js';
@@ -730,6 +730,17 @@ export async function rotas(app: FastifyInstance) {
       cobrancaDoUsuario(req, id);
       const { pdf, nome } = await demonstrativoPdf(id);
       return reply.type('application/pdf').header('Content-Disposition', `inline; filename="${nome}"`).send(pdf);
+    });
+    api.get('/api/empresas/:id/pix-config', async (req) => { const id = Number((req.params as any).id); checarEmpresa(req, id); return configPixPublica(id); });
+    api.put('/api/empresas/:id/pix-config', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const id = Number((req.params as any).id); checarEmpresa(req, id);
+      return salvarConfigPix(id, ConfigPix.parse(req.body));
+    });
+    api.post('/api/empresas/:id/pix-gerar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => { const id = Number((req.params as any).id); checarEmpresa(req, id); return gerarPixPendentes(id); });
+    api.post('/api/cobrancas/:id/pix/gerar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      const id = Number((req.params as any).id);
+      cobrancaDoUsuario(req, id);
+      return gerarPixCobranca(id);
     });
     api.post('/api/cobrancas/:id/pix', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id);

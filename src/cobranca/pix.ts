@@ -50,7 +50,7 @@ export function lerPix(entrada: string): PixLido {
   };
 }
 
-/** Monta um BR Code estático (usado nos testes e em exemplos). */
+/** Monta um BR Code estático (Pix copia e cola com a chave da empresa; também usado nos testes). */
 export function montarPix(d: { chave: string; valor?: number; nome: string; cidade: string; txid?: string }): string {
   const f = (id: string, v: string) => `${id}${String(v.length).padStart(2, '0')}${v}`;
   const conta = f('00', 'br.gov.bcb.pix') + f('01', d.chave);

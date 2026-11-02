@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.45.3';
+export const MANUAL_VERSAO = '1.46.0';
 
 export const MANUAL = [
   {
@@ -371,7 +371,7 @@ export const MANUAL = [
       <p>A tela <strong>Cobranças</strong> tem duas carteiras. Cada cliente fica em uma delas, escolhida no cadastro dele (Faturamento e cobrança &gt; <em>Carteira de cobrança</em>):</p>
       <ul>
         <li><strong>Carteira boleto:</strong> boleto do convênio Ailos, com remessa e retorno, como sempre. A situação mostra pendente, pronto, enviado ao banco, registrado, pago ou cancelado.</li>
-        <li><strong>Carteira Pix:</strong> sem boleto. O escritório gera a cobrança Pix no aplicativo do banco, clica em <em>Informar Pix</em> e cola o código <em>Pix copia e cola</em>. O Kontor confere o código (formato e dígito de conferência) e recusa se o valor do Pix for diferente do valor da cobrança. Depois disso a cobrança fica como <em>Pix pronto, a receber</em>. O código também pode ser colado já em <em>Nova cobrança</em>. Quando o cliente pagar, use <em>Marcar pago</em>.</li>
+        <li><strong>Carteira Pix:</strong> sem boleto. O escritório gera a cobrança Pix no aplicativo do banco, clica em <em>Informar Pix</em> e cola o código <em>Pix copia e cola</em>. O Kontor confere o código (formato e dígito de conferência) e recusa se o valor do Pix for diferente do valor da cobrança. Depois disso a cobrança fica como <em>Pix pronto, a receber</em>. O código também pode ser colado já em <em>Nova cobrança</em>. Quando o cliente pagar, use <em>Marcar pago</em>. <strong>Pix gerado pelo Kontor:</strong> cadastre a chave Pix da empresa (InfinitePay ou qualquer banco) em Empresas &gt; Dados bancários &gt; <em>Pix gerado pelo Kontor</em>. A partir daí, cada cobrança da carteira Pix já sai com o Pix copia e cola e o QR Code no valor certo, sem precisar abrir o aplicativo do banco; o dinheiro cai direto na conta da chave. O botão <em>Gerar o Pix das cobranças pendentes</em> resolve as que já estavam lançadas, e no <em>Informar Pix</em> há o botão <em>Gerar com a chave Pix da empresa</em>. A baixa do pagamento continua manual. Faça um Pix de teste de pequeno valor antes de enviar aos clientes.</li>
       </ul>
       <h3>Demonstrativo de cobrança</h3>
       <p>O botão <em>Demonstrativo</em> gera o PDF (na carteira boleto, com o boleto completo na página 2) com o cabeçalho do escritório (logo, CNPJ, endereço, e-mail e WhatsApp do cadastro da empresa), o cliente, o vencimento, a discriminação dos serviços (com o desconto, se houver), o total e a forma de pagamento: QR Code e copia e cola na carteira Pix, ou a linha digitável na carteira boleto, com o boleto inteiro (recibo do pagador e ficha de compensação) na página seguinte. A frase do rodapé é definida no botão <em>Demonstrativo</em> do topo da tela. O demonstrativo vai anexo nos e-mails de cobrança; no Pix, o código copia e cola vai também no texto do e-mail (modelo <em>Cobrança por Pix</em>, em Configurações &gt; Modelos de e-mail). O botão <em>E-mail</em> envia ou reenvia a cobrança, e no WhatsApp o campo <code>{linha}</code> traz o Pix copia e cola nas cobranças Pix.</p>

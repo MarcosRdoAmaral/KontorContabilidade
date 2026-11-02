@@ -1034,8 +1034,12 @@ function informarPixDialogo(c, aoSalvar) {
       <li>Copie o código <em>Pix copia e cola</em> e cole abaixo.</li></ol>
     <label>Pix copia e cola <textarea name="codigo" rows="4" required spellcheck="false" style="font-family:ui-monospace,Consolas,monospace;font-size:.82rem">${esc(c.pix_copia_cola ?? '')}</textarea></label>
     <p class="erro" id="erro-pix"></p>
-    <div class="acoes"><button class="primario" type="submit">Conferir e salvar</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
+    <div class="acoes"><button class="primario" type="submit">Conferir e salvar</button><button type="button" id="pix-gerar">Gerar com a chave Pix da empresa</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
     const f = $('#form-pix');
+    $('#pix-gerar').onclick = async () => {
+      try { await api('POST', `/api/cobrancas/${c.id}/pix/gerar`); d.close(); aviso('Pix gerado com a chave da empresa. O demonstrativo com o QR Code já pode ser enviado.'); aoSalvar?.(); }
+      catch (e) { $('#erro-pix').textContent = mensagemErro(e); }
+    };
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const b = f.querySelector('[type=submit]'); b.disabled = true; b.textContent = 'Conferindo…';
@@ -1097,7 +1101,7 @@ async function telaCobrancas() {
       <a href="#" data-carteira="BOLETO" class="${pix ? '' : 'ativo'}">Carteira boleto <span class="contagem">${daCarteira('BOLETO').length}</span></a>
       <a href="#" data-carteira="PIX" class="${pix ? 'ativo' : ''}">Carteira Pix <span class="contagem">${daCarteira('PIX').length}</span>${faltaPix ? ` <span class="selo-estado" style="--c:var(--g-pend)">${faltaPix} sem Pix</span>` : ''}</a>
     </nav>
-    <p class="sutil">${pix ? `Cobranças dos clientes da carteira Pix: gere a cobrança Pix no aplicativo do banco, clique em <strong>Informar Pix</strong> e cole o código copia e cola. O Kontor confere o código e o valor e monta o demonstrativo com o QR Code. ${brl(aberto)} em aberto.`
+    <p class="sutil">${pix ? `Cobranças dos clientes da carteira Pix: com a chave Pix da empresa cadastrada (Empresas › Dados bancários), o Kontor gera o Pix de cada cobrança sozinho; sem ela, gere a cobrança no aplicativo do banco, clique em <strong>Informar Pix</strong> e cole o código copia e cola. O Kontor confere o código e o valor e monta o demonstrativo com o QR Code. ${brl(aberto)} em aberto.`
       : `Boletos do convênio Ailos, com remessa e retorno. O demonstrativo de cobrança vai junto no e-mail. ${brl(aberto)} em aberto.`} A carteira de cada cliente fica no cadastro dele (Faturamento e cobrança).</p>
     ${coraAtiva ? `<div class="banner">Cobrança pela <strong>Cora</strong>${cora.ambiente === 'teste' ? ' (ambiente de teste)' : ''}: os boletos são registrados na Cora na hora, com Pix, e a baixa é automática (a cada 10 minutos).${cora.saldo != null ? ` Saldo na Cora: <strong>${brl(cora.saldo)}</strong>.` : ''}</div>` : ''}
     ${!pix && !conta && !coraAtiva ? `<div class="banner teste">Os dados bancários (Ailos) desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
@@ -1324,8 +1328,24 @@ async function telaCobrancas() {
 async function telaBanco() {
   const c = (await api('GET', `/api/empresas/${estado.empresaId}/conta-bancaria`)) ?? { cooperativa_nome: 'Ailos', carteira: '01', multa_pct: 2, juros_pct_mes: 1 };
   const cora = await api('GET', `/api/empresas/${estado.empresaId}/cora`).catch(() => null);
+  const pixCfg = await api('GET', `/api/empresas/${estado.empresaId}/pix-config`).catch(() => null);
+  const px = pixCfg?.config;
   conteudo.innerHTML = `
     <div class="topo"><div><p class="sutil"><a href="#/empresas">← Empresas</a></p><h1>Dados bancários</h1><p class="sutil">${esc(empresa().razao_social)} — cobrança pela Cora (API) ou Ailos (remessa e retorno)</p></div></div>
+    <form id="form-pixk" class="cartao" style="margin-bottom:20px">
+      <h2 style="margin-top:0">Pix gerado pelo Kontor ${px ? (px.ativo ? '<span class="selo-estado" style="--c:var(--verde)">ativo</span>' : '<span class="selo-estado" style="--c:var(--laranja)">desativado</span>') : ''}</h2>
+      <p class="dica">Para os clientes da carteira Pix: o Kontor monta o Pix copia e cola e o QR Code de cada cobrança, com o valor certo, usando a chave Pix da empresa (InfinitePay ou qualquer outro banco). O dinheiro cai direto na conta dessa chave, sem taxa do Kontor. A baixa do pagamento continua manual (botão Pago, ou pelo extrato).</p>
+      <div class="grade">
+        <label>Tipo de chave <select name="tipo">${Object.entries(pixCfg?.tipos ?? {}).map(([k, t]) => `<option value="${k}" ${px?.tipo === k ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        <label>Chave Pix <input name="chave" maxlength="77" autocomplete="off" required value="${esc(px?.chave ?? '')}" placeholder="A chave cadastrada no banco"></label>
+        <label>Nome do recebedor <input name="nome" maxlength="60" required value="${esc(px?.nome ?? empresa().razao_social ?? '')}"><span class="dica">Até 25 letras, sem acento (o banco mostra o nome oficial da conta ao pagar)</span></label>
+        <label>Cidade <input name="cidade" maxlength="40" required value="${esc(px?.cidade ?? empresa().cidade ?? '')}"></label>
+        <label class="check"><input type="checkbox" name="ativo" ${px ? (px.ativo ? 'checked' : '') : 'checked'}> Gerar o Pix sozinho nas novas cobranças da carteira Pix</label>
+      </div>
+      <p class="erro" id="erro-pixk" role="alert"></p>
+      <div class="acoes"><button class="primario" type="submit">Salvar chave Pix</button>${px && pixCfg.pendentes ? `<button type="button" id="pixk-pend">Gerar o Pix das ${pixCfg.pendentes} cobrança(s) pendente(s)</button>` : ''}</div>
+      <p class="dica">Confira a chave com cuidado: um Pix pago para a chave errada não volta sozinho. Faça um Pix de teste de pequeno valor antes de enviar aos clientes.</p>
+    </form>
     <form id="form-cora" class="cartao" style="margin-bottom:20px">
       <h2 style="margin-top:0">Banco Cora ${cora ? (cora.ativa ? '<span class="selo-estado" style="--c:var(--verde)">ativa</span>' : '<span class="selo-estado" style="--c:var(--laranja)">desativada</span>') : ''}</h2>
       <p class="dica">Com a Cora, o boleto (com Pix) é registrado direto pelo sistema, a baixa é automática e o extrato vem da API, sem arquivo de remessa. Para gerar as credenciais: app ou Cora Web › <strong>Integrações via API</strong> › <strong>Integração direta</strong>; baixe o <em>Client ID</em>, o <em>certificado</em> e a <em>chave privada</em> (arquivos .pem). Teste e produção têm credenciais diferentes. Se a empresa tiver Cora ativa, os novos boletos saem pela Cora; os já emitidos pelo Ailos continuam com remessa e retorno.</p>
@@ -1382,6 +1402,16 @@ async function telaBanco() {
     try { await api('PUT', `/api/empresas/${estado.empresaId}/feriados`, { feriados_extra: ev.target.feriados_extra.value }); aviso('Feriados salvos.'); }
     catch (e) { $('#erro-feriados').textContent = mensagemErro(e); }
   };
+  const fp = $('#form-pixk');
+  fp.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(fp));
+    try { await api('PUT', `/api/empresas/${estado.empresaId}/pix-config`, { ativo: !!d.ativo, tipo: d.tipo, chave: d.chave, nome: d.nome, cidade: d.cidade }); aviso('Chave Pix salva.'); telaBanco(); }
+    catch (e) { $('#erro-pixk').textContent = mensagemErro(e); }
+  };
+  $('#pixk-pend') && ($('#pixk-pend').onclick = async () => {
+    try { const r2 = await api('POST', `/api/empresas/${estado.empresaId}/pix-gerar`); aviso(`${r2.gerados} Pix gerado(s).`); telaBanco(); } catch (e) { aviso(mensagemErro(e)); }
+  });
   const fc = $('#form-cora');
   fc.querySelectorAll('[data-ler]').forEach((i) => (i.onchange = async () => { const a = i.files[0]; if (a) fc[i.dataset.ler].value = await a.text(); }));
   fc.onsubmit = async (ev) => {

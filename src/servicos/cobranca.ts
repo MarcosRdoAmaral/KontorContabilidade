@@ -6,7 +6,7 @@ import { gerarRemessa400 } from '../cobranca/ailos400.js';
 import { codigoBarras, descreverMotivo, gerarRemessa, lerRetornoAuto, linhaDigitavel, nossoNumero, MOVIMENTO_RETORNO, type ContaAilos, type Titulo } from '../cobranca/ailos.js';
 import { gerarBoletoPdf, type DadosBoleto } from '../cobranca/boleto-pdf.js';
 import { gerarDemonstrativoPdf } from '../cobranca/demonstrativo-pdf.js';
-import { lerPix } from '../cobranca/pix.js';
+import { lerPix, montarPix } from '../cobranca/pix.js';
 
 const UF_IBGE: Record<string, string> = { '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO', '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR', '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF' };
 const hojeBr = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -89,10 +89,12 @@ export function criarCobranca(d: { empresaId: number; tomadorId: number; notaId:
   if (valor > 99999999.99) throw new ErroNegocio('Valor do boleto acima do limite.');
   const forma = t?.forma_cobranca ?? 'BOLETO';
   const pix = forma === 'PIX' && d.pix?.trim() ? conferirPix(d.pix, valor) : null;
+  const pixProprio = forma === 'PIX' && !pix ? configPix(d.empresaId) : null; // Pix gerado pelo Kontor com a chave da empresa
   const r = db.prepare(`INSERT INTO cobrancas (empresa_id, tomador_id, nota_id, descricao, valor, vencimento, emissao, criado_por, desconto, desconto_motivo, multa_pct, juros_pct_mes, desc_pontual_pct, desc_pontual_dias, forma, pix_copia_cola, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(d.empresaId, d.tomadorId, d.notaId, d.descricao, valor, d.vencimento, hojeBr(), d.usuarioId, desconto, desconto ? t!.desconto_motivo : null, t?.multa_pct ?? null, t?.juros_pct_mes ?? null, t?.desc_pontual_pct ?? null, t?.desc_pontual_dias ?? null,
       forma, pix, pix ? 'REGISTRADO' : 'AGUARDANDO_BANCO');
   const id = Number(r.lastInsertRowid);
+  if (pixProprio?.ativo) { try { gerarPixCobranca(id); } catch { /* fica pendente, para informar o Pix */ } }
   if (!pix && usaCora(d.empresaId)) { import('./cora.js').then((m) => m.emitirEmSegundoPlano(id)); }
   else if (forma === 'BOLETO' && obterConta(d.empresaId)) { try { gerarTitulo(id); } catch { /* fica pendente, com o motivo na tela */ } }
   return obterCobranca(id)!;
@@ -193,6 +195,71 @@ function dadosDoBoleto(c: any): DadosBoleto {
 // ---------------------------------------------------------------------------
 // Carteira Pix: o escritório gera a cobrança Pix no banco e cola o código aqui
 // ---------------------------------------------------------------------------
+// ---- Pix gerado pelo Kontor com a chave Pix da empresa (InfinitePay ou qualquer banco): BR Code estático ----
+export const TIPOS_CHAVE_PIX = { CNPJ: 'CNPJ', CPF: 'CPF', EMAIL: 'E-mail', TELEFONE: 'Celular', ALEATORIA: 'Chave aleatória' } as const;
+export const ConfigPix = z.object({
+  ativo: z.boolean(),
+  tipo: z.enum(Object.keys(TIPOS_CHAVE_PIX) as [keyof typeof TIPOS_CHAVE_PIX]),
+  chave: z.string().trim().min(1, 'Informe a chave Pix').max(77),
+  nome: z.string().trim().min(1, 'Informe o nome do recebedor').max(60),
+  cidade: z.string().trim().min(1, 'Informe a cidade').max(40),
+});
+const P_PIX = (empresaId: number) => `pix_kontor:${empresaId}`;
+const semAcentoPix = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 .\-]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+
+/** Chave no formato do Banco Central: CPF/CNPJ só números, celular +55DDDNÚMERO, e-mail e chave aleatória em minúsculas. */
+export function normalizarChavePix(tipo: keyof typeof TIPOS_CHAVE_PIX, chave: string): string {
+  const so = chave.replace(/\D/g, '');
+  if (tipo === 'CPF') { if (so.length !== 11) throw new ErroNegocio('CPF da chave Pix deve ter 11 números.'); return so; }
+  if (tipo === 'CNPJ') { if (so.length !== 14) throw new ErroNegocio('CNPJ da chave Pix deve ter 14 números.'); return so; }
+  if (tipo === 'TELEFONE') {
+    const n = so.length === 13 && so.startsWith('55') ? so.slice(2) : so;
+    if (!/^\d{2}9?\d{8}$/.test(n)) throw new ErroNegocio('Celular da chave Pix: informe DDD e número, ex.: (47) 99901-7034.');
+    return `+55${n}`;
+  }
+  if (tipo === 'EMAIL') { const e = chave.trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new ErroNegocio('E-mail da chave Pix inválido.'); return e; }
+  const evp = chave.trim().toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(evp)) throw new ErroNegocio('Chave aleatória inválida: copie a chave completa (36 caracteres, com os hífens) do aplicativo do banco.');
+  return evp;
+}
+
+export function configPix(empresaId: number): (z.infer<typeof ConfigPix> & { pendentes?: number }) | null {
+  const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(P_PIX(empresaId)) as any)?.valor;
+  return v ? JSON.parse(v) : null;
+}
+export function configPixPublica(empresaId: number) {
+  const c = configPix(empresaId);
+  const pendentes = (db.prepare("SELECT COUNT(*) AS n FROM cobrancas WHERE empresa_id = ? AND forma = 'PIX' AND status = 'AGUARDANDO_BANCO'").get(empresaId) as any).n;
+  return { config: c, pendentes, tipos: TIPOS_CHAVE_PIX };
+}
+export function salvarConfigPix(empresaId: number, d: z.infer<typeof ConfigPix>) {
+  const chave = normalizarChavePix(d.tipo, d.chave);
+  const nova = { ativo: d.ativo, tipo: d.tipo, chave, nome: semAcentoPix(d.nome).slice(0, 25), cidade: semAcentoPix(d.cidade).slice(0, 15) };
+  if (!nova.nome || !nova.cidade) throw new ErroNegocio('Informe o nome do recebedor e a cidade (sem só símbolos).');
+  db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(P_PIX(empresaId), JSON.stringify(nova));
+  return configPixPublica(empresaId);
+}
+
+/** Gera o Pix copia e cola da cobrança com a chave da empresa (valor fixo, identificador KONTOR + número da cobrança). */
+export function gerarPixCobranca(id: number) {
+  const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(id) as any;
+  if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
+  if (c.forma !== 'PIX') throw new ErroNegocio('Esta cobrança é da carteira de boleto.');
+  if (c.status === 'PAGO' || c.status === 'CANCELADO') throw new ErroNegocio('Esta cobrança já está encerrada.');
+  const cfg = configPix(c.empresa_id);
+  if (!cfg) throw new ErroNegocio('Cadastre a chave Pix da empresa em Cadastros > Empresas > Dados bancários.');
+  const codigo = montarPix({ chave: cfg.chave, valor: c.valor, nome: cfg.nome, cidade: cfg.cidade, txid: `KONTOR${id}` });
+  db.prepare("UPDATE cobrancas SET pix_copia_cola = ?, status = 'REGISTRADO', observacao_banco = NULL WHERE id = ?").run(conferirPix(codigo, c.valor), id);
+  return obterCobranca(id);
+}
+
+/** Gera o Pix de todas as cobranças Pix pendentes da empresa. */
+export function gerarPixPendentes(empresaId: number) {
+  const ids = (db.prepare("SELECT id FROM cobrancas WHERE empresa_id = ? AND forma = 'PIX' AND status = 'AGUARDANDO_BANCO'").all(empresaId) as { id: number }[]).map((x) => x.id);
+  for (const id of ids) gerarPixCobranca(id);
+  return { gerados: ids.length };
+}
+
 /** Confere o Pix copia e cola e devolve o código limpo; recusa se o valor do Pix for diferente do da cobrança. */
 export function conferirPix(codigo: string, valor: number): string {
   let p;
