@@ -1232,6 +1232,79 @@ const migracoes: string[] = [
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX idx_radar_auditoria ON radar_auditoria(escritorio_id, criado_em);`,
+  // 51: Gestão de CND: certidões (cada emissão é um registro novo, nunca sobrescrito), PDFs, consultas (histórico e
+  // auditoria), fila de consultas (individual, em lote e renovação automática) e alertas de vencimento já enviados
+  `CREATE TABLE cnd_certidoes (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id),
+    tipo TEXT NOT NULL CHECK (tipo IN ('FEDERAL','ESTADUAL','MUNICIPAL','TRABALHISTA','FGTS')),
+    orgao TEXT NOT NULL,
+    documento TEXT NOT NULL,
+    numero TEXT,
+    codigo_controle TEXT,
+    emissao TEXT,
+    validade TEXT,
+    resultado TEXT NOT NULL CHECK (resultado IN ('NEGATIVA','POSITIVA_EFEITO_NEGATIVA','POSITIVA')),
+    origem TEXT NOT NULL CHECK (origem IN ('SERPRO','SERPRO_DEMONSTRACAO','MANUAL')),
+    observacoes TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_cnd_cert_empresa ON cnd_certidoes(empresa_id, tipo, criado_em);
+  CREATE INDEX idx_cnd_cert_validade ON cnd_certidoes(escritorio_id, validade);
+  CREATE TABLE cnd_documentos (
+    id INTEGER PRIMARY KEY,
+    certidao_id INTEGER NOT NULL REFERENCES cnd_certidoes(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    tipo_mime TEXT NOT NULL DEFAULT 'application/pdf',
+    tamanho INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    arquivo BLOB NOT NULL,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_cnd_doc_cert ON cnd_documentos(certidao_id);
+  CREATE TABLE cnd_consultas (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id),
+    tipo TEXT NOT NULL,
+    documento TEXT NOT NULL,
+    origem TEXT NOT NULL CHECK (origem IN ('INDIVIDUAL','LOTE','AUTOMATICA','MANUAL')),
+    resultado TEXT NOT NULL CHECK (resultado IN ('ENCONTRADA','EMITIDA','NAO_EMITIDA','IMPEDITIVA','PENDENTE','ERRO','REGISTRO_MANUAL')),
+    status_api INTEGER,
+    http INTEGER,
+    mensagem TEXT,
+    cobrada INTEGER NOT NULL DEFAULT 0,
+    ambiente TEXT,
+    certidao_id INTEGER REFERENCES cnd_certidoes(id),
+    lote_id INTEGER,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_cnd_cons_empresa ON cnd_consultas(empresa_id, criado_em);
+  CREATE INDEX idx_cnd_cons_esc ON cnd_consultas(escritorio_id, criado_em);
+  CREATE TABLE cnd_fila (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id),
+    tipo TEXT NOT NULL DEFAULT 'FEDERAL',
+    lote_id INTEGER NOT NULL,
+    origem TEXT NOT NULL CHECK (origem IN ('INDIVIDUAL','LOTE','AUTOMATICA')),
+    situacao TEXT NOT NULL DEFAULT 'AGUARDANDO' CHECK (situacao IN ('AGUARDANDO','PROCESSANDO','CONCLUIDA','ERRO','CANCELADA')),
+    consulta_id INTEGER REFERENCES cnd_consultas(id),
+    mensagem TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    concluido_em TEXT
+  );
+  CREATE INDEX idx_cnd_fila ON cnd_fila(escritorio_id, situacao, id);
+  CREATE TABLE cnd_alertas (
+    certidao_id INTEGER NOT NULL REFERENCES cnd_certidoes(id) ON DELETE CASCADE,
+    marco TEXT NOT NULL,
+    enviado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (certidao_id, marco)
+  );`,
 ];
 
 export function migrar(): void {
