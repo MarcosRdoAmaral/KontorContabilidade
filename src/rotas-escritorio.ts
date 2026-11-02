@@ -313,6 +313,15 @@ export async function rotasEscritorio(app: FastifyInstance) {
     });
     api.post('/api/escritorio/captura/buscar', async (req) => capturarTodos(u(req).escritorio_id, empresasDoUsuario(u(req))));
     api.post('/api/escritorio/captura/automatica', async (req) => automaticaParaTodos(u(req).escritorio_id, z.object({ ligar: z.boolean() }).parse(req.body).ligar, empresasDoUsuario(u(req))));
+    // NFS-e por procuração: emitir e buscar as notas do cliente com o certificado do escritório
+    api.put('/api/escritorio/captura/:id/procuracao', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
+      checar(req, id(req));
+      const ativo = z.object({ ativo: z.boolean() }).parse(req.body).ativo;
+      const esc = db.prepare('SELECT cert_pfx_enc, cert_validade FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1 ORDER BY id LIMIT 1').get(u(req).escritorio_id) as any;
+      if (ativo && !esc?.cert_pfx_enc) throw new ErroNegocio('Envie antes o certificado do escritório (e-CNPJ) em Empresas > Certificado, na empresa do escritório.');
+      db.prepare('UPDATE empresas SET nfse_procuracao = ? WHERE id = ? AND eh_escritorio = 0').run(ativo ? 1 : 0, id(req));
+      return { ok: true, ativo };
+    });
     api.get('/api/escritorio/captura/:id/pacote', async (req, reply) => {
       checar(req, id(req));
       const p = await pacoteDoMes(id(req), mesDe(req.query));

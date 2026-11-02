@@ -43,11 +43,12 @@ export function lerRespostaAdn(status: number, corpo: any): RespostaAdn {
 }
 
 /** Consulta real ao ADN (produção: as notas dos clientes só existem lá). */
-export function consultaAdn(cert: CertificadoA1, ambiente: 1 | 2 = 1): { consultar: ConsultaAdn; fechar: () => void } {
+/** `cnpjConsulta`: com procuração, o certificado é do escritório e a consulta é do CNPJ do cliente. */
+export function consultaAdn(cert: CertificadoA1, ambiente: 1 | 2 = 1, cnpjConsulta: string | null = null): { consultar: ConsultaAdn; fechar: () => void } {
   const base = process.env.ADN_URL_TESTE ?? ADN_URL[ambiente];
   const agent = new https.Agent({ key: cert.chavePem, cert: cert.cadeiaPem, keepAlive: true, rejectUnauthorized: !process.env.ADN_URL_TESTE });
   const consultar: ConsultaAdn = (nsu) => new Promise((resolve, reject) => {
-    const r = https.request(`${base}/DFe/${nsu}`, { method: 'GET', agent, headers: { Accept: 'application/json' }, timeout: 60_000 }, (res) => {
+    const r = https.request(`${base}/DFe/${nsu}${cnpjConsulta ? `?cnpjConsulta=${encodeURIComponent(cnpjConsulta)}` : ''}`, { method: 'GET', agent, headers: { Accept: 'application/json' }, timeout: 60_000 }, (res) => {
       const partes: Buffer[] = [];
       res.on('data', (c) => partes.push(c));
       res.on('end', () => {

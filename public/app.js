@@ -372,7 +372,8 @@ function infoEmpresa() {
   $('#empresa-atual').title = e.razao_social;
   $('#info-empresa').innerHTML = `${fmtDoc(e.documento)}<br>
     ${e.ambiente === 1 ? 'Produção' : '<span class="alerta">Produção restrita (testes)</span>'} · série ${esc(e.serie)}<br>
-    ${!e.tem_certificado ? `<span class="alerta selo-cert ruim">${icone('alerta')}Sem certificado A1</span>`
+    ${!e.tem_certificado && e.nfse_procuracao ? `<span class="selo-cert">NFS-e por procuração</span>`
+      : !e.tem_certificado ? `<span class="alerta selo-cert ruim">${icone('alerta')}Sem certificado A1</span>`
       : dias < 0 ? `<span class="alerta selo-cert ruim">${icone('alerta')}Certificado vencido em ${dataBr(e.cert_validade)}</span>`
       : dias < 30 ? `<span class="alerta selo-cert aviso">${icone('alerta')}Certificado vence em ${dias} dias</span>`
       : `<span class="selo-cert ok">Certificado até ${dataBr(e.cert_validade)} ${icone('ok')}</span>`}`;
@@ -558,7 +559,7 @@ async function telaEmitir(param) {
     </div></div>
     ${origem ? `<div class="banner">Copiado da ${origem.n_nfse ? `NFS-e nº ${origem.n_nfse}` : `DPS ${origem.serie}/${origem.n_dps}`} (${esc(origem.tomador_nome ?? 'sem tomador')}, ${brl(origem.valor_servico)}). Isto emite uma <strong>nota nova</strong>, com outro número: confira a competência, o valor e a descrição antes de emitir. <a href="#/nota/${origem.id}">Voltar para a nota</a></div>` : ''}
     ${e.ambiente === 2 ? '<div class="banner teste">Esta empresa está em produção restrita: as notas são de teste e não têm valor fiscal.</div>' : ''}
-    ${e.modo_emissao === 'PORTAL' ? '<div class="banner teste">Esta empresa emite as notas pelo portal do Emissor Nacional (sem certificado). Aqui você gera o <strong>boleto</strong>; a nota é emitida no portal e importada em <a href="#/notas">Notas emitidas</a>.</div>' : !e.tem_certificado ? '<div class="banner teste">Cadastre o certificado A1 da empresa antes de emitir.</div>' : ''}
+    ${e.modo_emissao === 'PORTAL' ? '<div class="banner teste">Esta empresa emite as notas pelo portal do Emissor Nacional (sem certificado). Aqui você gera o <strong>boleto</strong>; a nota é emitida no portal e importada em <a href="#/notas">Notas emitidas</a>.</div>' : !e.tem_certificado && !e.nfse_procuracao ? '<div class="banner teste">Cadastre o certificado A1 da empresa (ou ligue a NFS-e por procuração) antes de emitir.</div>' : ''}
     <form id="form-emitir">
       <fieldset><legend>Tomador</legend>
         <div class="grade">
@@ -669,7 +670,7 @@ async function telaEmitir(param) {
 
   const f = $('#form-emitir');
   const portal = e.modo_emissao === 'PORTAL';
-  if (!e.tem_certificado && !portal) f.querySelector('[type=submit]').disabled = true;
+  if (!e.tem_certificado && !e.nfse_procuracao && !portal) f.querySelector('[type=submit]').disabled = true;
   if (portal) f.acao.querySelectorAll('option:not([value=BOLETO])').forEach((o) => o.remove());
   if (p.tribISSQN) f.tribISSQN.value = p.tribISSQN;
   if (p.issRetido) f.issRetido.value = p.issRetido;
@@ -3212,6 +3213,7 @@ function formCertificado(e) {
   abrirDialogo(`
     <form id="form-cert"><h2>Certificado A1 — ${esc(e.razao_social)}</h2>
       <p class="sutil">Arquivo .pfx ou .p12 do e-CNPJ. Ele é guardado criptografado e usado apenas para assinar e transmitir as notas desta empresa.</p>
+      ${e.eh_escritorio ? '' : `<label class="cartao" style="display:block;margin:10px 0"><input type="checkbox" id="cert-proc" ${e.nfse_procuracao ? 'checked' : ''}> <strong>Emitir e buscar NFS-e por procuração</strong><br><span class="dica">Com a procuração eletrônica da NFS-e dada ao escritório, as notas desta empresa são emitidas e buscadas no Ambiente Nacional com o certificado do escritório, sem precisar do A1 dela.</span></label>`}
       <div class="grade">
         <label class="largo">Arquivo <input type="file" name="arquivo" accept=".pfx,.p12" required></label>
         <label>Senha do certificado <input type="password" name="senha" required autocomplete="off"></label>
@@ -3219,6 +3221,15 @@ function formCertificado(e) {
       <p class="erro" id="erro-cert"></p>
       <div class="acoes"><button class="primario" type="submit">Enviar certificado</button><button type="button" data-fechar>Fechar</button></div>
     </form>`, (d) => {
+    const proc = $('#cert-proc');
+    if (proc) {
+      const ajustar = () => d.querySelectorAll('#form-cert input[name=arquivo], #form-cert input[name=senha]').forEach((i) => (i.required = !proc.checked));
+      ajustar();
+      proc.onchange = async () => {
+        try { await api('PUT', `/api/escritorio/captura/${e.id}/procuracao`, { ativo: proc.checked }); ajustar(); aviso(proc.checked ? 'NFS-e por procuração ligada para esta empresa.' : 'NFS-e por procuração desligada: volta a usar o A1 da empresa.'); await carregarEmpresas(); }
+        catch (er) { proc.checked = !proc.checked; $('#erro-cert').textContent = mensagemErro(er); }
+      };
+    }
     $('#form-cert').onsubmit = async (ev) => {
       ev.preventDefault();
       const f = ev.target;
@@ -3242,7 +3253,7 @@ async function telaEmpresas() {
       <button class="primario" id="novo">Cadastrar empresa</button></div>
     ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Empresa</th><th>Documento</th><th>Regime</th><th>Ambiente</th><th>Certificado</th><th></th></tr></thead><tbody>
       ${lista.map((e, i) => `<tr class="${e.ativo === 0 ? 'inativo' : ''}"><td>${esc(e.razao_social)}${e.eh_escritorio ? ' <span class="selo-carteira">Escritório</span>' : ''}${e.na_carteira ? ' <span class="selo-carteira">Também cliente</span>' : ''}${e.ativo === 0 ? ' <span class="selo-conferir">Inativa</span>' : ''}</td><td>${fmtDoc(e.documento)}</td><td>${['', 'Não optante', 'MEI', 'Simples ME/EPP'][e.op_simp_nac]}</td>
-        <td>${e.ambiente === 1 ? 'Produção' : 'Testes'}</td><td>${e.modo_emissao === 'PORTAL' ? 'Portal (CNPJ e senha)' : e.tem_certificado ? `até ${dataBr(e.cert_validade)}` : '<span class="pendente-txt">Falta enviar</span>'}</td>
+        <td>${e.ambiente === 1 ? 'Produção' : 'Testes'}</td><td>${e.modo_emissao === 'PORTAL' ? 'Portal (CNPJ e senha)' : e.nfse_procuracao && !e.tem_certificado ? 'Procuração (certificado do escritório)' : e.tem_certificado ? `até ${dataBr(e.cert_validade)}${e.nfse_procuracao ? '<br><span class="dica">NFS-e por procuração</span>' : ''}` : '<span class="pendente-txt">Falta enviar</span>'}</td>
         <td><button data-editar="${i}">Editar</button> ${e.modo_emissao === 'PORTAL' ? '' : `<button data-cert="${i}">Certificado</button>`} <button data-logo="${i}">${e.tem_logo ? 'Logo ✓' : 'Logo'}</button> <button data-banco="${i}">Dados bancários</button>${estado.usuario.papel === 'admin' || estado.usuario.tipo === 'adm' ? ` <button data-ativo="${i}">${e.ativo === 0 ? 'Reativar' : 'Inativar'}</button>` : ''}${estado.usuario.mestre ? ` <button class="perigo" data-excluir="${i}">Excluir</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="vazio">Cadastre a empresa do escritório (marque "Esta é a empresa do escritório").</div>'}`;
   $('#novo').onclick = () => formEmpresa();
@@ -4786,7 +4797,7 @@ async function abaFaturamento() {
 async function telaCaptura() {
   const mes = telaCaptura.mes ?? mesAtual();
   const [lista, ax] = await Promise.all([api('GET', `/api/escritorio/captura?mes=${mes}`), api('GET', `/api/escritorio/captura/autxml?mes=${mes}`)]);
-  const comCert = lista.filter((l) => l.tem_certificado);
+  const comCert = lista.filter((l) => l.tem_certificado || l.procuracao_ok);
   const prontos = lista.filter((l) => l.pode_consultar || l.pode_adn).length;
   const e = ax.escritorio;
   const ultima = (data, resultado, erro, proxima, pode, cert) => `${data ? `<span class="dica">${dhBr(data)}</span>` : '<span class="dica">nunca</span>'}${erro ? `<br><span class="dica cor-vermelho">${esc(erro)}</span>` : resultado ? `<br><span class="dica">${esc(resultado)}</span>` : ''}${proxima && !pode && cert ? `<br><span class="dica">próxima a partir de ${dhBr(proxima)}</span>` : ''}`;
@@ -4806,6 +4817,7 @@ async function telaCaptura() {
       <div class="cartao">
         <h2 style="margin-top:0">Compras e serviços</h2>
         <p class="sutil">Com o certificado A1 de cada cliente, o sistema baixa as <strong>NF-e de compra</strong> (SEFAZ) e as <strong>NFS-e prestadas e tomadas</strong> (Ambiente Nacional da NFS-e, nos municípios do padrão nacional).</p>
+        <p class="dica"><strong>NFS-e por procuração:</strong> marque na coluna do certificado os clientes que deram procuração eletrônica ao escritório para a NFS-e. As notas desses clientes são emitidas e buscadas no Ambiente Nacional com o certificado do escritório, sem o A1 deles.</p>
         <p class="dica">A busca automática consulta sozinha com o programa aberto, respeitando o intervalo de 1 hora de cada órgão quando não há notas novas. Para enviar o certificado de um cliente, use Cadastros &gt; Empresas.</p>
       </div>
     </div>
@@ -4817,13 +4829,14 @@ async function telaCaptura() {
     <div id="cap-res"></div>
     <div class="rolagem" style="margin-top:12px"><table class="tabela tabela-captura"><thead><tr><th>Cliente</th><th>Certificado A1</th><th class="num">NF-e compras</th><th class="num">NF-e vendas</th><th class="num">NFS-e prestadas</th><th class="num">NFS-e tomadas</th><th>Última consulta</th><th>Automática</th><th></th></tr></thead><tbody>
     ${lista.map((l) => `<tr><td><strong>${esc(l.cliente)}</strong>${l.eh_escritorio ? ' <span class="selo PZ-PRAZO">Escritório</span>' : ''}<br><span class="dica">${fmtDoc(l.documento)}</span></td>
-      <td>${!l.tem_certificado ? '<span class="dica">não enviado</span>' : l.cert_vencido ? '<span class="cor-vermelho">vencido</span>' : `até ${dataBr(l.cert_validade)}`}</td>
+      <td>${!l.tem_certificado ? '<span class="dica">não enviado</span>' : l.cert_vencido ? '<span class="cor-vermelho">vencido</span>' : `até ${dataBr(l.cert_validade)}`}
+        ${l.eh_escritorio ? '' : `<br><label class="dica" title="NFS-e emitidas e buscadas com o certificado do escritório, pela procuração eletrônica do cliente (Emissor Nacional e APIs da NFS-e, desde 01/11/2026)"><input type="checkbox" data-proc="${l.id}" ${l.nfse_procuracao ? 'checked' : ''}> NFS-e por procuração</label>`}</td>
       <td class="num">${l.nfe_mes}${l.nfe_mes ? `<br><span class="dica">${brl(l.nfe_valor)}</span>` : ''}${l.nfe_sem_xml ? `<br><span class="dica cor-ambar">${l.nfe_sem_xml} sem XML</span>` : ''}</td>
       <td class="num">${l.eh_escritorio ? '<span class="dica">—</span>' : `${l.vendas_mes}${l.vendas_mes ? `<br><span class="dica">${brl(l.vendas_valor)}</span>` : ''}`}</td>
       <td class="num">${l.nfse_prestadas}</td><td class="num">${l.eh_escritorio ? '<span class="dica">—</span>' : l.nfse_tomadas}</td>
       <td><span class="dica">NF-e:</span> ${ultima(l.ultima_consulta, l.ultimo_resultado, l.ultimo_erro, l.proxima_consulta, l.pode_consultar, l.tem_certificado)}
-        ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado)}`}</td>
-      <td>${!l.tem_certificado ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
+        ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado || l.procuracao_ok)}`}</td>
+      <td>${!l.tem_certificado && !l.procuracao_ok ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
       <td class="acoes-linha">${l.eh_escritorio ? '' : `<a href="#/resumo/${l.id}"><button type="button">Resumo</button></a> `}<button data-notas="${l.id}">Notas</button> <button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
     </tbody></table></div>
     <p class="dica">O pacote do mês (ZIP) traz os XML das notas de compra, de venda e de serviço (prestadas e tomadas), com planilhas de conferência.</p>`;
@@ -4841,6 +4854,10 @@ async function telaCaptura() {
   };
   const auto = (ligar) => async () => { try { const r = await api('POST', '/api/escritorio/captura/automatica', { ligar }); aviso(`Busca automática ${ligar ? 'ligada' : 'desligada'} para ${r.alterados} cliente(s).`); telaCaptura(); } catch (er) { aviso(mensagemErro(er)); } };
   $('#cap-auto-on').onclick = auto(true); $('#cap-auto-off').onclick = auto(false);
+  conteudo.querySelectorAll('[data-proc]').forEach((c) => (c.onchange = async () => {
+    try { await api('PUT', `/api/escritorio/captura/${c.dataset.proc}/procuracao`, { ativo: c.checked }); aviso(c.checked ? 'NFS-e por procuração ligada: emissão e busca com o certificado do escritório.' : 'NFS-e por procuração desligada: volta a usar o certificado A1 do cliente.'); telaCaptura(); }
+    catch (er) { c.checked = !c.checked; aviso(mensagemErro(er)); }
+  }));
   conteudo.querySelectorAll('[data-pac]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/captura/${b.dataset.pac}/pacote?mes=${mes}`, `documentos_${mes}.zip`)));
   conteudo.querySelectorAll('[data-notas]').forEach((b) => (b.onclick = () => notasCapturadas(lista.find((l) => l.id === Number(b.dataset.notas)), mes)));
 }

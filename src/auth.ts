@@ -69,7 +69,7 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/escritorio\/(tarefas|obrigacoes)(\/\d+|\/entregar|\/inicio)?$/, mod: ['obrigacoes'] },
   { r: /^\/api\/escritorio\/certificados(\/\d+(\/renovar)?)?$/, mod: ['certificados'] },
   { r: /^\/api\/escritorio\/(honorarios\/config|contratos(\/\d+(\/(status|texto|pdf|assinado|reajustes|reajuste|decimo-terceiro))?)?|indices\/[A-Z]+|decimo-terceiro|inadimplencia|modelos(\/\d+)?|contratos-exemplo|contrato-marca(\/imagem)?)$/, mod: ['honorarios'] },
-  { r: /^\/api\/escritorio\/captura(\/buscar|\/automatica|\/autxml|\/\d+\/(pacote|notas|xml\/[A-Za-z0-9]{44,60}))?$/, mod: ['captura'] },
+  { r: /^\/api\/escritorio\/captura(\/buscar|\/automatica|\/autxml|\/\d+\/(pacote|notas|procuracao|xml\/[A-Za-z0-9]{44,60}))?$/, mod: ['captura'] },
   { r: /^\/api\/escritorio\/avisos(\/enviar)?$/, mod: 'adm' },
   { r: /^\/api\/escritorio\/integra\/(config|testar)$/, mod: 'adm' },
   { m: 'PUT', r: /^\/api\/escritorio\/situacao-fiscal\/agenda$/, mod: 'adm' },

@@ -1145,6 +1145,9 @@ const migracoes: string[] = [
     criado_em TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (empresa_id, processo)
   );`,
+  // 49: NFS-e por procuração eletrônica (desde 01/11/2026 os emissores e as APIs da NFS-e aceitam o procurador):
+  // a empresa emite e busca as notas com o certificado do escritório, sem o A1 dela
+  `ALTER TABLE empresas ADD COLUMN nfse_procuracao INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function migrar(): void {

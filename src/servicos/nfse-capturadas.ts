@@ -1,7 +1,7 @@
 import { db } from '../db.js';
 import { lerNfse } from '../nfse/leitura.js';
 import { consultaAdn, lerRespostaAdn, type ConsultaAdn, type DocAdn } from '../nfse/adn.js';
-import { ErroNegocio, certificadoDaEmpresa } from './emissao.js';
+import { ErroNegocio, certificadoNfse, escritorioDaEmpresa } from './emissao.js';
 
 /**
  * NFS-e prestadas e tomadas de cada cliente, baixadas do Ambiente de Dados Nacional (ADN) com o certificado A1 dele.
@@ -73,7 +73,7 @@ export function processarDocAdn(empresa: { id: number; documento: string }, d: D
 export async function buscarNoAdn(empresaId: number, opcoes: { consultar?: ConsultaAdn; automatica?: boolean } = {}): Promise<ResultadoAdn> {
   const empresa = db.prepare('SELECT * FROM empresas WHERE id = ?').get(empresaId) as any;
   if (!empresa) throw new ErroNegocio('Cliente não encontrado.', 404);
-  if (!opcoes.consultar && !empresa.cert_pfx_enc) throw new ErroNegocio('Para buscar as NFS-e no Ambiente Nacional, cadastre o certificado A1 do cliente em Empresas > Certificado.');
+  if (!opcoes.consultar && !empresa.cert_pfx_enc && !empresa.nfse_procuracao) throw new ErroNegocio('Para buscar as NFS-e no Ambiente Nacional, cadastre o certificado A1 do cliente em Empresas > Certificado ou ligue a procuração da NFS-e (certificado do escritório) em Captura de documentos.');
   if (emAndamento.has(empresaId)) throw new ErroNegocio('Já há uma busca de NFS-e em andamento para este cliente.', 409);
   const est = estado(empresaId);
   const res: ResultadoAdn = { consultou: false, prestadas: 0, tomadas: 0, cancelamentos: 0, proximaConsulta: est.proxima_consulta, resumo: '' };
@@ -84,7 +84,7 @@ export async function buscarNoAdn(empresaId: number, opcoes: { consultar?: Consu
   emAndamento.add(empresaId);
   let conexao: { consultar: ConsultaAdn; fechar: () => void } | null = null;
   try {
-    const consultar = opcoes.consultar ?? (conexao = consultaAdn(certificadoDaEmpresa(empresa))).consultar;
+    const consultar = opcoes.consultar ?? (conexao = consultaAdn(certificadoNfse(empresa), 1, empresa.nfse_procuracao && !empresa.eh_escritorio ? String(empresa.documento).replace(/\D/g, '') : null)).consultar;
     let nsu = Number(est.ult_nsu) || 0;
     let fimDaFila = false;
     res.consultou = true;
@@ -132,7 +132,7 @@ export function configurarAdn(empresaId: number, automatica: boolean) {
 export async function buscarAdnAutomaticamente(): Promise<void> {
   const agora = new Date().toISOString();
   const empresas = db.prepare(`SELECT a.empresa_id FROM adn_distribuicao a JOIN empresas e ON e.id = a.empresa_id
-    WHERE a.automatica = 1 AND e.situacao != 'ENCERRADO' AND e.cert_pfx_enc IS NOT NULL AND (e.cert_validade IS NULL OR e.cert_validade > ?)
+    WHERE a.automatica = 1 AND e.situacao != 'ENCERRADO' AND ((e.cert_pfx_enc IS NOT NULL AND (e.cert_validade IS NULL OR e.cert_validade > ?)) OR e.nfse_procuracao = 1)
       AND (a.proxima_consulta IS NULL OR a.proxima_consulta <= ?)`).all(agora, agora) as { empresa_id: number }[];
   for (const { empresa_id } of empresas) {
     if ((esperaPorErro.get(empresa_id) ?? 0) > Date.now()) continue;

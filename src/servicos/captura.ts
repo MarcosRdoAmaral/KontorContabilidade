@@ -22,7 +22,7 @@ const dataBr = (s?: string | null) => (s ? s.slice(0, 10).split('-').reverse().j
 export function statusCaptura(escritorioId: number, mes: string, empresas: number[] | null = null) {
   const filtro = empresas ? `AND e.id IN (${empresas.map(() => '?').join(',') || 'NULL'})` : '';
   const de = `${mes}-01`, ate = fimDoMes(mes);
-  const linhas = db.prepare(`SELECT e.id, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento, e.uf, e.cert_validade, e.eh_escritorio,
+  const linhas = db.prepare(`SELECT e.id, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento, e.uf, e.cert_validade, e.eh_escritorio, e.nfse_procuracao,
       (e.cert_pfx_enc IS NOT NULL) AS tem_certificado, d.ultima_consulta, d.proxima_consulta, d.ultimo_resultado, d.ultimo_erro, d.automatica,
       (d.empresa_id IS NOT NULL) AS iniciada,
       a.ultima_consulta AS adn_ultima, a.proxima_consulta AS adn_proxima, a.ultimo_resultado AS adn_resultado, a.ultimo_erro AS adn_erro, a.automatica AS adn_automatica,
@@ -39,15 +39,18 @@ export function statusCaptura(escritorioId: number, mes: string, empresas: numbe
     FROM empresas e LEFT JOIN nfe_distribuicao d ON d.empresa_id = e.id LEFT JOIN adn_distribuicao a ON a.empresa_id = e.id
     WHERE e.escritorio_id = ? AND (e.na_carteira = 1 OR e.eh_escritorio = 1) AND e.situacao != 'ENCERRADO' ${filtro} ORDER BY e.eh_escritorio DESC, cliente`).all(de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, escritorioId, ...(empresas ?? [])) as any[];
   const agora = new Date().toISOString();
+  const esc = db.prepare('SELECT cert_validade, (cert_pfx_enc IS NOT NULL) AS tem FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1 ORDER BY id LIMIT 1').get(escritorioId) as any;
+  const escOk = !!esc?.tem && !(esc.cert_validade && esc.cert_validade < agora);
   return linhas.map((l) => {
     const certOk = !!l.tem_certificado && !(l.cert_validade && l.cert_validade < agora);
+    const procuracao = !!l.nfse_procuracao && !l.eh_escritorio;
     return {
-      ...l, tem_certificado: !!l.tem_certificado, eh_escritorio: !!l.eh_escritorio, iniciada: !!l.iniciada, automatica: l.iniciada ? !!l.automatica : false,
+      ...l, nfse_procuracao: procuracao, procuracao_ok: procuracao && escOk, tem_certificado: !!l.tem_certificado, eh_escritorio: !!l.eh_escritorio, iniciada: !!l.iniciada, automatica: l.iniciada ? !!l.automatica : false,
       adn_iniciada: !!l.adn_iniciada, adn_automatica: l.adn_iniciada ? !!l.adn_automatica : false,
       cert_vencido: l.cert_validade ? l.cert_validade < agora : false,
       nfse_prestadas: l.nfse_prestadas + l.nfse_sistema,
       pode_consultar: certOk && (!l.proxima_consulta || l.proxima_consulta <= agora),
-      pode_adn: certOk && !l.eh_escritorio && (!l.adn_proxima || l.adn_proxima <= agora),
+      pode_adn: (procuracao ? escOk : certOk) && !l.eh_escritorio && (!l.adn_proxima || l.adn_proxima <= agora),
     };
   });
 }
@@ -105,7 +108,7 @@ export async function capturarTodos(escritorioId: number, empresas: number[] | n
 
 /** Liga (ou desliga) a busca automática de NF-e e de NFS-e para todos os clientes com certificado. */
 export function automaticaParaTodos(escritorioId: number, ligar: boolean, empresas: number[] | null = null) {
-  const alvo = statusCaptura(escritorioId, new Date().toISOString().slice(0, 7), empresas).filter((l) => l.tem_certificado);
+  const alvo = statusCaptura(escritorioId, new Date().toISOString().slice(0, 7), empresas).filter((l) => l.tem_certificado || l.procuracao_ok);
   for (const l of alvo) {
     configurarBusca(l.id, ligar);
     if (!l.eh_escritorio) configurarAdn(l.id, ligar);

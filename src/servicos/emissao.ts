@@ -44,9 +44,25 @@ export function certificadoDaEmpresa(empresa: any): CertificadoA1 {
   return cert;
 }
 
+/** Empresa do escritório (a que tem o certificado e-CNPJ usado como procurador). */
+export function escritorioDaEmpresa(empresa: any): any {
+  return db.prepare('SELECT * FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1 ORDER BY id LIMIT 1').get(empresa.escritorio_id) ?? null;
+}
+/**
+ * Certificado da NFS-e: o A1 da própria empresa ou, com a procuração eletrônica ligada, o do escritório.
+ * Desde 01/11/2026 o Emissor Nacional e as APIs de emissão e distribuição aceitam o procurador: o mTLS e a
+ * assinatura da DPS são do escritório, e a nota continua sendo da empresa (prestador = CNPJ dela).
+ */
+export function certificadoNfse(empresa: any): CertificadoA1 {
+  if (!empresa.nfse_procuracao || empresa.eh_escritorio) return certificadoDaEmpresa(empresa);
+  const esc = escritorioDaEmpresa(empresa);
+  if (!esc?.cert_pfx_enc) throw new ErroNegocio('Para usar a procuração da NFS-e, envie o certificado do escritório (e-CNPJ) em Empresas > Certificado, na empresa do escritório.');
+  return certificadoDaEmpresa(esc);
+}
+
 function cliente(empresa: any, notaId: number | null): SefinClient {
   const ins = db.prepare('INSERT INTO log_comunicacao (nota_id, metodo, url, status_http, resposta, duracao_ms) VALUES (?,?,?,?,?,?)');
-  return new SefinClient(certificadoDaEmpresa(empresa), empresa.ambiente, (r: RespostaSefin) =>
+  return new SefinClient(certificadoNfse(empresa), empresa.ambiente, (r: RespostaSefin) =>
     ins.run(notaId, r.metodo, r.url, r.status, r.bruto.slice(0, 20000), r.duracaoMs),
   );
 }
@@ -252,7 +268,7 @@ export async function emitir(u: Usuario, entrada: EntradaEmissao) {
   const empresa = db.prepare('SELECT * FROM empresas WHERE id = ? AND ativo = 1').get(entrada.empresaId) as any;
   if (!empresa) throw new ErroNegocio('Empresa não encontrada.', 404);
   if (empresa.modo_emissao === 'PORTAL') throw new ErroNegocio('Esta empresa emite as notas pelo portal (CNPJ e senha). Emita no Emissor Nacional e importe o XML em Notas emitidas.');
-  certificadoDaEmpresa(empresa); // falha cedo se o certificado estiver ausente ou vencido
+  certificadoNfse(empresa); // falha cedo se o certificado estiver ausente ou vencido
 
   const notaId = db.transaction(() => {
     const nDPS = reservarNumero(empresa.id, empresa.ambiente, empresa.serie);
@@ -288,7 +304,7 @@ export async function enviar(notaId: number, novaEntrada?: EntradaEmissao) {
 
   const entrada = novaEntrada ?? EntradaEmissao.parse(JSON.parse(nota.payload_json));
   const dados = montarDadosDps(empresa, entrada, nota.n_dps, nota.ambiente, nota.serie);
-  const cert = certificadoDaEmpresa(empresa);
+  const cert = certificadoNfse(empresa);
   const { xml } = montarDps(dados);
   const xmlAssinado = assinarXml(xml, 'infDPS', cert);
 
@@ -382,7 +398,7 @@ export async function cancelar(u: Usuario, notaId: number, cMotivo: 1 | 2 | 9, x
   if (!nota || nota.status !== 'AUTORIZADA') throw new ErroNegocio('Só é possível cancelar NFS-e autorizada.');
   if (xMotivo.trim().length < 15) throw new ErroNegocio('Descreva o motivo do cancelamento com pelo menos 15 caracteres.');
   const empresa = db.prepare('SELECT * FROM empresas WHERE id = ?').get(nota.empresa_id) as any;
-  const cert = certificadoDaEmpresa(empresa);
+  const cert = certificadoNfse(empresa);
 
   const xml = assinarXml(
     montarCancelamento({
