@@ -5148,11 +5148,9 @@ async function telaControle() {
   };
   const totais = () => {
     const vis = visiveis();
-    const soma = (k) => fmtValor(vis.reduce((t, c) => t + (c.dados[k] ?? 0), 0));
     const env = vis.filter((c) => c.dados.enviado).length;
     $('#ct-cont').textContent = `${vis.length} cliente(s) · ${env} enviado(s) · ${vis.length - env} pendente(s).`;
-    $('#ct-tot').innerHTML = f.area === 'FISCAL' ? `<tr><td><strong>Total</strong></td><td colspan="4"></td><td class="num"><strong>${soma('faturamento')}</strong></td><td class="num"><strong>${soma('imposto')}</strong></td><td colspan="5"></td></tr>`
-      : f.area === 'DP' ? `<tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>${soma('darf_prev')}</strong></td><td class="num"><strong>${soma('fgts')}</strong></td><td class="num"><strong>${soma('sindicato')}</strong></td><td colspan="2"></td></tr>` : '';
+    $('#ct-tot').innerHTML = ''; // sem linha de totais (pedido do escritório)
   };
   const visiveis = () => { const q = norm(f.q); return lista.filter((c) => (!q || norm(c.cliente).includes(q) || c.documento.includes(f.q.replace(/\D/g, '') || '#')) && (!f.pendentes || !c.dados.enviado) && (f.area !== 'DP' || f.todosDp || c.tem_funcionarios || Object.keys(c.dados).length)); };
   const salvar = async (c, extra = {}) => {
