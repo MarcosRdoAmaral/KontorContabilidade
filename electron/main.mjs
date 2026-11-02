@@ -106,9 +106,13 @@ async function iniciarServidor() {
 // ---------------- Janela e menu ----------------
 function criarJanela() {
   janela = new BrowserWindow({
-    width: 1320, height: 860, minWidth: 900, minHeight: 600, title: NOME, backgroundColor: '#091226',
+    width: 1320, height: 860, minWidth: 900, minHeight: 600, show: false, title: NOME, backgroundColor: '#091226',
     webPreferences: { preload: path.join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  // abre sempre maximizada (mostrada só depois de maximizar, sem piscar no tamanho menor)
+  janela.maximize();
+  janela.once('ready-to-show', () => { if (!janela.isMaximized()) janela.maximize(); janela.show(); });
+  setTimeout(() => { if (janela && !janela.isDestroyed() && !janela.isVisible()) { janela.maximize(); janela.show(); } }, 5000); // garantia, se a página demorar
   janela.loadURL(urlLocal);
 
   // PDFs (DANFSe) abrem em janela própria; links externos vão para o navegador padrão.
