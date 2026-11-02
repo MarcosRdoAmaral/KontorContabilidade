@@ -11,7 +11,7 @@ export const MODULOS = {
   painel: 'Visão geral do faturamento',
   visao: 'Visão geral do escritório', carteira: 'Carteira de clientes', obrigacoes: 'Obrigações e prazos', certificados: 'Certificados',
   honorarios: 'Contratos e honorários', captura: 'Captura de documentos', situacao: 'Situação fiscal',
-  controle: 'Controle mensal de entregas', senhas: 'Senhas e acessos dos clientes',
+  controle: 'Controle mensal de entregas', senhas: 'Senhas e acessos dos clientes', radar: 'Radar de Oportunidades',
   emitir: 'Emitir nota', notas: 'Notas emitidas', cobrancas: 'Cobranças',
   banco: 'Dados bancários', despesas: 'Despesas e balanço', tomadores: 'Clientes', servicos: 'Serviços', empresas: 'Empresas', relatorios: 'Relatórios', compras: 'Compras', tributacao: 'Tributação',
   excluir: 'Excluir registros',
@@ -50,6 +50,10 @@ const REGRAS: Regra[] = [
   // exclusão de empresa: a rota confere que é o usuário master e a senha dele
   { r: /^\/api\/empresas\/\d+\/(exclusao|excluir)$/, mod: 'livre' },
   { r: /^\/api\/zerar$/, mod: 'livre' }, // a rota confere que é o master e a senha dele
+  // ---- Radar de Oportunidades: configuração e auditoria só do administrador ----
+  { r: /^\/api\/radar\/(config|auditoria)$/, m: 'PUT', mod: 'adm' },
+  { m: 'GET', r: /^\/api\/radar\/auditoria$/, mod: 'adm' },
+  { r: /^\/api\/radar(\/(painel|config|pesquisar|empresas\/\d{14}(\/atualizar)?|leads(\/\d+(\/(contatos|cadastro))?)?))?$/, mod: ['radar'] },
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },

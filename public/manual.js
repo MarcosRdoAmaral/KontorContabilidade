@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.43.4';
+export const MANUAL_VERSAO = '1.44.0';
 
 export const MANUAL = [
   {
@@ -32,6 +32,28 @@ export const MANUAL = [
       <h3>Como o sistema é organizado</h3>
       <p>No alto do menu lateral fica a <strong>empresa selecionada</strong>: quase todas as telas mostram os dados dela. Troque a empresa ali a qualquer momento. O restante do menu segue o fluxo do dia a dia: emitir, acompanhar notas, cobrar, controlar despesas e consultar relatórios.</p>
       <p class="dica">O menu mostra só o que o seu usuário tem permissão de usar (Configurações &gt; Usuários e acessos). Este manual está liberado para todos os usuários: em Relatórios &gt; Documentação, ou no item Documentação do menu para quem não tem o acesso a Relatórios.</p>`,
+  },
+  {
+    id: 'radar', titulo: 'Radar de Oportunidades', resumo: 'Pesquisa de empresas novas e existentes e CRM de prospecção do escritório.',
+    corpo: `
+      <p>O <strong>Radar de Oportunidades</strong> (menu lateral) encontra empresas pelo cadastro público de CNPJ da Receita Federal e organiza a prospecção do escritório. Ele tem permissão própria: libere a funcionalidade <em>Radar de Oportunidades</em> para cada usuário em Configurações &gt; Usuários e acessos.</p>
+      <h3>Configurar a fonte de dados (administrador)</h3>
+      <ol>
+        <li>Crie uma conta em casadosdados.com.br, coloque saldo e gere a <strong>chave de API</strong> (api-key) no portal.</li>
+        <li>No Radar, clique em <em>Configurar fonte de dados</em>, escolha <em>Casa dos Dados</em> e cole a chave. Ela fica guardada criptografada neste computador.</li>
+        <li>Ajuste por quantas horas cada pesquisa fica guardada (pesquisas repetidas nesse prazo não gastam saldo), a UF e o município padrão e os critérios do potencial.</li>
+      </ol>
+      <p>Sem chave, o Radar funciona em <strong>modo demonstração</strong>, com empresas fictícias marcadas como DEMONSTRAÇÃO (que não podem ir para a carteira de clientes).</p>
+      <h3>Pesquisar</h3>
+      <p>Use <em>Novas empresas</em> (abertas nos últimos dias, só ativas), <em>Todas</em> (qualquer data de abertura) ou <em>Minha carteira</em> (os leads do escritório). Os filtros se combinam: razão social ou CNPJ, UF, município, período ou datas de abertura, CNAE principal, situação cadastral e, em <em>Mais filtros</em>, descrição da atividade, natureza jurídica, porte, com telefone, com e-mail e potencial. Com a Casa dos Dados, o filtro pela descrição da atividade vale para a página trazida; para buscar por atividade em toda a base, use o CNAE.</p>
+      <p>Cada empresa fica guardada uma vez só (pelo CNPJ), com a fonte e a data da última atualização. Em <em>Ver detalhes</em>, o botão <em>Atualizar dados</em> consulta a fonte de novo e registra o que mudou no cadastro.</p>
+      <h3>Potencial estimado</h3>
+      <p>O Kontor estima a oportunidade pelos critérios do escritório (começo do código CNAE e palavras na descrição da atividade, com peso): prestador de serviços, pode emitir NFS-e, boleto recorrente e automação de cobranças, que podem ser ajustados. É sempre uma <em>estimativa</em>: o CNAE não confirma que a empresa precisa do serviço.</p>
+      <h3>Carteira de prospecção (CRM)</h3>
+      <p>Adicione a empresa com <em>+ Lead</em> ou pelos detalhes. Os estágios são: Novo lead, Não contatado, Primeiro contato realizado, Em negociação, Aguardando retorno, Convertido em cliente e Não interessado (pede o motivo da perda). Em cada lead: responsável, origem, observações, próximo contato, vínculo a um cliente da carteira e a autorização da empresa para receber contatos comerciais. O histórico de contatos registra data, canal e o que foi conversado; o primeiro contato tira o lead de "Novo". Convertido, o botão <em>Cadastrar na carteira de clientes</em> abre o cadastro já preenchido.</p>
+      <h3>Painel, isolamento e auditoria</h3>
+      <p>No alto: empresas identificadas pelo escritório, novos leads, em negociação e convertidos; ao lado, os leads por estágio, a taxa de conversão, os próximos contatos e a distribuição por município e por CNAE. Os leads e o que cada escritório pesquisou são só dele. O administrador vê a auditoria (pesquisas, inclusões, mudanças de estágio, contatos, exclusões e erros da fonte) em <em>Configurar fonte de dados &gt; Ver auditoria</em>.</p>
+      <p><strong>LGPD:</strong> os dados são de cadastros públicos de empresas. Use os contatos para oferecer serviços de forma respeitosa, registre quando a empresa não quiser mais receber mensagens e remova da carteira quem pedir.</p>`,
   },
   {
     id: 'inicio', titulo: 'Início e lembretes', resumo: 'Tela de abertura com acesso rápido, dica e mensagem do dia; lembretes no sininho.',

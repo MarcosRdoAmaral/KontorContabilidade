@@ -1148,6 +1148,90 @@ const migracoes: string[] = [
   // 49: NFS-e por procuração eletrônica (desde 01/11/2026 os emissores e as APIs da NFS-e aceitam o procurador):
   // a empresa emite e busca as notas com o certificado do escritório, sem o A1 dela
   `ALTER TABLE empresas ADD COLUMN nfse_procuracao INTEGER NOT NULL DEFAULT 0;`,
+  // 50: Radar de Oportunidades: cadastro público das empresas (cache por CNPJ, com origem e data), pesquisas
+  // guardadas, empresas que cada escritório já viu, CRM de prospecção (leads, contatos) e auditoria
+  `CREATE TABLE radar_empresas (
+    cnpj TEXT PRIMARY KEY,
+    razao_social TEXT NOT NULL,
+    nome_fantasia TEXT,
+    data_abertura TEXT,
+    uf TEXT,
+    municipio TEXT,
+    cod_municipio TEXT,
+    cnae TEXT,
+    cnae_descricao TEXT,
+    natureza_codigo TEXT,
+    natureza_descricao TEXT,
+    situacao TEXT,
+    porte TEXT,
+    telefone TEXT,
+    email TEXT,
+    endereco_json TEXT,
+    capital_social REAL,
+    origem TEXT NOT NULL,
+    demonstracao INTEGER NOT NULL DEFAULT 0,
+    alteracoes_json TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_radar_emp_abertura ON radar_empresas(data_abertura);
+  CREATE INDEX idx_radar_emp_local ON radar_empresas(uf, municipio);
+  CREATE TABLE radar_vistos (
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    cnpj TEXT NOT NULL REFERENCES radar_empresas(cnpj),
+    primeira_vez TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (escritorio_id, cnpj)
+  );
+  CREATE TABLE radar_buscas (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    chave TEXT NOT NULL,
+    origem TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    cnpjs_json TEXT NOT NULL,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (escritorio_id, chave)
+  );
+  CREATE TABLE radar_leads (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    cnpj TEXT NOT NULL REFERENCES radar_empresas(cnpj),
+    estagio TEXT NOT NULL DEFAULT 'NOVO' CHECK (estagio IN ('NOVO','NAO_CONTATADO','PRIMEIRO_CONTATO','EM_NEGOCIACAO','AGUARDANDO_RETORNO','CONVERTIDO','NAO_INTERESSADO')),
+    responsavel_id INTEGER REFERENCES usuarios(id),
+    origem TEXT NOT NULL DEFAULT 'RADAR' CHECK (origem IN ('RADAR','INDICACAO','SITE','EVENTO','IMPORTACAO','OUTRO')),
+    observacoes TEXT,
+    proximo_contato TEXT,
+    motivo_perda TEXT,
+    empresa_id INTEGER REFERENCES empresas(id),
+    consentimento_contato INTEGER NOT NULL DEFAULT 0,
+    consentimento_em TEXT,
+    criado_por INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    convertido_em TEXT,
+    UNIQUE (escritorio_id, cnpj)
+  );
+  CREATE INDEX idx_radar_leads_estagio ON radar_leads(escritorio_id, estagio);
+  CREATE TABLE radar_contatos (
+    id INTEGER PRIMARY KEY,
+    lead_id INTEGER NOT NULL REFERENCES radar_leads(id) ON DELETE CASCADE,
+    escritorio_id INTEGER NOT NULL REFERENCES escritorios(id),
+    quando TEXT NOT NULL,
+    canal TEXT NOT NULL CHECK (canal IN ('TELEFONE','WHATSAPP','EMAIL','VISITA','REUNIAO','OUTRO')),
+    descricao TEXT NOT NULL,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE radar_auditoria (
+    id INTEGER PRIMARY KEY,
+    escritorio_id INTEGER NOT NULL,
+    usuario_id INTEGER,
+    acao TEXT NOT NULL,
+    alvo TEXT,
+    detalhe TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_radar_auditoria ON radar_auditoria(escritorio_id, criado_em);`,
 ];
 
 export function migrar(): void {

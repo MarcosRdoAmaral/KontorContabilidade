@@ -10,6 +10,7 @@ import { db, migrar } from './db.js';
 import { garantirAdmin, garantirMaster } from './auth.js';
 import { rotas } from './rotas.js';
 import { rotasEscritorio } from './rotas-escritorio.js';
+import { rotasRadar } from './rotas-radar.js';
 import { avisosAutomaticos } from './servicos/avisos.js';
 import { buscarAdnAutomaticamente } from './servicos/nfse-capturadas.js';
 import { sincronizarTodosOsEscritorios } from './servicos/cadastro-unico.js';
@@ -51,6 +52,7 @@ export async function criarApp() {
 
   await app.register(rotas);
   await app.register(rotasEscritorio);
+  await app.register(rotasRadar);
 
   backupAutomatico();
   const timer = setInterval(backupAutomatico, 3600e3);
