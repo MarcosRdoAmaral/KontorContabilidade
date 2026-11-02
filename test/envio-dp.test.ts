@@ -26,6 +26,8 @@ test('envio automático do DP pela pasta do escritório', async () => {
     assert.equal(D.tipoDoArquivo('Boleto Sindicato.pdf'), 'SINDICATO');
     assert.equal(D.tipoDoArquivo('FGTS.pdf'), 'FGTS');
     assert.equal(D.tipoDoArquivo('FGTS.xlsx'), null);
+    assert.equal(D.tipoDoArquivo('Recibo FGTS Digital.pdf'), null, 'recibo do FGTS nunca vai no lugar da guia');
+    assert.equal(D.tipoDoArquivo('Comprovante FGTS.pdf'), null);
 
     const t = (await call('POST', '/api/setup', { escritorio: 'Ciclo', usuario: 'ana', nome: 'Ana', email: 'ana@x.com', senha: 'senha-segura-1' })).json.token;
     db.prepare('UPDATE escritorios SET smtp_enc = ? WHERE id = 1').run(cifrarTexto(JSON.stringify({ host: 'x', porta: 587, usuario: 'u', senha: 's', remetente_nome: 'Ciclo', remetente_email: 'ciclo@x.com' })));
@@ -42,6 +44,7 @@ test('envio automático do DP pela pasta do escritório', async () => {
     poe('10-2026', 'Recibo Dctf Web.pdf');
     poe('10-2026', 'Recibo Mensal.pdf');
     poe('10-2026', 'Darf Previdenciária.pdf');
+    poe('10-2026', 'Recibo FGTS Digital.pdf');                // recibo do FGTS: não conta como a guia
 
     assert.equal((await call('PUT', '/api/escritorio/envio-dp/config', { ligado: true, pasta: path.join(tmp, 'nao-existe'), desde: '2026-10' }, t)).status, 400);
     assert.equal((await call('PUT', '/api/escritorio/envio-dp/config', { ligado: true, pasta: raiz, desde: '2026-10' }, t)).status, 200);
@@ -49,6 +52,8 @@ test('envio automático do DP pela pasta do escritório', async () => {
     assert.equal(painel.pastas[0].empresa_id, agro, 'pasta ligada ao cliente pelo nome');
     assert.deepEqual(painel.clientes.find((c: any) => c.id === agro).docs, ['DARF', 'FGTS', 'RECIBO'], 'padrão com funcionários');
 
+    // registro antigo (versão anterior) que tinha classificado o recibo como guia: ignorado
+    db.prepare("INSERT INTO dp_arquivos (empresa_id, competencia, tipo, caminho, tamanho, modificado) VALUES (?, '2026-10', 'FGTS', ?, 10, '2026-10-01T00:00:00.000Z')").run(agro, path.join(mes('10-2026'), 'Recibo FGTS Digital.pdf'));
     // falta o FGTS: espera
     let r = await D.varrerPastaDp(1, true);
     assert.deepEqual(r.map((x) => [x.competencia, x.situacao, x.faltando]), [['2026-10', 'AGUARDANDO', ['FGTS']]]);

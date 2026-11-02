@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.43.1';
+export const MANUAL_VERSAO = '1.43.2';
 
 export const MANUAL = [
   {
@@ -90,7 +90,7 @@ export const MANUAL = [
       </ul>
       <p>Na aba Departamento pessoal, DARF Prev., FGTS e Sindicato começam em 0,00. O valor de cada DARF emitido pelo Kontor (no fechamento ou na Situação fiscal) vai para o DARF Prev. da competência, substituindo o que estiver lá; vale sempre o DARF mais recente. Se a Receita falhar no cálculo de juros e multa (fim de semana, feriado ou instabilidade), o Kontor tenta com o próximo dia útil; se ainda assim não sair, a declaração fica como <em>Transmitida, sem guia</em> e dá para buscar o DARF de novo depois.</p>
       <h3>Envio automático do departamento pessoal</h3>
-      <p>Na aba Departamento pessoal, o botão <em>Envio automático do DP</em> liga o envio dos documentos que o escritório salva na pasta do DP, organizada como <strong>pasta › Cliente › AAAA › MM-AAAA</strong> (a subpasta é a competência). O Kontor reconhece os arquivos pelo nome: <em>Darf Previdenciária</em>, <em>FGTS</em>, <em>Boleto Sindicato</em>, <em>Recibo Mensal</em> (pró-labore), o espelho e resumo da folha e o <em>Recibo Dctf Web</em>.</p>
+      <p>Na aba Departamento pessoal, o botão <em>Envio automático do DP</em> liga o envio dos documentos que o escritório salva na pasta do DP, organizada como <strong>pasta › Cliente › AAAA › MM-AAAA</strong> (a subpasta é a competência). O Kontor reconhece os arquivos pelo nome: <em>Darf Previdenciária</em>, <em>FGTS</em>, <em>Boleto Sindicato</em>, <em>Recibo Mensal</em> (pró-labore), o espelho e resumo da folha e o <em>Recibo Dctf Web</em>. Outros recibos e comprovantes (como o <em>Recibo FGTS Digital</em>) ficam de fora e nunca vão no lugar de uma guia.</p>
       <ul>
         <li>Informe a pasta (ou use <em>Escolher…</em>), a competência a partir da qual enviar e ligue o envio. Com o programa aberto, a pasta é olhada a cada 5 minutos.</li>
         <li>Cada pasta de cliente é ligada ao cliente da carteira pelo nome; se não bater, escolha o cliente na lista. Marque os documentos que cada cliente recebe (padrão: DARF, FGTS para quem tem funcionários e Recibo mensal).</li>

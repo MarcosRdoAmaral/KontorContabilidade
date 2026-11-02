@@ -57,6 +57,8 @@ export function tipoDoArquivo(nome: string): TipoDp | null {
   if (/recibo.*dctf|dctf.*recibo/.test(n)) return 'RECIBO_DCTF';
   if (/recibomensal|prolabore/.test(n)) return 'RECIBO';
   if (/espelho|resumodafolha|folhadepagamento/.test(n)) return 'FOLHA';
+  // recibo ou comprovante nunca é guia: "Recibo FGTS Digital.pdf" não pode ir no lugar da guia do FGTS
+  if (/recibo|comprovante|relatorio|demonstrativo/.test(n)) return null;
   if (/darf/.test(n)) return 'DARF';
   if (/fgts/.test(n)) return 'FGTS';
   if (/sindica/.test(n)) return 'SINDICATO';
@@ -116,8 +118,12 @@ async function registrar(empresaId: number, comp: string, dir: string) {
 
 /** A versão mais recente de cada tipo que ainda existe na pasta. */
 function atuais(empresaId: number, comp: string): ArqDp[] {
-  const l = db.prepare(`SELECT id, tipo, caminho, valor, vencimento, envio_id FROM dp_arquivos WHERE id IN (SELECT MAX(id) FROM dp_arquivos WHERE empresa_id = ? AND competencia = ? GROUP BY tipo)`).all(empresaId, comp) as ArqDp[];
-  return l.filter((a) => fs.existsSync(a.caminho)).sort((a, b) => ORDEM.indexOf(a.tipo) - ORDEM.indexOf(b.tipo));
+  // o mais recente de cada tipo que ainda existe e que continua sendo daquele tipo pelo nome
+  // (registros antigos de arquivos hoje recusados, como "Recibo FGTS Digital", ficam de fora)
+  const todos = db.prepare('SELECT id, tipo, caminho, valor, vencimento, envio_id FROM dp_arquivos WHERE empresa_id = ? AND competencia = ? ORDER BY id DESC').all(empresaId, comp) as ArqDp[];
+  const por = new Map<TipoDp, ArqDp>();
+  for (const a of todos) if (!por.has(a.tipo) && tipoDoArquivo(path.basename(a.caminho)) === a.tipo && fs.existsSync(a.caminho)) por.set(a.tipo, a);
+  return [...por.values()].sort((a, b) => ORDEM.indexOf(a.tipo) - ORDEM.indexOf(b.tipo));
 }
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
