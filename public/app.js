@@ -5128,7 +5128,7 @@ async function telaControle() {
   const enviado = (v) => `${dt('enviado', v)} ${v ? '' : '<button type="button" data-hoje title="Marcar como enviado hoje">Hoje</button>'}`;
   const COLS = {
     FISCAL: ['Cliente', 'PGDAS-D', 'Sem mov.', 'Ent.', 'S/S', 'Faturamento', 'Imposto', 'Alíquota', 'Emissão da guia', 'Envio', 'Enviado em', 'Observações'],
-    DP: ['Cliente', 'DCTFWeb', 'Sem folha', 'DARF Prev.', 'FGTS', 'Sindicato', 'Total', 'Enviado em', 'Observações'],
+    DP: ['Cliente', 'DCTFWeb', 'Sem folha', 'DARF Prev.', 'FGTS', 'Sindicato', 'Enviado em', 'Observações'],
     CONTABIL: ['Cliente', 'Enviado em', 'Observações'],
   };
   $('#ct-cab').innerHTML = `<tr>${COLS[f.area].map((c) => `<th class="${/Faturamento|Imposto|Alíquota|DARF|FGTS|Sindicato|Total/.test(c) ? 'num' : ''}">${c}</th>`).join('')}</tr>`;
@@ -5143,7 +5143,7 @@ async function telaControle() {
       <td class="num">${num('faturamento', d.faturamento)}</td><td class="num">${num('imposto', d.imposto)}</td><td class="num" data-aliq>${aliq(d)}</td><td>${dt('emissao', d.emissao)}</td>
       <td><select data-canal><option value="">—</option>${Object.entries(CANAL).map(([k, v]) => `<option value="${k}" ${c.canal_envio === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
     if (f.area === 'DP') return `<tr data-id="${c.empresa_id}" class="${d.sem_folha ? 'inativo' : ''}">${cliente(c)}${celFech(c, 'DCTFWEB')}<td>${chk('sem_folha', d.sem_folha, 'Sem folha calculada')}</td>
-      <td class="num">${num('darf_prev', d.darf_prev ?? 0)}</td><td class="num">${num('fgts', d.fgts ?? 0)}</td><td class="num">${num('sindicato', d.sindicato ?? 0)}</td><td class="num" data-total>${fmtValor((d.darf_prev ?? 0) + (d.fgts ?? 0) + (d.sindicato ?? 0)) || '—'}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
+      <td class="num">${num('darf_prev', d.darf_prev ?? 0)}</td><td class="num">${num('fgts', d.fgts ?? 0)}</td><td class="num">${num('sindicato', d.sindicato ?? 0)}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
     return `<tr data-id="${c.empresa_id}">${cliente(c)}<td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
   };
   const totais = () => {
@@ -5152,7 +5152,7 @@ async function telaControle() {
     const env = vis.filter((c) => c.dados.enviado).length;
     $('#ct-cont').textContent = `${vis.length} cliente(s) · ${env} enviado(s) · ${vis.length - env} pendente(s).`;
     $('#ct-tot').innerHTML = f.area === 'FISCAL' ? `<tr><td><strong>Total</strong></td><td colspan="4"></td><td class="num"><strong>${soma('faturamento')}</strong></td><td class="num"><strong>${soma('imposto')}</strong></td><td colspan="5"></td></tr>`
-      : f.area === 'DP' ? `<tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>${soma('darf_prev')}</strong></td><td class="num"><strong>${soma('fgts')}</strong></td><td class="num"><strong>${soma('sindicato')}</strong></td><td class="num"><strong>${fmtValor(vis.reduce((t, c) => t + (c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0), 0))}</strong></td><td colspan="2"></td></tr>` : '';
+      : f.area === 'DP' ? `<tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>${soma('darf_prev')}</strong></td><td class="num"><strong>${soma('fgts')}</strong></td><td class="num"><strong>${soma('sindicato')}</strong></td><td colspan="2"></td></tr>` : '';
   };
   const visiveis = () => { const q = norm(f.q); return lista.filter((c) => (!q || norm(c.cliente).includes(q) || c.documento.includes(f.q.replace(/\D/g, '') || '#')) && (!f.pendentes || !c.dados.enviado) && (f.area !== 'DP' || f.todosDp || c.tem_funcionarios || Object.keys(c.dados).length)); };
   const salvar = async (c, extra = {}) => {
