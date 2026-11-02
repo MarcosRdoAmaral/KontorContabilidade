@@ -177,6 +177,26 @@ test('consulta da situação fiscal pelo Integra Contador', async () => {
     const r3 = await consultarSituacao(1, 1, ids[SEMPROC], { transporte: t304 as any, esperar });
     assert.equal(r3.status, 'PRONTA'); assert.equal(r3.situacao, 'REGULAR');
     assert.deepEqual(esperas, [1500]);
+    // limite de solicitações em processamento (vem com status de sucesso e tempoEspera): espera e pede de novo, sem gravar erro
+    const MSG_LIM = 'A requisição foi efetuada com sucesso. O limite de solicitações em processamento foi atingido. Aguarde o tempo informado no campo tempoEspera para fazer uma nova solicitação.';
+    let pedidos = 0;
+    const tLim = { autenticar: transporte.autenticar, async consultar(corpo: any) {
+      const srv = corpo.pedidoDados.idServico;
+      if (srv === 'SOLICITARPROTOCOLO91') { pedidos++; return pedidos === 1
+        ? { status: 200, corpo: { status: 200, mensagens: [{ codigo: '[Aviso-Sitfis-AV01]', texto: MSG_LIM }], dados: JSON.stringify({ tempoEspera: 4000 }) } }
+        : { status: 200, corpo: { status: 200, mensagens: [], dados: JSON.stringify({ protocoloRelatorio: 'P-LIM', tempoEspera: 0 }) } }; }
+      return { status: 200, corpo: { status: 200, mensagens: [], dados: JSON.stringify({ pdf: pdfReg }) } };
+    } };
+    esperas.length = 0;
+    const r4 = await consultarSituacao(1, 1, ids[ALFA], { transporte: tLim as any, esperar });
+    assert.equal(r4.status, 'PRONTA'); assert.deepEqual(esperas, [4000]); assert.equal(pedidos, 2);
+    // limite que não passa: avisa, não grava erro e os demais do lote ficam para depois
+    const tSempre = { autenticar: transporte.autenticar, async consultar() { return { status: 200, corpo: { status: 200, mensagens: [{ codigo: 'AV', texto: MSG_LIM }], dados: JSON.stringify({ tempoEspera: 30000 }) } }; } };
+    const antes = db.prepare("SELECT COUNT(*) AS n FROM situacao_fiscal WHERE status = 'ERRO'").get() as any;
+    const lote = await consultarVarios(1, 1, [ids[ALFA], ids[SEMPROC]], { transporte: tSempre as any, esperar });
+    assert.equal(lote.resultados.length, 2); assert.ok(lote.resultados.every((x: any) => x.limite));
+    assert.match(lote.resultados[0].mensagem, /limite de relatórios/);
+    assert.equal((db.prepare("SELECT COUNT(*) AS n FROM situacao_fiscal WHERE status = 'ERRO'").get() as any).n, antes.n, 'não grava erro');
   } finally {
     await app.close();
   }

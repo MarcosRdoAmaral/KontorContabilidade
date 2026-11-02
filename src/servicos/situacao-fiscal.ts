@@ -175,7 +175,7 @@ async function concluir(id: number, pdf: Buffer, manterData = false) {
   return r;
 }
 
-export interface ResultadoSitfis { empresa_id: number; cliente: string; status: 'PRONTA' | 'SOLICITADA' | 'ERRO'; situacao?: string; mensagem: string; id?: number }
+export interface ResultadoSitfis { empresa_id: number; cliente: string; status: 'PRONTA' | 'SOLICITADA' | 'ERRO'; situacao?: string; mensagem: string; id?: number; limite?: boolean }
 
 /** Pede (ou retoma) o relatório de um cliente e espera um pouco por ele. */
 /** Valor de um ETag do SERPRO: "protocoloRelatorio:XYZ" → XYZ; sem prefixo, o próprio texto (só para o protocolo). */
@@ -188,6 +188,13 @@ export function valorEtag(etag: string | undefined, chave: 'protocoloRelatorio' 
   return chave === 'protocoloRelatorio' && t.length > 10 ? t : chave === 'tempoEspera' && /^\d+$/.test(t) ? t : null;
 }
 
+const ESPERA_LIMITE_MS = 60_000; // espera máxima, por cliente, quando a Receita está no limite de solicitações
+/** Resposta "limite de solicitações em processamento atingido" (vem até com status de sucesso). */
+export function limiteAtingido(r: { http?: number; mensagens?: any; dados?: any }) {
+  return r.http === 429 || /limite de solicita[cç][oõ]es|tempoEspera/i.test(textoMsgs(r.mensagens) || '') || (!!(r.dados?.tempoEspera) && !(r.dados?.protocoloRelatorio ?? r.dados?.protocolo ?? r.dados?.pdf));
+}
+const tempoEsperaMs = (r: { dados?: any; etag?: string }) => Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || Number(valorEtag(r.etag, 'tempoEspera')) || 0;
+
 export async function consultarSituacao(escritorioId: number, usuarioId: number | null, empresaId: number, opcoes: { transporte?: Transporte; esperar?: Espera } = {}): Promise<ResultadoSitfis> {
   const e = db.prepare('SELECT id, documento, COALESCE(nome_fantasia, razao_social) AS cliente FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId) as any;
   if (!e) throw new ErroNegocio('Cliente não encontrado.', 404);
@@ -198,7 +205,19 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
   let reg = ultimaPendente(empresaId);
   if (reg && Date.now() - Date.parse(reg.solicitada_em.replace(' ', 'T') + 'Z') > PROTOCOLO_VALIDO_MS) reg = null;
   if (!reg) {
-    const r = await i.consultar(e.documento, 'SITFIS', 'SOLICITARPROTOCOLO91', null, 'Apoiar');
+    // "limite de solicitações em processamento": a Receita aceita poucos relatórios em geração ao mesmo tempo por
+    // escritório; não é erro do cliente. Espera o tempoEspera e pede de novo; se passar do limite, avisa sem gravar erro.
+    let r = await i.consultar(e.documento, 'SITFIS', 'SOLICITARPROTOCOLO91', null, 'Apoiar');
+    for (let gastoLimite = 0, n = 0; n < 4; n++) {
+      const temProt = r.dados?.protocoloRelatorio ?? r.dados?.protocolo ?? (r.http === 304 ? valorEtag(r.etag, 'protocoloRelatorio') : null);
+      if (temProt || !limiteAtingido(r)) break;
+      const espera = tempoEsperaMs(r) || 5000;
+      if (gastoLimite + espera > ESPERA_LIMITE_MS) {
+        return { ...base, status: 'ERRO', limite: true, mensagem: `A Receita está com o limite de relatórios em geração atingido para o escritório. Tente este cliente de novo em ${Math.max(1, Math.ceil(espera / 1000))} segundo(s).` };
+      }
+      gastoLimite += espera; await esperar(espera);
+      r = await i.consultar(e.documento, 'SITFIS', 'SOLICITARPROTOCOLO91', null, 'Apoiar');
+    }
     // 304: já existe um protocolo válido para o cliente (pedido antes, aqui ou em outro sistema); ele vem no ETag
     const protocolo = r.dados?.protocoloRelatorio ?? r.dados?.protocolo ?? (r.http === 304 ? valorEtag(r.etag, 'protocoloRelatorio') : null);
     if (!(r.ok || r.http === 304) || !protocolo) {
@@ -223,8 +242,8 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
       const msg = lido.situacao === 'REGULAR' ? 'Sem pendências na Receita Federal e na PGFN.' : lido.situacao === 'PENDENCIAS' ? `${lido.qtdPendencias} pendência(s)${lido.totalAberto ? `, saldo de R$ ${lido.totalAberto.toFixed(2).replace('.', ',')}` : ''}.` : 'Relatório recebido: confira o PDF.';
       return { ...base, status: 'PRONTA', situacao: lido.situacao, mensagem: msg, id: reg.id };
     }
-    // 204: o relatório ainda está sendo gerado; o novo tempo de espera vem no ETag
-    const espera = Number(r.dados?.tempoEspera ?? r.dados?.tempoEsperaMs) || Number(valorEtag(r.etag, 'tempoEspera')) || (r.http === 204 ? 5000 : 0);
+    // 204: o relatório ainda está sendo gerado; o novo tempo de espera vem no ETag (ou o limite de solicitações foi atingido)
+    const espera = tempoEsperaMs(r) || (r.http === 204 || limiteAtingido(r) ? 5000 : 0);
     if (espera > 0 && gasto + espera <= ESPERA_MAX_MS) {
       db.prepare('UPDATE situacao_fiscal SET liberar_em = ? WHERE id = ?').run(new Date(Date.now() + espera).toISOString(), reg.id);
       gasto += espera; await esperar(espera); continue;
@@ -243,7 +262,15 @@ export async function consultarSituacao(escritorioId: number, usuarioId: number 
 export async function consultarVarios(escritorioId: number, usuarioId: number | null, ids: number[], opcoes: { transporte?: Transporte; esperar?: Espera } = {}) {
   const resultados: ResultadoSitfis[] = [];
   for (const id of ids.slice(0, 100)) {
-    try { resultados.push(await consultarSituacao(escritorioId, usuarioId, id, opcoes)); }
+    try {
+      const r = await consultarSituacao(escritorioId, usuarioId, id, opcoes);
+      resultados.push(r);
+      if (r.limite) { // a Receita segue no limite: os demais ficam para a próxima rodada, sem gastar chamadas
+        const resto = ids.slice(0, 100).slice(ids.indexOf(id) + 1);
+        for (const x of resto) { const c = db.prepare('SELECT COALESCE(nome_fantasia, razao_social) AS n FROM empresas WHERE id = ?').get(x) as any; resultados.push({ empresa_id: x, cliente: c?.n ?? String(x), status: 'ERRO', limite: true, mensagem: 'Não consultado: a Receita está no limite de relatórios em geração. Consulte de novo em alguns minutos.' }); }
+        break;
+      }
+    }
     catch (e: any) {
       const c = db.prepare('SELECT COALESCE(nome_fantasia, razao_social) AS n FROM empresas WHERE id = ?').get(id) as any;
       resultados.push({ empresa_id: id, cliente: c?.n ?? String(id), status: 'ERRO', mensagem: String(e?.message ?? e) });

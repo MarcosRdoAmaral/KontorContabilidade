@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.43.0';
+export const MANUAL_VERSAO = '1.43.1';
 
 export const MANUAL = [
   {
@@ -220,7 +220,7 @@ export const MANUAL = [
     corpo: `
       <p>Consulta, pelo Integra Contador, o <strong>Relatório de Situação Fiscal</strong> da Receita Federal e da Procuradoria-Geral da Fazenda Nacional (o mesmo do e-CAC) e mostra o que está em aberto: débitos, omissões de declaração e inscrições em dívida ativa, com o saldo de cada um. O PDF original fica guardado.</p>
       <h3>Consultar</h3>
-      <p>A Situação fiscal fica no <strong>Monitor fiscal</strong> (Escritório &gt; Monitor fiscal). Marque os clientes na lista e clique em <em>Consultar situação fiscal</em> (sem marcação, consulta todos os da lista). A consulta automática fica no fim da tela, em <em>Consulta automática da situação fiscal</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador.</p>
+      <p>A Situação fiscal fica no <strong>Monitor fiscal</strong> (Escritório &gt; Monitor fiscal). Marque os clientes na lista e clique em <em>Consultar situação fiscal</em> (sem marcação, consulta todos os da lista). A consulta automática fica no fim da tela, em <em>Consulta automática da situação fiscal</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador. Quando a Receita avisa que o <em>limite de solicitações em processamento</em> foi atingido (ela gera poucos relatórios ao mesmo tempo por escritório), o Kontor espera o tempo pedido e tenta de novo; se continuar no limite, avisa e deixa os demais clientes do lote para uma nova consulta, sem marcar erro.</p>
       <h3>Resultado</h3>
       <ul>
         <li><strong>Com pendências:</strong> o valor em aberto aparece na coluna Situação fiscal; clicando nele abre o detalhe, que mostra o total dos débitos na Receita Federal (saldo com multa e juros), os <strong>impostos em aberto agrupados por tributo</strong>, a lista completa dos débitos (com período, vencimento e número da notificação, no caso das multas por atraso) e as inscrições em dívida ativa na PGFN, com a situação (ajuizada ou a ser cobrada). O relatório não traz o valor das inscrições: consulte no Regularize. Débitos e parcelamentos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão. A última certidão aparece com a validade, em vermelho se estiver vencida.</li>
