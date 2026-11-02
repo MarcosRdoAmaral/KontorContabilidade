@@ -267,8 +267,10 @@ export function detalheEmpresa(escritorioId: number, cnpjBruto: string) {
   if (!r) throw new ErroNegocio('Empresa não encontrada.', 404);
   const e = linhaEmpresa(r, configPublicaRadar(escritorioId).criterios);
   const alteracoes = (db.prepare('SELECT alteracoes_json FROM radar_empresas WHERE cnpj = ?').get(cnpj) as any)?.alteracoes_json;
-  const lead = r.lead_id ? leadCompleto(escritorioId, r.lead_id) : null;
+  const lead: any = r.lead_id ? leadCompleto(escritorioId, r.lead_id) : null;
   const naCarteira = db.prepare('SELECT id, COALESCE(nome_fantasia, razao_social) AS nome FROM empresas WHERE escritorio_id = ? AND documento = ?').get(escritorioId, cnpj) ?? null;
+  // lead convertido e cadastrado depois na carteira: liga os dois sozinho
+  if (lead && !lead.empresa_id && naCarteira) { db.prepare('UPDATE radar_leads SET empresa_id = ? WHERE id = ?').run((naCarteira as any).id, lead.id); lead.empresa_id = (naCarteira as any).id; }
   return { ...e, lead, alteracoes: alteracoes ? JSON.parse(alteracoes).map((a: any) => ({ ...a, mudancas: a.mudancas.map((m: any) => ({ ...m, rotulo: ROTULO_CAMPO[m.campo] ?? m.campo })) })) : [], na_carteira: naCarteira };
 }
 

@@ -425,13 +425,13 @@ function primeiraTelaDoMenu() {
 
 /** A tela pertence a algum módulo liberado para o usuário? (o servidor confere de novo em cada chamada) */
 function telaPermitida(nome) {
-  const modulo = { monitor: 'visao', resumo: 'captura', controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
+  const modulo = { radar: 'radar', monitor: 'visao', resumo: 'captura', controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
   if (nome === 'monitor' || nome === 'situacao') return estado.usuario.modulos.includes('visao') || estado.usuario.modulos.includes('situacao');
   return nome === 'config' || nome === 'inicio' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
 const rotas = {
-  inicio: telaInicio, monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
+  inicio: telaInicio, radar: telaRadar, monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
   painel: telaPainel, emitir: telaEmitir, notas: telaNotas, nota: telaNota,
   cobrancas: telaCobrancas, banco: telaBanco, despesas: telaDespesas, compras: telaCompras, entradas: telaCompras, 'compra-nova': telaCompraManual, 'nfe-sefaz': telaNfeSefaz, tributacao: telaTributacao, extrato: telaExtrato, cartao: telaCartao, agenda: telaAgenda, relatorios: telaRelatorios, tomadores: telaTomadores, servicos: telaServicos, empresas: telaEmpresas, config: telaConfig,
 };
@@ -4093,8 +4093,8 @@ function maisAcoesCliente(c) {
 }
 
 function formCliente(c, tab, equipe, jaTemEscritorio = false) {
-  const novo = !c;
-  c ??= { regime: 'SIMPLES', situacao: 'ATIVO', contribuinte_iss: true, cliente_desde: hoje(), uf: 'SC' };
+  const novo = !c || !!c._novo; // _novo: cadastro novo já preenchido (ex.: lead convertido no Radar)
+  c = { regime: 'SIMPLES', situacao: 'ATIVO', contribuinte_iss: true, cliente_desde: hoje(), uf: 'SC', ...(novo ? c ?? {} : c) };
   abrirDialogo(`
     <form id="form-cli"><h2>${novo ? 'Novo cliente' : 'Editar cliente'}</h2>
       <fieldset><legend>Identificação</legend><div class="grade">
@@ -6098,6 +6098,13 @@ const ICONES = {
   visao: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   painel: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   monitor: 'M5 20v-8M10 20V5M15 20v-6M20 20V9M3 20h18',
+  radar: 'M12 21a9 9 0 1 1 9-9M12 17a5 5 0 1 1 5-5M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 12l7-7M16 5h3v3',
+  aperto: 'M3 11l4-4 4 2 3-3 7 6-4 4M7 7l-4 4 6 6 2-2M11 13l2 2M13 11l2 2',
+  trofeu: 'M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 20h6M10 17h4',
+  filtro: 'M4 5h16l-6 7v6l-4 2v-8z',
+  busca: 'M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14zM20 20l-4-4',
+  local: 'M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  pizza: 'M12 3v9h9a9 9 0 1 1-9-9zM15 3.5A9 9 0 0 1 20.5 9H15z',
   carteira: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM22 19v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.75',
   tomadores: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM22 19v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.75',
   obrigacoes: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M8 17h2',
@@ -6336,5 +6343,259 @@ function escolherAvatar(aoMudar) {
       try { await api('PUT', '/api/me/avatar', { avatar }); estado.usuario.avatar = avatar; pintarAvatarTopo(); d.close(); aviso('Avatar atualizado.'); aoMudar?.(); }
       catch (e) { $('#erro-avatar').textContent = mensagemErro(e); }
     }));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Radar de Oportunidades: pesquisa de empresas (novas e existentes) e CRM de prospecção do escritório
+// ---------------------------------------------------------------------------
+const UFS = 'AC AL AM AP BA CE DF ES GO MA MG MS MT PA PB PE PI PR RJ RN RO RR RS SC SE SP TO'.split(' ');
+const COR_ESTAGIO = { NOVO: '#f97316', NAO_CONTATADO: '#94a3b8', PRIMEIRO_CONTATO: '#3b82f6', EM_NEGOCIACAO: '#a855f7', AGUARDANDO_RETORNO: '#eab308', CONVERTIDO: '#22c55e', NAO_INTERESSADO: '#64748b' };
+const ROT_POT = { ALTO: 'Potencial alto', MEDIO: 'Potencial médio', BAIXO: 'Potencial baixo' };
+const nomeRadar = (e) => String(e.nome_fantasia || e.razao_social || '').replace(/\s*\((demonstra[çc][ãa]o|DEMONSTRA[ÇC][ÃA]O)\)\s*$/, '');
+const iniciais = (s) => String(s ?? '').replace(/\(.*?\)/g, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0] ?? '').join('').toUpperCase();
+
+async function telaRadar() {
+  const f = telaRadar.f ??= { modo: 'NOVAS', dias: 30, ordem: 'RECENTES', pagina: 1, limite: 25 };
+  const [p, equipe] = await Promise.all([api('GET', '/api/radar/painel'), api('GET', '/api/escritorio/equipe').catch(() => [])]);
+  const cfg = p.config, k = p.kpis, adm = estado.usuario.tipo === 'adm';
+  if (f.uf === undefined) { f.uf = cfg.ufPadrao ?? ''; f.municipio = cfg.municipioPadrao ?? ''; }
+  const variacao = (v) => (v == null ? '<span class="dica">sem comparação</span>' : `<span class="${v >= 0 ? 'cor-verde' : 'cor-vermelho'}">${v >= 0 ? '↑' : '↓'} ${Math.abs(v)}% no período</span>`);
+  const kpi = (ic, n, rot, sub, cor) => `<div class="cartao rd-kpi"><span class="rd-kpi-ic" style="--c:${cor}">${icone(ic)}</span><div><strong>${n}</strong><span>${rot}</span><small>${sub}</small></div></div>`;
+  const barras = (l, rot) => { const max = Math.max(1, ...l.map((x) => x.n)); return l.length ? l.map((x) => `<div class="rd-barra"><span title="${esc(x.descricao ?? x.chave)}">${esc(rot(x))}</span><i><b style="width:${(x.n / max) * 100}%"></b></i><em>${x.n}</em></div>`).join('') : '<p class="dica">Pesquise empresas para ver a distribuição.</p>'; };
+  conteudo.innerHTML = `
+    <div class="topo rd-topo"><div class="rd-tit"><span class="rd-alvo">${icone('radar')}</span><div><h1>Radar de Oportunidades</h1><p class="sutil">Encontre empresas e transforme oportunidades em clientes.</p></div></div>
+      <div class="rd-acoes"><span class="rd-fonte"><i class="${cfg.demonstracao ? 'demo' : ''}"></i>${cfg.demonstracao ? 'Modo demonstração' : 'Fonte: Casa dos Dados'}</span>${adm ? '<button id="rd-cfg">Configurar fonte de dados</button>' : ''}</div></div>
+    ${cfg.demonstracao ? `<div class="banner teste"><strong>Dados de demonstração.</strong> As empresas listadas são fictícias (marcadas como DEMONSTRAÇÃO) e servem para conhecer o Radar. Para pesquisar empresas reais, ${adm ? 'configure a chave da Casa dos Dados em <em>Configurar fonte de dados</em>' : 'peça ao administrador para configurar a fonte de dados'}.</div>` : ''}
+    <div class="rd-kpis" id="rd-kpis">
+      ${kpi('radar', k.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k.novos.toLocaleString('pt-BR')} abertas nos últimos ${p.dias} dias`, '#f97316')}
+      ${kpi('carteira', k.leads, 'Novos leads', variacao(k.leadsVar), '#3b82f6')}
+      ${kpi('aperto', k.negociacao, 'Em negociação', `${k.totalLeads} lead(s) na carteira`, '#a855f7')}
+      ${kpi('trofeu', k.convertidos, 'Convertidos', `${k.convertidosPeriodo} nos últimos ${p.dias} dias`, '#22c55e')}
+    </div>
+    <section class="cartao rd-filtros">
+      <div class="rd-filtros-topo"><h2>${icone('filtro')} Pesquisar empresas</h2>
+        <div class="rd-modos">${[['NOVAS', 'Novas empresas'], ['TODAS', 'Todas'], ['CARTEIRA', 'Minha carteira']].map(([m, r]) => `<button type="button" data-modo="${m}" class="${f.modo === m ? 'ativo' : ''}">${r}</button>`).join('')}</div></div>
+      <form id="rd-form" class="rd-grade">
+        <label>Razão social ou CNPJ <input name="texto" value="${esc(f.texto ?? '')}" placeholder="Digite o nome ou CNPJ…"></label>
+        <label>UF <select name="uf"><option value="">Todas</option>${UFS.map((u) => `<option ${f.uf === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
+        <label>Município <input name="municipio" value="${esc(f.municipio ?? '')}" placeholder="Todas as cidades"></label>
+        ${f.modo === 'NOVAS' ? `<label>Período de abertura <select name="dias">${[7, 15, 30, 60, 90, 180, 365].map((d) => `<option value="${d}" ${Number(f.dias) === d ? 'selected' : ''}>Últimos ${d} dias</option>`).join('')}</select></label>`
+          : f.modo === 'TODAS' ? `<label>Abertura de <input type="date" name="aberturaDe" value="${f.aberturaDe ?? ''}"></label><label>até <input type="date" name="aberturaAte" value="${f.aberturaAte ?? ''}"></label>`
+          : `<label>Estágio <select name="estagio"><option value="">Todos</option>${Object.entries(cfg.estagios).map(([e, r]) => `<option value="${e}" ${f.estagio === e ? 'selected' : ''}>${r}</option>`).join('')}</select></label>`}
+        <label>CNAE principal <input name="cnae" value="${esc(f.cnae ?? '')}" placeholder="Ex.: 6201-5/01 ou 62"></label>
+        ${f.modo !== 'CARTEIRA' ? `<label>Situação cadastral <select name="situacao"><option value="">${f.modo === 'NOVAS' ? 'Ativa' : 'Todas'}</option>${['ATIVA', 'BAIXADA', 'INAPTA', 'SUSPENSA', 'NULA'].map((s) => `<option value="${s}" ${f.situacao === s ? 'selected' : ''}>${s[0] + s.slice(1).toLowerCase()}</option>`).join('')}</select></label>` : ''}
+        <details class="rd-mais largo" ${f.atividade || f.natureza || f.porte || f.comTelefone || f.comEmail || f.potencial ? 'open' : ''}><summary>Mais filtros</summary><div class="rd-grade">
+          ${f.modo !== 'CARTEIRA' ? `<label>Descrição da atividade <input name="atividade" value="${esc(f.atividade ?? '')}" placeholder="Ex.: software, academia"></label>
+          <label>Natureza jurídica (código) <input name="natureza" value="${esc(f.natureza ?? '')}" placeholder="Ex.: 2062"></label>
+          <label>Porte <select name="porte"><option value="">Todos</option>${[['ME', 'Microempresa'], ['EPP', 'Pequeno porte'], ['DEMAIS', 'Demais']].map(([v, r]) => `<option value="${v}" ${f.porte === v ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+          <label class="rd-chk"><input type="checkbox" name="comTelefone" ${f.comTelefone ? 'checked' : ''}> Com telefone</label><label class="rd-chk"><input type="checkbox" name="comEmail" ${f.comEmail ? 'checked' : ''}> Com e-mail</label>` : ''}
+          <label>Potencial estimado <select name="potencial"><option value="">Todos</option>${Object.entries(ROT_POT).map(([v, r]) => `<option value="${v}" ${f.potencial === v ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+        </div></details>
+        <div class="acoes rd-btn"><button type="button" id="rd-limpar">Limpar</button><button class="primario" type="submit">${icone('busca')} Pesquisar</button></div>
+      </form>
+    </section>
+    <div class="rd-corpo">
+      <section class="cartao rd-lista"><div id="rd-res"><p class="sutil">Pesquisando…</p></div></section>
+      <aside class="rd-lado">
+        <section class="cartao"><h2>${icone('pizza')} Carteira de prospecção</h2>
+          <ul class="rd-estagios">${Object.entries(cfg.estagios).map(([e, r]) => `<li><button type="button" data-est="${e}"><i style="background:${COR_ESTAGIO[e]}"></i>${r}<b>${p.porEstagio[e]}</b></button></li>`).join('')}</ul>
+          <div class="rd-conv"><span>Taxa de conversão</span><strong>${k.conversao == null ? '—' : `${k.conversao}%`}</strong></div>
+          <p class="dica">Convertidos sobre todos os leads da carteira.</p></section>
+        <section class="cartao"><h2>${icone('agenda')} Próximos contatos</h2>
+          ${p.proximos.length ? `<ul class="rd-prox">${p.proximos.map((x) => `<li><button type="button" data-cnpj="${x.cnpj}"><b class="${x.proximo_contato < p.hoje ? 'cor-vermelho' : ''}">${dataBr(x.proximo_contato)}</b><span>${esc(x.nome)}</span><small>${esc(cfg.estagios[x.estagio])}${x.responsavel ? ` · ${esc(x.responsavel)}` : ''}</small></button></li>`).join('')}</ul>` : '<p class="dica">Nenhum contato agendado para os próximos 7 dias.</p>'}</section>
+        <section class="cartao"><h2>Por município</h2><div id="rd-mun">${barras(p.porMunicipio, (x) => x.chave)}</div></section>
+        <section class="cartao"><h2>Por CNAE</h2><div id="rd-cnae">${barras(p.porCnae, (x) => `${x.chave}${x.descricao ? ` · ${x.descricao}` : ''}`)}</div></section>
+      </aside>
+    </div>
+    <p class="dica rd-lgpd">Os dados vêm de cadastros públicos de CNPJ (Receita Federal), pela fonte configurada, com a data de cada atualização. Use os contatos só para oferecer serviços de forma respeitosa e registre quando o contato não quiser mais receber mensagens (LGPD).</p>`;
+  const form = $('#rd-form');
+  const ler = () => {
+    const d = Object.fromEntries(new FormData(form));
+    Object.assign(f, { texto: d.texto || null, uf: d.uf || '', municipio: d.municipio || '', cnae: d.cnae || null, situacao: d.situacao || null, atividade: d.atividade || null, natureza: d.natureza || null, porte: d.porte || null,
+      comTelefone: !!d.comTelefone, comEmail: !!d.comEmail, potencial: d.potencial || null, estagio: d.estagio ?? f.estagio ?? null });
+    if (f.modo === 'NOVAS') f.dias = Number(d.dias || 30);
+    if (f.modo === 'TODAS') { f.aberturaDe = d.aberturaDe || null; f.aberturaAte = d.aberturaAte || null; }
+  };
+  form.onsubmit = (ev) => { ev.preventDefault(); ler(); f.pagina = 1; pesquisarRadar(); };
+  $('#rd-limpar').onclick = () => { telaRadar.f = { modo: f.modo, dias: 30, ordem: f.ordem, pagina: 1, limite: 25, uf: cfg.ufPadrao ?? '', municipio: cfg.municipioPadrao ?? '' }; telaRadar(); };
+  conteudo.querySelectorAll('[data-modo]').forEach((b) => (b.onclick = () => { ler(); f.modo = b.dataset.modo; f.pagina = 1; telaRadar(); }));
+  conteudo.querySelectorAll('[data-est]').forEach((b) => (b.onclick = () => { f.modo = 'CARTEIRA'; f.estagio = b.dataset.est; f.pagina = 1; telaRadar(); }));
+  conteudo.querySelectorAll('.rd-prox [data-cnpj]').forEach((b) => (b.onclick = () => detalheRadar(b.dataset.cnpj, equipe)));
+  $('#rd-cfg') && ($('#rd-cfg').onclick = () => configRadar(cfg));
+  telaRadar.equipe = equipe;
+  telaRadar.kpiHtml = (p2) => { const k2 = p2.kpis; return `${kpi('radar', k2.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k2.novos.toLocaleString('pt-BR')} abertas nos últimos ${p2.dias} dias`, '#f97316')}
+      ${kpi('carteira', k2.leads, 'Novos leads', variacao(k2.leadsVar), '#3b82f6')}${kpi('aperto', k2.negociacao, 'Em negociação', `${k2.totalLeads} lead(s) na carteira`, '#a855f7')}
+      ${kpi('trofeu', k2.convertidos, 'Convertidos', `${k2.convertidosPeriodo} nos últimos ${p2.dias} dias`, '#22c55e')}`; };
+  telaRadar.barras = (p2) => { const a = $('#rd-mun'), c = $('#rd-cnae'); if (a) a.innerHTML = barras(p2.porMunicipio, (x) => x.chave); if (c) c.innerHTML = barras(p2.porCnae, (x) => `${x.chave}${x.descricao ? ` · ${x.descricao}` : ''}`); };
+  pesquisarRadar();
+}
+
+async function pesquisarRadar(atualizar = false) {
+  const f = telaRadar.f, box = $('#rd-res');
+  if (!box) return;
+  box.innerHTML = '<p class="sutil">Pesquisando…</p>';
+  let r;
+  try { r = await api('POST', '/api/radar/pesquisar', { ...f, uf: f.uf || null, municipio: f.municipio || null, atualizar }); }
+  catch (e) { box.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; return; }
+  if (!r.doCache && telaRadar.kpiHtml) api('GET', '/api/radar/painel').then((p2) => { const el = $('#rd-kpis'); if (el) el.innerHTML = telaRadar.kpiHtml(p2); telaRadar.barras(p2); }).catch(() => {});
+  const ORD = [['RECENTES', 'Mais recentes'], ['ANTIGAS', 'Mais antigas'], ['NOME', 'Nome'], ['POTENCIAL', 'Potencial']];
+  const linha = (e) => {
+    const seg = e.cnae_descricao ? e.cnae_descricao.split(/[,;]/)[0] : (e.cnae ?? '—');
+    return `<li class="rd-emp">
+      <span class="rd-av" style="--c:${COR_ESTAGIO[e.lead?.estagio] ?? 'var(--laranja)'}">${esc(iniciais(nomeRadar(e)))}</span>
+      <div class="rd-nome"><button type="button" class="link-fech" data-cnpj="${e.cnpj}"><strong>${esc(nomeRadar(e))}</strong></button>${e.demonstracao ? ' <span class="rd-demo">demonstração</span>' : ''}<small>${fmtDoc(e.cnpj)}</small>
+        <span class="rd-tags">${e.situacao && e.situacao !== 'ATIVA' ? `<span class="rd-tag cinza">${esc(e.situacao.toLowerCase())}</span>` : ''}${e.potencial.nivel ? `<span class="rd-tag pot-${e.potencial.nivel}" title="Oportunidade estimada pelo CNAE: ${esc(e.potencial.motivos.join(', ') || 'nenhum critério')}">${ROT_POT[e.potencial.nivel]}</span>` : ''}${e.lead ? `<span class="rd-tag" style="--c:${COR_ESTAGIO[e.lead.estagio]}">${esc(e.lead.rotulo)}</span>` : ''}</span></div>
+      <span class="rd-local">${icone('local')}${esc(e.municipio ?? '—')}${e.uf ? ` / ${e.uf}` : ''}</span>
+      <span class="rd-data" title="Data de abertura">${icone('agenda')}${dataBr(e.data_abertura) || '—'}</span>
+      <span class="rd-seg" title="${esc(e.cnae ?? '')} ${esc(e.cnae_descricao ?? '')}">${esc(seg.length > 34 ? `${seg.slice(0, 33)}…` : seg)}</span>
+      <span class="rd-bts"><button type="button" data-cnpj="${e.cnpj}">Ver detalhes</button>${e.lead ? '' : `<button type="button" class="primario" data-add="${e.cnpj}" title="Adicionar à carteira de prospecção">+ Lead</button>`}</span></li>`;
+  };
+  const pags = []; for (let i = Math.max(1, r.pagina - 2); i <= Math.min(r.paginas, r.pagina + 2); i++) pags.push(i);
+  box.innerHTML = `<div class="rd-lista-topo"><div><h2>${r.modo === 'CARTEIRA' ? 'Minha carteira de prospecção' : 'Empresas encontradas'}</h2>
+      <p class="sutil">Mostrando ${r.empresas.length} de ${r.total.toLocaleString('pt-BR')} empresa(s)${r.modo !== 'CARTEIRA' ? ` · ${esc(r.fonte)}${r.doCache ? ` · pesquisa de ${dhBr(r.consultadoEm)} (guardada)` : ''}` : ''}</p></div>
+      <div class="rd-ord">${r.modo !== 'CARTEIRA' && r.doCache ? '<button type="button" id="rd-atual" title="Consulta a fonte de novo, sem usar a pesquisa guardada">Atualizar</button>' : ''}<label>Ordenar por <select id="rd-ordem">${ORD.map(([v, t]) => `<option value="${v}" ${telaRadar.f.ordem === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
+    ${r.empresas.length ? `<ul class="rd-emps">${r.empresas.map(linha).join('')}</ul>` : `<div class="vazio">${r.modo === 'CARTEIRA' ? 'Nenhum lead na carteira com esses filtros. Adicione empresas pela pesquisa.' : 'Nenhuma empresa encontrada com esses filtros.'}</div>`}
+    ${r.paginas > 1 ? `<div class="rd-pag">${r.pagina > 1 ? `<button type="button" data-pag="${r.pagina - 1}">‹</button>` : ''}${pags.map((i) => `<button type="button" data-pag="${i}" class="${i === r.pagina ? 'ativo' : ''}">${i}</button>`).join('')}${r.pagina < r.paginas ? `<button type="button" data-pag="${r.pagina + 1}">›</button>` : ''}<span class="dica">Página ${r.pagina} de ${r.paginas.toLocaleString('pt-BR')}</span></div>` : ''}`;
+  box.querySelectorAll('[data-cnpj]').forEach((b) => (b.onclick = () => detalheRadar(b.dataset.cnpj, telaRadar.equipe)));
+  box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = async () => {
+    b.disabled = true;
+    try { await api('POST', '/api/radar/leads', { cnpj: b.dataset.add }); aviso('Empresa adicionada à carteira de prospecção como "Novo lead".'); telaRadar(); }
+    catch (e) { b.disabled = false; aviso(mensagemErro(e)); }
+  }));
+  box.querySelectorAll('[data-pag]').forEach((b) => (b.onclick = () => { telaRadar.f.pagina = Number(b.dataset.pag); pesquisarRadar(); box.scrollIntoView({ behavior: 'smooth' }); }));
+  $('#rd-ordem').onchange = (ev) => { telaRadar.f.ordem = ev.target.value; pesquisarRadar(); };
+  $('#rd-atual') && ($('#rd-atual').onclick = () => pesquisarRadar(true));
+}
+
+async function detalheRadar(cnpj, equipe = []) {
+  let e;
+  try { e = await api('GET', `/api/radar/empresas/${cnpj}`); } catch (er) { return aviso(mensagemErro(er)); }
+  const cfg = (await api('GET', '/api/radar/config'));
+  const l = e.lead, end = e.endereco ?? {};
+  const podeCarteira = estado.usuario.modulos.includes('carteira');
+  const campo = (r, v) => `<div><dt>${r}</dt><dd>${v || '—'}</dd></div>`;
+  const opts = (obj, sel) => Object.entries(obj).map(([v, r]) => `<option value="${v}" ${sel === v ? 'selected' : ''}>${esc(r)}</option>`).join('');
+  const clientes = l ? await api('GET', '/api/escritorio/carteira').catch(() => []) : [];
+  abrirDialogo(`<div class="dlg-largo rd-det">
+    <div class="rd-det-topo"><span class="rd-av grande" style="--c:${COR_ESTAGIO[l?.estagio] ?? 'var(--laranja)'}">${esc(iniciais(e.nome_fantasia || e.razao_social))}</span>
+      <div><h2>${esc(nomeRadar(e))}${e.demonstracao ? ' <span class="rd-demo">demonstração</span>' : ''}</h2><p class="sutil">${fmtDoc(e.cnpj)} · ${esc(e.razao_social)}</p></div></div>
+    <dl class="rd-dados">
+      ${campo('Abertura', dataBr(e.data_abertura))}${campo('Situação cadastral', esc(e.situacao ?? ''))}${campo('Município', `${esc(e.municipio ?? '')}${e.uf ? ` / ${e.uf}` : ''}`)}
+      ${campo('CNAE principal', `${esc(e.cnae ?? '')}${e.cnae_descricao ? ` — ${esc(e.cnae_descricao)}` : ''}`)}${campo('Natureza jurídica', `${esc(e.natureza_codigo ?? '')}${e.natureza_descricao ? ` — ${esc(e.natureza_descricao)}` : ''}`)}${campo('Porte', esc({ ME: 'Microempresa', EPP: 'Empresa de pequeno porte', DEMAIS: 'Demais' }[e.porte] ?? e.porte ?? ''))}
+      ${campo('Telefone', e.telefone ? esc(e.telefone.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3')) : '')}${campo('E-mail', esc(e.email ?? ''))}${campo('Endereço', esc([end.logradouro, end.numero, end.complemento, end.bairro, end.cep].filter(Boolean).join(', ')))}
+    </dl>
+    <p class="dica">Fonte: ${esc(e.origem === 'DEMONSTRACAO' ? 'demonstração (dados fictícios)' : e.origem === 'CASA_DOS_DADOS' ? 'Casa dos Dados (cadastro público da Receita Federal)' : e.origem)} · atualizado em ${dhBr(e.atualizado_em)}. <button type="button" id="rd-upd">Atualizar dados</button></p>
+    <div class="rd-pot"><strong>${e.potencial.nivel ? ROT_POT[e.potencial.nivel] : 'Sem potencial estimado (empresa não está ativa)'}</strong>${e.potencial.motivos.length ? `: ${esc(e.potencial.motivos.join(' · '))}` : ''}
+      <br><span class="dica">Oportunidade estimada pelo CNAE e pela descrição da atividade, segundo os critérios do escritório. Não confirma que a empresa precisa do serviço: confirme no contato.</span></div>
+    ${e.alteracoes.length ? `<details><summary>Alterações cadastrais (${e.alteracoes.length})</summary><ul class="dicas">${e.alteracoes.map((a) => `<li>${dhBr(a.em)}: ${a.mudancas.map((m) => `${esc(m.rotulo)} ${m.campo === 'endereco' ? 'mudou' : `de “${esc(String(m.de ?? '—'))}” para “${esc(String(m.para ?? '—'))}”`}`).join('; ')}</li>`).join('')}</ul></details>` : ''}
+    <h3>Carteira de prospecção</h3>
+    ${!l ? `<form id="rd-novo" class="rd-grade">
+        <label>Responsável <select name="responsavel_id"><option value="">${esc(estado.usuario.nome)} (eu)</option>${equipe.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>
+        <label>Origem do lead <select name="origem">${opts(cfg.origens, 'RADAR')}</select></label>
+        <label class="largo">Observações <textarea name="observacoes" rows="2"></textarea></label>
+        <div class="acoes largo"><button class="primario" type="submit">Adicionar à carteira de prospecção</button></div></form>`
+      : `<form id="rd-lead" class="rd-grade">
+        <label>Estágio <select name="estagio">${opts(cfg.estagios, l.estagio)}</select></label>
+        <label>Responsável <select name="responsavel_id"><option value="">—</option>${equipe.map((u) => `<option value="${u.id}" ${l.responsavel_id === u.id ? 'selected' : ''}>${esc(u.nome)}</option>`).join('')}</select></label>
+        <label>Próximo contato <input type="date" name="proximo_contato" value="${l.proximo_contato ?? ''}"></label>
+        <label>Origem do lead <select name="origem">${opts(cfg.origens, l.origem)}</select></label>
+        <label class="largo" id="rd-motivo" ${l.estagio === 'NAO_INTERESSADO' ? '' : 'hidden'}>Motivo da perda <input name="motivo_perda" value="${esc(l.motivo_perda ?? '')}" maxlength="500"></label>
+        <label class="largo">Cliente vinculado na carteira <select name="empresa_id"><option value="">Nenhum</option>${clientes.filter((c) => !c.eh_escritorio).map((c) => `<option value="${c.id}" ${l.empresa_id === c.id ? 'selected' : ''}>${esc(c.nome_fantasia || c.razao_social)} · ${fmtDoc(c.documento)}</option>`).join('')}</select></label>
+        <label class="largo">Observações <textarea name="observacoes" rows="3">${esc(l.observacoes ?? '')}</textarea></label>
+        <label class="largo rd-chk"><input type="checkbox" name="consentimento_contato" ${l.consentimento_contato ? 'checked' : ''}> A empresa autorizou receber contatos e mensagens comerciais${l.consentimento_em ? ` <span class="dica">(desde ${dataBr(l.consentimento_em)})</span>` : ''}</label>
+        <div class="acoes largo"><button class="primario" type="submit">Salvar</button>${l.estagio === 'CONVERTIDO' && !e.na_carteira && podeCarteira && !e.demonstracao ? '<button type="button" id="rd-cad">Cadastrar na carteira de clientes</button>' : ''}<button type="button" class="perigo" id="rd-exc">Remover da carteira de prospecção</button></div>
+        <p class="dica largo">Lead criado em ${dhBr(l.criado_em)}${l.criado_por_nome ? ` por ${esc(l.criado_por_nome)}` : ''}${l.convertido_em ? ` · convertido em ${dataBr(l.convertido_em)}` : ''}${e.na_carteira ? ` · já está na carteira de clientes como ${esc(e.na_carteira.nome)}` : ''}.</p></form>
+      <h3>Histórico de contatos</h3>
+      <form id="rd-contato" class="rd-grade">
+        <label>Quando <input type="datetime-local" name="quando" required value="${new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16)}"></label>
+        <label>Canal <select name="canal">${opts(cfg.canais, 'TELEFONE')}</select></label>
+        <label>Próximo contato <input type="date" name="proximo_contato"></label>
+        <label class="largo">O que foi conversado <textarea name="descricao" rows="2" required minlength="3"></textarea></label>
+        <div class="acoes largo"><button type="submit">Registrar contato</button></div></form>
+      ${l.contatos.length ? `<ul class="rd-hist">${l.contatos.map((c) => `<li><b>${dhBr(c.quando.replace('T', ' '))}</b> · ${esc(cfg.canais[c.canal])}${c.usuario ? ` · ${esc(c.usuario)}` : ''}<p>${esc(c.descricao)}</p></li>`).join('')}</ul>` : '<p class="dica">Nenhum contato registrado ainda.</p>'}`}
+    <p class="erro" id="rd-erro"></p>
+    <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
+    const erro = (er) => (dlg.querySelector('#rd-erro').textContent = mensagemErro(er));
+    const recarregar = () => { detalheRadar(cnpj, equipe); if (location.hash.startsWith('#/radar')) pesquisarRadar(); };
+    dlg.querySelector('#rd-upd').onclick = async (ev) => {
+      ev.target.disabled = true; ev.target.textContent = 'Consultando…';
+      try { const r = await api('POST', `/api/radar/empresas/${cnpj}/atualizar`); aviso(r.mudancas.length ? `Cadastro atualizado: ${r.mudancas.map((m) => m.rotulo).join(', ')}.` : 'Dados conferidos: nada mudou no cadastro.'); recarregar(); }
+      catch (er) { erro(er); ev.target.disabled = false; ev.target.textContent = 'Atualizar dados'; }
+    };
+    const fNovo = dlg.querySelector('#rd-novo');
+    if (fNovo) fNovo.onsubmit = async (ev) => {
+      ev.preventDefault(); const d = Object.fromEntries(new FormData(fNovo));
+      try { await api('POST', '/api/radar/leads', { cnpj, origem: d.origem, responsavel_id: d.responsavel_id ? Number(d.responsavel_id) : null, observacoes: d.observacoes || null }); aviso('Empresa adicionada à carteira de prospecção.'); recarregar(); }
+      catch (er) { erro(er); }
+    };
+    const fLead = dlg.querySelector('#rd-lead');
+    if (fLead) {
+      fLead.estagio.onchange = () => (dlg.querySelector('#rd-motivo').hidden = fLead.estagio.value !== 'NAO_INTERESSADO');
+      fLead.onsubmit = async (ev) => {
+        ev.preventDefault(); const d = Object.fromEntries(new FormData(fLead));
+        try {
+          await api('PUT', `/api/radar/leads/${l.id}`, { estagio: d.estagio, responsavel_id: d.responsavel_id ? Number(d.responsavel_id) : null, proximo_contato: d.proximo_contato || null, origem: d.origem,
+            motivo_perda: d.motivo_perda || null, empresa_id: d.empresa_id ? Number(d.empresa_id) : null, observacoes: d.observacoes || null, consentimento_contato: !!d.consentimento_contato });
+          aviso('Lead atualizado.'); recarregar();
+        } catch (er) { erro(er); }
+      };
+      dlg.querySelector('#rd-exc').onclick = async () => {
+        if (!confirm('Remover esta empresa da carteira de prospecção? O histórico de contatos também é apagado.')) return;
+        try { await api('DELETE', `/api/radar/leads/${l.id}`); dlg.close(); aviso('Removida da carteira de prospecção.'); if (location.hash.startsWith('#/radar')) telaRadar(); } catch (er) { erro(er); }
+      };
+      dlg.querySelector('#rd-cad') && (dlg.querySelector('#rd-cad').onclick = async () => {
+        try {
+          const [s, tab, eq] = await Promise.all([api('GET', `/api/radar/leads/${l.id}/cadastro`), api('GET', '/api/escritorio/tabelas'), api('GET', '/api/escritorio/equipe')]);
+          dlg.close(); location.hash = '#/carteira';
+          setTimeout(() => formCliente({ ...s, _novo: true }, tab, eq), 400);
+        } catch (er) { erro(er); }
+      });
+      const fC = dlg.querySelector('#rd-contato');
+      fC.onsubmit = async (ev) => {
+        ev.preventDefault(); const d = Object.fromEntries(new FormData(fC));
+        try { await api('POST', `/api/radar/leads/${l.id}/contatos`, { quando: d.quando, canal: d.canal, descricao: d.descricao, proximo_contato: d.proximo_contato || null }); aviso('Contato registrado.'); recarregar(); }
+        catch (er) { erro(er); }
+      };
+    }
+  });
+}
+
+function configRadar(cfg) {
+  abrirDialogo(`<form id="rd-cfg-f" class="dlg-largo"><h2>Fonte de dados do Radar</h2>
+    <p class="sutil">O Radar pesquisa o cadastro público de CNPJ da Receita Federal por meio de um fornecedor com API. Hoje: <strong>Casa dos Dados</strong> (plano pago, com saldo de consultas). Sem chave, o Radar fica em modo demonstração.</p>
+    <div class="rd-grade">
+      <label>Fonte <select name="provedor"><option value="CASA_DOS_DADOS" ${cfg.provedorEscolhido === 'CASA_DOS_DADOS' ? 'selected' : ''}>Casa dos Dados</option><option value="DEMONSTRACAO" ${cfg.provedorEscolhido === 'DEMONSTRACAO' ? 'selected' : ''}>Demonstração (dados fictícios)</option></select></label>
+      <label>Chave de API (api-key) <input name="apiKey" type="password" autocomplete="off" placeholder="${cfg.temChave ? '•••••• guardada (deixe em branco para manter)' : 'Cole a chave do portal da Casa dos Dados'}"></label>
+      <label>Guardar cada pesquisa por (horas) <input type="number" name="cacheHoras" min="1" max="720" value="${cfg.cacheHoras}"><span class="dica">Pesquisas repetidas nesse prazo não gastam saldo.</span></label>
+      <label>UF padrão <select name="ufPadrao"><option value="">—</option>${UFS.map((u) => `<option ${cfg.ufPadrao === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
+      <label>Município padrão <input name="municipioPadrao" value="${esc(cfg.municipioPadrao ?? '')}"></label>
+    </div>
+    <h3>Critérios do potencial estimado</h3>
+    <p class="dica">Cada critério soma o peso quando o CNAE principal começa com um dos códigos ou a descrição da atividade tem uma das palavras. O resultado é sempre uma <em>oportunidade estimada</em>.</p>
+    <div id="rd-crit">${cfg.criterios.map((c, i) => `<fieldset class="sub" data-i="${i}"><legend>${esc(c.nome)}</legend><div class="rd-grade">
+      <label>Nome <input name="nome" value="${esc(c.nome)}" required></label><label>Peso <input type="number" name="peso" min="1" max="10" value="${c.peso}"></label>
+      <label class="largo">Começo dos códigos CNAE (separados por vírgula) <input name="cnaes" value="${esc(c.cnaes.join(', '))}"></label>
+      <label class="largo">Palavras na atividade (separadas por vírgula) <input name="palavras" value="${esc(c.palavras.join(', '))}"></label></div></fieldset>`).join('')}</div>
+    <p class="dica"><strong>Como contratar:</strong> crie a conta em casadosdados.com.br, gere a chave de API no portal, coloque saldo e cole a chave acima. A chave fica guardada criptografada neste computador.</p>
+    <p class="erro" id="rd-cfg-erro"></p>
+    <div class="acoes"><button class="primario" type="submit">Salvar</button><button type="button" id="rd-aud">Ver auditoria</button><button type="button" data-fechar>Fechar</button></div></form>`, (dlg) => {
+    const fm = dlg.querySelector('#rd-cfg-f');
+    fm.onsubmit = async (ev) => {
+      ev.preventDefault(); const d = Object.fromEntries(new FormData(fm));
+      const lista = (s) => String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      const criterios = [...dlg.querySelectorAll('#rd-crit fieldset')].map((fs, i) => ({ id: cfg.criterios[i].id, nome: fs.querySelector('[name=nome]').value.trim(), peso: Number(fs.querySelector('[name=peso]').value) || 1,
+        cnaes: lista(fs.querySelector('[name=cnaes]').value).map((x) => x.replace(/\D/g, '')).filter((x) => x.length >= 2), palavras: lista(fs.querySelector('[name=palavras]').value).filter((x) => x.length >= 3) }));
+      try {
+        await api('PUT', '/api/radar/config', { provedor: d.provedor, apiKey: d.apiKey || null, cacheHoras: Number(d.cacheHoras) || 24, ufPadrao: d.ufPadrao || null, municipioPadrao: d.municipioPadrao || null, criterios });
+        dlg.close(); aviso('Fonte de dados do Radar salva.'); telaRadar.f = null; telaRadar();
+      } catch (er) { dlg.querySelector('#rd-cfg-erro').textContent = mensagemErro(er); }
+    };
+    dlg.querySelector('#rd-aud').onclick = async () => {
+      const l = await api('GET', '/api/radar/auditoria');
+      abrirDialogo(`<div class="dlg-largo"><h2>Auditoria do Radar</h2>${l.length ? `<table class="tabela"><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Empresa</th><th>Detalhe</th></tr></thead><tbody>
+        ${l.map((a) => `<tr><td>${dhBr(a.criado_em)}</td><td>${esc(a.usuario ?? '—')}</td><td>${esc(a.acao)}</td><td>${a.alvo ? fmtDoc(a.alvo) : '—'}</td><td>${esc(a.detalhe ?? '')}</td></tr>`).join('')}</tbody></table>` : '<p class="dica">Nada registrado ainda.</p>'}
+        <div class="acoes"><button data-fechar>Fechar</button></div></div>`);
+    };
   });
 }
