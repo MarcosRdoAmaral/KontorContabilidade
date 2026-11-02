@@ -104,10 +104,20 @@ export function listarAuditoria(escritorioId: number, limite = 200) {
 const CAMPOS = ['razao_social', 'nome_fantasia', 'data_abertura', 'uf', 'municipio', 'cod_municipio', 'cnae', 'cnae_descricao', 'natureza_codigo', 'natureza_descricao', 'situacao', 'porte', 'telefone', 'email', 'capital_social'] as const;
 const ROTULO_CAMPO: Record<string, string> = { razao_social: 'Razão social', nome_fantasia: 'Nome fantasia', situacao: 'Situação cadastral', municipio: 'Município', uf: 'UF', cnae: 'CNAE', porte: 'Porte', telefone: 'Telefone', email: 'E-mail', natureza_codigo: 'Natureza jurídica', endereco: 'Endereço' };
 
-/** Grava ou atualiza a empresa; devolve as mudanças em relação ao que estava guardado. */
+const vazio = (v: unknown) => v == null || String(v).trim() === '';
+/** Endereço sem as partes vazias (para comparar e para completar). */
+const endLimpo = (o: any) => Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => !vazio(v)));
+
+/**
+ * Grava ou atualiza a empresa; devolve as mudanças em relação ao que estava guardado.
+ * A pesquisa traz só parte do cadastro e a consulta por CNPJ traz o restante: campo que a fonte não trouxe mantém o valor
+ * guardado, e preencher um campo que estava vazio é complemento, não alteração cadastral (não entra no histórico).
+ */
 export function guardarEmpresa(e: EmpresaRadar, origem: string, demonstracao: boolean): { campo: string; de: unknown; para: unknown }[] {
   const atual = db.prepare('SELECT * FROM radar_empresas WHERE cnpj = ?').get(e.cnpj) as any;
-  const endereco = JSON.stringify(e.endereco ?? {});
+  const endNovo = endLimpo(e.endereco);
+  const endAtual = endLimpo(atual?.endereco_json ? JSON.parse(atual.endereco_json) : {});
+  const endereco = JSON.stringify({ ...endAtual, ...endNovo });
   if (!atual) {
     db.prepare(`INSERT INTO radar_empresas (cnpj, ${CAMPOS.join(', ')}, endereco_json, origem, demonstracao) VALUES (?, ${CAMPOS.map(() => '?').join(', ')}, ?, ?, ?)`)
       .run(e.cnpj, ...CAMPOS.map((c) => (e as any)[c] ?? null), endereco, origem, demonstracao ? 1 : 0);
@@ -115,16 +125,19 @@ export function guardarEmpresa(e: EmpresaRadar, origem: string, demonstracao: bo
   }
   const mud: { campo: string; de: unknown; para: unknown }[] = [];
   for (const c of CAMPOS) {
-    const novo = (e as any)[c] ?? null;
-    if (novo == null && atual[c] != null && ['telefone', 'email', 'cnae_descricao'].includes(c)) continue; // a fonte não trouxe: mantém o que havia
-    if (String(novo ?? '') !== String(atual[c] ?? '') && ROTULO_CAMPO[c]) mud.push({ campo: c, de: atual[c], para: novo });
+    const novo = (e as any)[c];
+    if (vazio(novo) || vazio(atual[c])) continue; // a fonte não trouxe (mantém) ou o campo estava vazio (complemento)
+    if (String(novo) !== String(atual[c]) && ROTULO_CAMPO[c]) mud.push({ campo: c, de: atual[c], para: novo });
   }
-  if (endereco !== (atual.endereco_json ?? '{}') && atual.endereco_json) mud.push({ campo: 'endereco', de: JSON.parse(atual.endereco_json), para: e.endereco });
+  // endereço: só conta como alteração quando já havia endereço e uma parte informada mudou
+  if (Object.keys(endAtual).length && Object.keys(endNovo).length && Object.entries(endNovo).some(([k, v]) => k in endAtual && String(endAtual[k]) !== String(v))) {
+    mud.push({ campo: 'endereco', de: endAtual, para: { ...endAtual, ...endNovo } });
+  }
   const hist = atual.alteracoes_json ? JSON.parse(atual.alteracoes_json) : [];
   if (mud.length && !demonstracao) hist.unshift({ em: new Date().toISOString(), origem, mudancas: mud });
-  db.prepare(`UPDATE radar_empresas SET ${CAMPOS.map((c) => `${c} = COALESCE(?, ${['telefone', 'email', 'cnae_descricao'].includes(c) ? c : 'NULL'})`).join(', ')},
+  db.prepare(`UPDATE radar_empresas SET ${CAMPOS.map((c) => `${c} = COALESCE(?, ${c})`).join(', ')},
       endereco_json = ?, origem = ?, demonstracao = ?, alteracoes_json = ?, atualizado_em = datetime('now') WHERE cnpj = ?`)
-    .run(...CAMPOS.map((c) => (e as any)[c] ?? null), endereco, origem, demonstracao ? 1 : 0, hist.length ? JSON.stringify(hist.slice(0, 30)) : null, e.cnpj);
+    .run(...CAMPOS.map((c) => (vazio((e as any)[c]) ? null : (e as any)[c])), endereco, origem, demonstracao ? 1 : 0, hist.length ? JSON.stringify(hist.slice(0, 30)) : null, e.cnpj);
   return mud;
 }
 
@@ -271,7 +284,11 @@ export function detalheEmpresa(escritorioId: number, cnpjBruto: string) {
   const naCarteira = db.prepare('SELECT id, COALESCE(nome_fantasia, razao_social) AS nome FROM empresas WHERE escritorio_id = ? AND documento = ?').get(escritorioId, cnpj) ?? null;
   // lead convertido e cadastrado depois na carteira: liga os dois sozinho
   if (lead && !lead.empresa_id && naCarteira) { db.prepare('UPDATE radar_leads SET empresa_id = ? WHERE id = ?').run((naCarteira as any).id, lead.id); lead.empresa_id = (naCarteira as any).id; }
-  return { ...e, lead, alteracoes: alteracoes ? JSON.parse(alteracoes).map((a: any) => ({ ...a, mudancas: a.mudancas.map((m: any) => ({ ...m, rotulo: ROTULO_CAMPO[m.campo] ?? m.campo })) })) : [], na_carteira: naCarteira };
+  // mudanças de campo vazio para preenchido (gravadas por versões anteriores) eram complemento, não alteração
+  const historico = (alteracoes ? JSON.parse(alteracoes) : []).map((a: any) => ({ ...a, mudancas: a.mudancas
+    .filter((m: any) => (m.campo === 'endereco' ? Object.keys(endLimpo(m.de)).length > 0 : !vazio(m.de) && !vazio(m.para)))
+    .map((m: any) => ({ ...m, rotulo: ROTULO_CAMPO[m.campo] ?? m.campo })) })).filter((a: any) => a.mudancas.length);
+  return { ...e, lead, alteracoes: historico, na_carteira: naCarteira };
 }
 
 export async function atualizarEmpresa(escritorioId: number, usuarioId: number, cnpjBruto: string) {
@@ -285,6 +302,31 @@ export async function atualizarEmpresa(escritorioId: number, usuarioId: number, 
   const mud = guardarEmpresa(e, prov.id, prov.demonstracao);
   auditar(escritorioId, usuarioId, 'ATUALIZAR', cnpj, mud.length ? mud.map((m) => ROTULO_CAMPO[m.campo] ?? m.campo).join(', ') : 'sem mudanças');
   return { mudancas: mud.map((m) => ({ ...m, rotulo: ROTULO_CAMPO[m.campo] ?? m.campo })), empresa: detalheEmpresa(escritorioId, cnpj) };
+}
+
+/** Atualiza várias empresas pela consulta por CNPJ (uma consulta na fonte por empresa), uma de cada vez. */
+export async function atualizarVarias(escritorioId: number, usuarioId: number, cnpjsBrutos: string[]) {
+  const cnpjs = [...new Set(cnpjsBrutos.map(so))].filter((c) => c.length === 14);
+  for (const c of cnpjs) exigirVisivel(escritorioId, c);
+  const prov = provedorDo(escritorioId);
+  const res: { cnpj: string; ok: boolean; mensagem: string | null; mudancas: number }[] = [];
+  let parou: string | null = null;
+  for (const cnpj of cnpjs) {
+    if (parou) { res.push({ cnpj, ok: false, mensagem: 'Não consultada (a fonte de dados recusou as consultas anteriores).', mudancas: 0 }); continue; }
+    try {
+      const e = await prov.consultar(cnpj);
+      if (!e) { res.push({ cnpj, ok: false, mensagem: 'A fonte de dados não encontrou este CNPJ.', mudancas: 0 }); continue; }
+      const mud = guardarEmpresa(e, prov.id, prov.demonstracao);
+      res.push({ cnpj, ok: true, mensagem: null, mudancas: mud.length });
+    } catch (er) {
+      if (!(er instanceof ErroProvedor)) throw er;
+      res.push({ cnpj, ok: false, mensagem: er.message, mudancas: 0 });
+      if ([401, 403, 429].includes(er.status)) parou = er.message; // chave, saldo ou limite: não adianta seguir
+    }
+  }
+  const ok = res.filter((x) => x.ok).length;
+  auditar(escritorioId, usuarioId, 'ATUALIZAR_LOTE', null, `${ok} de ${cnpjs.length} empresa(s) atualizada(s)${parou ? ` · interrompido: ${parou}` : ''}`);
+  return { atualizadas: ok, falhas: res.length - ok, interrompido: parou, resultados: res };
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -820,3 +820,7 @@ main:focus, main:focus-visible { outline: none; }
 .lista-modulos li > div { flex: 1 1 240px; display: grid; gap: 2px; }
 .lista-modulos .etiqueta { padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 600; color: var(--tinta-2); background: var(--cinza-fundo); white-space: nowrap; }
 .lista-modulos .etiqueta.ok { color: var(--verde); background: var(--verde-fundo); }
+.rd-ord { flex-wrap: wrap; }
+.rd-alt-item { margin: 8px 0 12px; }
+.rd-alt-item > b { display: block; margin-bottom: 4px; font-size: .86rem; }
+.rd-alt .tabela td, .rd-alt .tabela th { font-size: .84rem; }

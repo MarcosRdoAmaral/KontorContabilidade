@@ -70,6 +70,21 @@ const porteDe = (codigo: unknown, descricao: unknown) => {
 // Casa dos Dados (https://docs.casadosdados.com.br) — header api-key; pesquisa POST /v5/cnpj/pesquisa
 // ---------------------------------------------------------------------------------------------
 
+const SITUACOES = ['ATIVA', 'BAIXADA', 'INAPTA', 'SUSPENSA', 'NULA'];
+/** Situação cadastral: aceita só os valores da Receita, em qualquer das formas em que a fonte a devolve (texto ou objeto). */
+function situacaoDe(x: any): string | null {
+  const s = x?.situacao_cadastral;
+  const candidatos = [s, s?.situacao_cadastral, s?.situacao_atual, s?.situacao, s?.descricao, x?.descricao_situacao_cadastral, x?.situacao];
+  for (const c of candidatos) {
+    const v = semAcento(String(typeof c === 'string' || typeof c === 'number' ? c : '')).trim().toUpperCase();
+    if (SITUACOES.includes(v)) return v;
+    if (v === '02' || v === '2') return 'ATIVA'; // código da Receita: 01 nula, 02 ativa, 03 suspensa, 04 inapta, 08 baixada
+    const cod: Record<string, string> = { '01': 'NULA', '1': 'NULA', '03': 'SUSPENSA', '3': 'SUSPENSA', '04': 'INAPTA', '4': 'INAPTA', '08': 'BAIXADA', '8': 'BAIXADA' };
+    if (cod[v]) return cod[v];
+  }
+  return null;
+}
+
 /** Converte a empresa devolvida pela Casa dos Dados (os campos variam um pouco entre versões da API). */
 export function deCasaDosDados(x: any): EmpresaRadar {
   const end = x?.endereco ?? {};
@@ -89,7 +104,7 @@ export function deCasaDosDados(x: any): EmpresaRadar {
     cnae_descricao: typeof atv === 'object' && atv ? txt(atv.descricao ?? atv.description) : txt(x?.descricao_atividade_principal),
     natureza_codigo: txt(x?.codigo_natureza_juridica),
     natureza_descricao: txt(x?.descricao_natureza_juridica),
-    situacao: txt(typeof x?.situacao_cadastral === 'object' ? x.situacao_cadastral?.situacao_cadastral : x?.situacao_cadastral)?.toUpperCase() ?? null,
+    situacao: situacaoDe(x),
     porte: porteDe(x?.porte_empresa?.codigo, x?.porte_empresa?.descricao),
     telefone: fones[0] ?? null,
     email: emails[0] ? String(emails[0]).toLowerCase() : null,

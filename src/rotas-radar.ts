@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { exigirLogin, type Usuario } from './auth.js';
 import {
-  ConfigRadar, EdicaoLead, NovoContato, NovoLead, Pesquisa, adicionarLead, atualizarEmpresa, configPublicaRadar, detalheEmpresa, editarLead, excluirLead,
+  ConfigRadar, EdicaoLead, atualizarVarias, NovoContato, NovoLead, Pesquisa, adicionarLead, atualizarEmpresa, configPublicaRadar, detalheEmpresa, editarLead, excluirLead,
   listarAuditoria, painelRadar, pesquisar, registrarContato, salvarConfigRadar, sugestaoCadastro,
 } from './servicos/radar.js';
 
@@ -18,6 +18,7 @@ export async function rotasRadar(app: FastifyInstance) {
     api.put('/api/radar/config', async (req) => salvarConfigRadar(u(req).escritorio_id, u(req).id, ConfigRadar.parse(req.body)));
     api.get('/api/radar/auditoria', async (req) => listarAuditoria(u(req).escritorio_id));
     api.post('/api/radar/pesquisar', async (req) => pesquisar(u(req).escritorio_id, u(req).id, Pesquisa.parse(req.body ?? {})));
+    api.post('/api/radar/empresas/atualizar', async (req) => atualizarVarias(u(req).escritorio_id, u(req).id, z.object({ cnpjs: z.array(z.string()).min(1).max(25) }).parse(req.body).cnpjs));
     api.get('/api/radar/empresas/:cnpj', async (req) => detalheEmpresa(u(req).escritorio_id, (req.params as any).cnpj));
     api.post('/api/radar/empresas/:cnpj/atualizar', async (req) => atualizarEmpresa(u(req).escritorio_id, u(req).id, (req.params as any).cnpj));
     api.post('/api/radar/leads', async (req) => adicionarLead(u(req).escritorio_id, u(req).id, NovoLead.parse(req.body)));

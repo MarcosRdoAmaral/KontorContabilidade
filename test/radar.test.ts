@@ -62,8 +62,40 @@ test('Radar de Oportunidades: pesquisa (demonstração e cache), CRM, painel, pe
     R.trocarProvedorRadar(() => ({ ...demo, id: 'CASA_DOS_DADOS', nome: 'Teste', demonstracao: false, consultar: async (c: string) => ({ ...(await demo.consultar(c))!, situacao: 'BAIXADA', telefone: '4733334444' }) }));
     const at = (await call('POST', `/api/radar/empresas/${tec.cnpj}/atualizar`, undefined, t)).json;
     R.trocarProvedorRadar(null);
-    assert.deepEqual(at.mudancas.map((m: any) => m.rotulo).sort(), ['Situação cadastral', 'Telefone']);
+    assert.deepEqual(at.mudancas.map((m: any) => m.rotulo), ['Situação cadastral'], 'telefone que faltava é complemento');
+    assert.equal(at.empresa.telefone, '4733334444');
     assert.equal(at.empresa.alteracoes.length, 1); assert.equal(at.empresa.situacao, 'BAIXADA');
+    // a pesquisa traz só parte do cadastro: completar campos vazios não é alteração, e uma pesquisa depois não apaga o que foi completado
+    const cnpjP = '69903724000141';
+    R.guardarEmpresa({ cnpj: cnpjP, razao_social: 'ESCRITORIO X', data_abertura: '2026-10-28' } as any, 'CASA_DOS_DADOS', false);
+    db.prepare('INSERT INTO radar_vistos (escritorio_id, cnpj) VALUES (1, ?)').run(cnpjP);
+    const completo = { cnpj: cnpjP, razao_social: 'ESCRITORIO X', data_abertura: '2026-10-28', uf: 'SC', municipio: 'BLUMENAU', cnae: '6911701', natureza_codigo: '2321', situacao: 'ATIVA',
+      porte: 'DEMAIS', telefone: '4732099723', email: 'x@x.adv.br', endereco: { logradouro: 'R DOUTOR PEDRO ZIMMERMANN', numero: '2561', cep: '89066000' } };
+    let chamadas = 0;
+    R.trocarProvedorRadar(() => ({ ...demo, id: 'CASA_DOS_DADOS', nome: 'Teste', demonstracao: false, consultar: async (c: string) => { chamadas++; return c === cnpjP ? (completo as any) : null; } }));
+    const lote = (await call('POST', '/api/radar/empresas/atualizar', { cnpjs: [cnpjP, tec.cnpj] }, t)).json;
+    assert.equal(lote.atualizadas, 1); assert.equal(lote.falhas, 1); assert.match(lote.resultados[1].mensagem, /não encontrou/);
+    let dp = (await call('GET', `/api/radar/empresas/${cnpjP}`, undefined, t)).json;
+    assert.deepEqual(dp.alteracoes, [], 'completar não é alteração');
+    assert.equal(dp.municipio, 'BLUMENAU'); assert.equal(dp.endereco.numero, '2561');
+    R.guardarEmpresa({ cnpj: cnpjP, razao_social: 'ESCRITORIO X' } as any, 'CASA_DOS_DADOS', false); // nova pesquisa, com menos campos
+    dp = (await call('GET', `/api/radar/empresas/${cnpjP}`, undefined, t)).json;
+    assert.equal(dp.municipio, 'BLUMENAU'); assert.equal(dp.telefone, '4732099723'); assert.deepEqual(dp.alteracoes, []);
+    R.guardarEmpresa({ ...completo, telefone: '4733330000', endereco: { numero: '100' } } as any, 'CASA_DOS_DADOS', false);
+    dp = (await call('GET', `/api/radar/empresas/${cnpjP}`, undefined, t)).json;
+    assert.deepEqual(dp.alteracoes[0].mudancas.map((m: any) => m.rotulo), ['Telefone', 'Endereço']);
+    assert.equal(dp.endereco.logradouro, 'R DOUTOR PEDRO ZIMMERMANN', 'endereço completa, não apaga');
+    // histórico antigo com "de vazio para valor" (versão anterior) não aparece
+    db.prepare('UPDATE radar_empresas SET alteracoes_json = ? WHERE cnpj = ?').run(JSON.stringify([{ em: '2026-11-02T21:38:03Z', origem: 'CASA_DOS_DADOS', mudancas: [{ campo: 'uf', de: null, para: 'SC' }, { campo: 'endereco', de: {}, para: { numero: '1' } }] }]), cnpjP);
+    assert.deepEqual((await call('GET', `/api/radar/empresas/${cnpjP}`, undefined, t)).json.alteracoes, []);
+    // saldo/limite: interrompe o lote sem consultar o resto
+    chamadas = 0;
+    R.trocarProvedorRadar(() => ({ ...demo, id: 'CASA_DOS_DADOS', nome: 'Teste', demonstracao: false, consultar: async () => { chamadas++; throw new P.ErroProvedor('Limite de consultas da Casa dos Dados atingido.', 429); } }));
+    const lim = (await call('POST', '/api/radar/empresas/atualizar', { cnpjs: [cnpjP, tec.cnpj] }, t)).json;
+    assert.equal(chamadas, 1); assert.match(lim.interrompido, /Limite/); assert.equal(lim.atualizadas, 0);
+    assert.equal((await call('POST', '/api/radar/empresas/atualizar', { cnpjs: ['11111111000191'] }, t)).status, 404, 'só empresas do radar do escritório');
+    assert.equal((await call('POST', '/api/radar/empresas/atualizar', { cnpjs: Array(26).fill(cnpjP) }, t)).status, 400);
+    R.trocarProvedorRadar(null);
     // isolamento: outro escritório não vê a empresa nem o lead
     db.prepare("INSERT INTO escritorios (id, nome) VALUES (2, 'Outro')").run();
     assert.throws(() => R.detalheEmpresa(2, tec.cnpj), /não encontrada/);
@@ -93,6 +125,8 @@ test('Radar: Casa dos Dados (corpo da pesquisa, leitura da resposta e erros)', a
   const e = P.deCasaDosDados({ cnpj: '12345678000190', razao_social: 'TESTE LTDA', data_abertura: '2026-10-20', porte_empresa: { codigo: '03', descricao: 'EMPRESA DE PEQUENO PORTE' },
     situacao_cadastral: { situacao_cadastral: 'ATIVA' }, endereco: { uf: 'SC', municipio: 'BLUMENAU', ibge: { codigo_municipio: 4202404 }, tipo_logradouro: 'RUA', logradouro: 'XV DE NOVEMBRO', numero: '10' },
     atividade_principal: { codigo: '6201501', descricao: 'Desenvolvimento de software' }, contato_telefonico: [{ completo: '(47) 3333-4444' }], contato_email: [{ email: 'Contato@Teste.com' }] });
+  for (const [sc, esperado] of [[{ situacao_cadastral: 'Ativa' }, 'ATIVA'], ['BAIXADA', 'BAIXADA'], [{ descricao: 'INAPTA' }, 'INAPTA'], [{ codigo: '02', situacao_atual: '02' }, 'ATIVA'], [{ situacao_cadastral: 'ATIVO?' }, null]] as const)
+    assert.equal(P.deCasaDosDados({ cnpj: '12345678000190', situacao_cadastral: sc }).situacao, esperado, JSON.stringify(sc));
   assert.deepEqual([e.porte, e.situacao, e.cod_municipio, e.cnae, e.telefone, e.email, e.endereco.logradouro], ['EPP', 'ATIVA', '4202404', '6201501', '4733334444', 'contato@teste.com', 'RUA XV DE NOVEMBRO']);
   const resp = (status: number, corpo: any) => (async () => new Response(JSON.stringify(corpo), { status })) as any;
   await assert.rejects(P.casaDosDados('x', resp(401, {})).pesquisar({}, 1, 10), /chave da Casa dos Dados está incorreta/);

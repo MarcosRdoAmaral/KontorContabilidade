@@ -6473,7 +6473,7 @@ async function pesquisarRadar(atualizar = false) {
     return `<li class="rd-emp">
       <span class="rd-av" style="--c:${COR_ESTAGIO[e.lead?.estagio] ?? 'var(--laranja)'}">${esc(iniciais(nomeRadar(e)))}</span>
       <div class="rd-nome"><button type="button" class="link-fech" data-cnpj="${e.cnpj}"><strong>${esc(nomeRadar(e))}</strong></button>${e.demonstracao ? ' <span class="rd-demo">demonstração</span>' : ''}<small>${fmtDoc(e.cnpj)}</small>
-        <span class="rd-tags">${e.situacao && e.situacao !== 'ATIVA' ? `<span class="rd-tag cinza">${esc(e.situacao.toLowerCase())}</span>` : ''}${e.potencial.nivel ? `<span class="rd-tag pot-${e.potencial.nivel}" title="Oportunidade estimada pelo CNAE: ${esc(e.potencial.motivos.join(', ') || 'nenhum critério')}">${ROT_POT[e.potencial.nivel]}</span>` : ''}${e.lead ? `<span class="rd-tag" style="--c:${COR_ESTAGIO[e.lead.estagio]}">${esc(e.lead.rotulo)}</span>` : ''}</span></div>
+        <span class="rd-tags">${radarIncompleta(e) && !e.demonstracao ? '<span class="rd-tag cinza" title="A pesquisa traz só parte do cadastro. Use Atualizar dados para trazer situação, endereço, CNAE, porte e contatos.">dados resumidos</span>' : ''}${e.situacao && e.situacao !== 'ATIVA' ? `<span class="rd-tag cinza">${esc(e.situacao.toLowerCase())}</span>` : ''}${e.potencial.nivel ? `<span class="rd-tag pot-${e.potencial.nivel}" title="Oportunidade estimada pelo CNAE: ${esc(e.potencial.motivos.join(', ') || 'nenhum critério')}">${ROT_POT[e.potencial.nivel]}</span>` : ''}${e.lead ? `<span class="rd-tag" style="--c:${COR_ESTAGIO[e.lead.estagio]}">${esc(e.lead.rotulo)}</span>` : ''}</span></div>
       <span class="rd-local">${icone('local')}${esc(e.municipio ?? '—')}${e.uf ? ` / ${e.uf}` : ''}</span>
       <span class="rd-data" title="Data de abertura">${icone('agenda')}${dataBr(e.data_abertura) || '—'}</span>
       <span class="rd-seg" title="${esc(e.cnae ?? '')} ${esc(e.cnae_descricao ?? '')}">${esc(seg.length > 34 ? `${seg.slice(0, 33)}…` : seg)}</span>
@@ -6482,7 +6482,7 @@ async function pesquisarRadar(atualizar = false) {
   const pags = []; for (let i = Math.max(1, r.pagina - 2); i <= Math.min(r.paginas, r.pagina + 2); i++) pags.push(i);
   box.innerHTML = `<div class="rd-lista-topo"><div><h2>${r.modo === 'CARTEIRA' ? 'Minha carteira de prospecção' : 'Empresas encontradas'}</h2>
       <p class="sutil">Mostrando ${r.empresas.length} de ${r.total.toLocaleString('pt-BR')} empresa(s)${r.modo !== 'CARTEIRA' ? ` · ${esc(r.fonte)}${r.doCache ? ` · pesquisa de ${dhBr(r.consultadoEm)} (guardada)` : ''}` : ''}</p></div>
-      <div class="rd-ord">${r.modo !== 'CARTEIRA' && r.doCache ? '<button type="button" id="rd-atual" title="Consulta a fonte de novo, sem usar a pesquisa guardada">Atualizar</button>' : ''}<label>Ordenar por <select id="rd-ordem">${ORD.map(([v, t]) => `<option value="${v}" ${telaRadar.f.ordem === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
+      <div class="rd-ord">${r.empresas.length && !r.demonstracao ? '<button type="button" id="rd-upd-lote" title="Consulta o cadastro completo de cada empresa desta página na fonte de dados">Atualizar dados</button>' : ''}${r.modo !== 'CARTEIRA' && r.doCache ? '<button type="button" id="rd-atual" title="Faz a pesquisa de novo na fonte, sem usar a pesquisa guardada">Refazer pesquisa</button>' : ''}<label>Ordenar por <select id="rd-ordem">${ORD.map(([v, t]) => `<option value="${v}" ${telaRadar.f.ordem === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
     ${r.empresas.length ? `<ul class="rd-emps">${r.empresas.map(linha).join('')}</ul>` : `<div class="vazio">${r.modo === 'CARTEIRA' ? 'Nenhum lead na carteira com esses filtros. Adicione empresas pela pesquisa.' : 'Nenhuma empresa encontrada com esses filtros.'}</div>`}
     ${r.paginas > 1 ? `<div class="rd-pag">${r.pagina > 1 ? `<button type="button" data-pag="${r.pagina - 1}">‹</button>` : ''}${pags.map((i) => `<button type="button" data-pag="${i}" class="${i === r.pagina ? 'ativo' : ''}">${i}</button>`).join('')}${r.pagina < r.paginas ? `<button type="button" data-pag="${r.pagina + 1}">›</button>` : ''}<span class="dica">Página ${r.pagina} de ${r.paginas.toLocaleString('pt-BR')}</span></div>` : ''}`;
   box.querySelectorAll('[data-cnpj]').forEach((b) => (b.onclick = () => detalheRadar(b.dataset.cnpj, telaRadar.equipe)));
@@ -6494,6 +6494,52 @@ async function pesquisarRadar(atualizar = false) {
   box.querySelectorAll('[data-pag]').forEach((b) => (b.onclick = () => { telaRadar.f.pagina = Number(b.dataset.pag); pesquisarRadar(); box.scrollIntoView({ behavior: 'smooth' }); }));
   $('#rd-ordem').onchange = (ev) => { telaRadar.f.ordem = ev.target.value; pesquisarRadar(); };
   $('#rd-atual') && ($('#rd-atual').onclick = () => pesquisarRadar(true));
+  $('#rd-upd-lote') && ($('#rd-upd-lote').onclick = () => atualizarRadarLote(r.empresas));
+}
+
+/** A pesquisa traz só parte do cadastro: falta algum dos dados que a consulta por CNPJ completa. */
+const radarIncompleta = (e) => !e.situacao || !e.municipio || !e.cnae || !e.porte;
+
+/** Atualiza pelo grid o cadastro das empresas da página (uma consulta na fonte por empresa). */
+function atualizarRadarLote(empresas) {
+  const incompletas = empresas.filter(radarIncompleta);
+  const d = abrirDialogo(`<h2>Atualizar dados das empresas</h2>
+    <p>A pesquisa traz só parte do cadastro. Aqui o Kontor consulta o cadastro completo de cada empresa (situação, endereço, CNAE, natureza jurídica, porte e contatos).</p>
+    <form id="rd-lote"><fieldset><legend>Quais empresas</legend>
+      <label class="rd-chk"><input type="radio" name="quais" value="inc" ${incompletas.length ? 'checked' : 'disabled'}> Só as com dados resumidos (${incompletas.length})</label>
+      <label class="rd-chk"><input type="radio" name="quais" value="todas" ${incompletas.length ? '' : 'checked'}> Todas desta página (${empresas.length})</label></fieldset>
+      <p class="dica">Cada empresa é uma consulta na Casa dos Dados e consome saldo da sua conta.</p>
+      <p id="rd-lote-prog" class="sutil"></p><p class="erro" id="rd-lote-erro"></p>
+      <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="primario" type="submit">Atualizar</button></div></form>`);
+  const form = $('#rd-lote');
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const lista = (form.quais.value === 'inc' ? incompletas : empresas).map((e) => e.cnpj);
+    if (!lista.length) return;
+    form.querySelectorAll('button, input').forEach((b) => (b.disabled = true));
+    let ok = 0, falhas = [], parou = null;
+    for (let i = 0; i < lista.length && !parou; i += 5) {
+      $('#rd-lote-prog').textContent = `Atualizando ${Math.min(i + 5, lista.length)} de ${lista.length}…`;
+      try {
+        const res = await api('POST', '/api/radar/empresas/atualizar', { cnpjs: lista.slice(i, i + 5) });
+        ok += res.atualizadas; falhas.push(...res.resultados.filter((x) => !x.ok)); parou = res.interrompido;
+      } catch (e) { parou = mensagemErro(e); }
+    }
+    d.close?.();
+    if ($('#dialogo').open) $('#dialogo').close();
+    aviso(`${ok} de ${lista.length} empresa(s) atualizada(s).${parou ? ` Interrompido: ${parou}` : falhas.length ? ` ${falhas.length} não atualizada(s): ${falhas[0].mensagem}` : ''}`);
+    pesquisarRadar();
+  };
+}
+
+/** Valor de um campo do histórico de alterações, legível. */
+function valorRadar(campo, v) {
+  if (v == null || v === '') return '—';
+  if (campo === 'telefone') return String(v).replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3');
+  if (campo === 'porte') return { ME: 'Microempresa', EPP: 'Empresa de pequeno porte', DEMAIS: 'Demais' }[v] ?? String(v);
+  if (campo === 'endereco') return [v.logradouro, v.numero, v.complemento, v.bairro, v.cep].filter(Boolean).join(', ') || '—';
+  if (campo === 'situacao' || campo === 'municipio') return String(v).charAt(0) + String(v).slice(1).toLowerCase();
+  return String(v);
 }
 
 async function detalheRadar(cnpj, equipe = []) {
@@ -6516,7 +6562,9 @@ async function detalheRadar(cnpj, equipe = []) {
     <p class="dica">Fonte: ${esc(e.origem === 'DEMONSTRACAO' ? 'demonstração (dados fictícios)' : e.origem === 'CASA_DOS_DADOS' ? 'Casa dos Dados (cadastro público da Receita Federal)' : e.origem)} · atualizado em ${dhBr(e.atualizado_em)}. <button type="button" id="rd-upd">Atualizar dados</button></p>
     <div class="rd-pot"><strong>${e.potencial.nivel ? ROT_POT[e.potencial.nivel] : 'Sem potencial estimado (empresa não está ativa)'}</strong>${e.potencial.motivos.length ? `: ${esc(e.potencial.motivos.join(' · '))}` : ''}
       <br><span class="dica">Oportunidade estimada pelo CNAE e pela descrição da atividade, segundo os critérios do escritório. Não confirma que a empresa precisa do serviço: confirme no contato.</span></div>
-    ${e.alteracoes.length ? `<details><summary>Alterações cadastrais (${e.alteracoes.length})</summary><ul class="dicas">${e.alteracoes.map((a) => `<li>${dhBr(a.em)}: ${a.mudancas.map((m) => `${esc(m.rotulo)} ${m.campo === 'endereco' ? 'mudou' : `de “${esc(String(m.de ?? '—'))}” para “${esc(String(m.para ?? '—'))}”`}`).join('; ')}</li>`).join('')}</ul></details>` : ''}
+    ${e.alteracoes.length ? `<details class="rd-alt"><summary>Alterações cadastrais (${e.alteracoes.length})</summary>${e.alteracoes.map((a) => `<div class="rd-alt-item"><b>${dhBr(a.em)}</b>
+      <table class="tabela"><thead><tr><th>Campo</th><th>Antes</th><th>Agora</th></tr></thead><tbody>${a.mudancas.map((m) => `<tr><td>${esc(m.rotulo)}</td><td>${esc(valorRadar(m.campo, m.de))}</td><td>${esc(valorRadar(m.campo, m.para))}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+      <p class="dica">Só aparecem os dados que mudaram no cadastro. Informações que faltavam e foram completadas pela consulta não contam como alteração.</p></details>` : ''}
     <h3>Carteira de prospecção</h3>
     ${!l ? `<form id="rd-novo" class="rd-grade">
         <label>Responsável <select name="responsavel_id"><option value="">${esc(estado.usuario.nome)} (eu)</option>${equipe.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>

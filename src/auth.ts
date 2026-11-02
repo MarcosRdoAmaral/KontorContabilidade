@@ -62,7 +62,7 @@ const REGRAS: Regra[] = [
   // ---- Radar de Oportunidades: configuração e auditoria só do administrador ----
   { r: /^\/api\/radar\/(config|auditoria)$/, m: 'PUT', mod: 'adm' },
   { m: 'GET', r: /^\/api\/radar\/auditoria$/, mod: 'adm' },
-  { r: /^\/api\/radar(\/(painel|config|pesquisar|empresas\/\d{14}(\/atualizar)?|leads(\/\d+(\/(contatos|cadastro))?)?))?$/, mod: ['radar'] },
+  { r: /^\/api\/radar(\/(painel|config|pesquisar|empresas\/(\d{14}(\/atualizar)?|atualizar)|leads(\/\d+(\/(contatos|cadastro))?)?))?$/, mod: ['radar'] },
   // ---- gestão do escritório (Kontor Gestão Contabilidade) ----
   { m: 'GET', r: /^\/api\/escritorio\/(tabelas|equipe)$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/escritorio\/visao$/, mod: ['visao'] },
