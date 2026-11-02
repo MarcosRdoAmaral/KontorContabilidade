@@ -6448,7 +6448,8 @@ async function telaRadar() {
   form.onsubmit = (ev) => { ev.preventDefault(); ler(); f.pagina = 1; pesquisarRadar(); };
   $('#rd-limpar').onclick = () => { telaRadar.f = { modo: f.modo, dias: 30, ordem: f.ordem, pagina: 1, limite: 25, uf: cfg.ufPadrao ?? '', municipio: cfg.municipioPadrao ?? '' }; telaRadar(); };
   conteudo.querySelectorAll('[data-modo]').forEach((b) => (b.onclick = () => { ler(); f.modo = b.dataset.modo; f.pagina = 1; telaRadar(); }));
-  conteudo.querySelectorAll('[data-est]').forEach((b) => (b.onclick = () => { f.modo = 'CARTEIRA'; f.estagio = b.dataset.est; f.pagina = 1; telaRadar(); }));
+  // o painel conta todos os leads do estágio: ao clicar, mostra todos, sem os filtros de local, nome, CNAE e potencial
+  conteudo.querySelectorAll('[data-est]').forEach((b) => (b.onclick = () => { Object.assign(f, { modo: 'CARTEIRA', estagio: b.dataset.est, pagina: 1, texto: null, uf: '', municipio: '', cnae: null, potencial: null }); telaRadar(); }));
   conteudo.querySelectorAll('.rd-prox [data-cnpj]').forEach((b) => (b.onclick = () => detalheRadar(b.dataset.cnpj, equipe)));
   $('#rd-cfg') && ($('#rd-cfg').onclick = () => configRadar(cfg));
   telaRadar.equipe = equipe;
@@ -6481,6 +6482,7 @@ async function pesquisarRadar(atualizar = false) {
   };
   const pags = []; for (let i = Math.max(1, r.pagina - 2); i <= Math.min(r.paginas, r.pagina + 2); i++) pags.push(i);
   box.innerHTML = `<div class="rd-lista-topo"><div><h2>${r.modo === 'CARTEIRA' ? 'Minha carteira de prospecção' : 'Empresas encontradas'}</h2>
+      ${r.modo === 'CARTEIRA' && (telaRadar.f.texto || telaRadar.f.uf || telaRadar.f.municipio || telaRadar.f.cnae || telaRadar.f.potencial) ? `<p class="dica">Filtrado por ${esc([telaRadar.f.texto, [telaRadar.f.municipio, telaRadar.f.uf].filter(Boolean).join(' / '), telaRadar.f.cnae && `CNAE ${telaRadar.f.cnae}`, telaRadar.f.potencial && ROT_POT[telaRadar.f.potencial]].filter(Boolean).join(', '))}. <button type="button" class="link-fech" id="rd-sem-filtro">Mostrar todos os leads${telaRadar.f.estagio ? ' deste estágio' : ''}</button></p>` : ''}
       <p class="sutil">Mostrando ${r.empresas.length} de ${r.total.toLocaleString('pt-BR')} empresa(s)${r.modo !== 'CARTEIRA' ? ` · ${esc(r.fonte)}${r.doCache ? ` · pesquisa de ${dhBr(r.consultadoEm)} (guardada)` : ''}` : ''}</p></div>
       <div class="rd-ord">${r.empresas.length && !r.demonstracao ? '<button type="button" id="rd-upd-lote" title="Consulta o cadastro completo de cada empresa desta página na fonte de dados">Atualizar dados</button>' : ''}${r.modo !== 'CARTEIRA' && r.doCache ? '<button type="button" id="rd-atual" title="Faz a pesquisa de novo na fonte, sem usar a pesquisa guardada">Refazer pesquisa</button>' : ''}<label>Ordenar por <select id="rd-ordem">${ORD.map(([v, t]) => `<option value="${v}" ${telaRadar.f.ordem === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
     ${r.empresas.length ? `<ul class="rd-emps">${r.empresas.map(linha).join('')}</ul>` : `<div class="vazio">${r.modo === 'CARTEIRA' ? 'Nenhum lead na carteira com esses filtros. Adicione empresas pela pesquisa.' : 'Nenhuma empresa encontrada com esses filtros.'}</div>`}
@@ -6495,6 +6497,7 @@ async function pesquisarRadar(atualizar = false) {
   $('#rd-ordem').onchange = (ev) => { telaRadar.f.ordem = ev.target.value; pesquisarRadar(); };
   $('#rd-atual') && ($('#rd-atual').onclick = () => pesquisarRadar(true));
   $('#rd-upd-lote') && ($('#rd-upd-lote').onclick = () => atualizarRadarLote(r.empresas));
+  $('#rd-sem-filtro') && ($('#rd-sem-filtro').onclick = () => { Object.assign(telaRadar.f, { texto: null, uf: '', municipio: '', cnae: null, potencial: null, pagina: 1 }); telaRadar(); });
 }
 
 /** A pesquisa traz só parte do cadastro: falta algum dos dados que a consulta por CNPJ completa. */
