@@ -396,8 +396,10 @@ export async function rotas(app: FastifyInstance) {
       checarEmpresa(req, id);
       const q = `%${((req.query as any).q ?? '').trim()}%`;
       const linhas = db.prepare('SELECT * FROM tomadores WHERE empresa_id = ? AND (nome LIKE ? OR documento LIKE ?) ORDER BY nome LIMIT 200').all(id, q, q) as any[];
-      const sp = db.prepare('SELECT servico_id, valor, descricao, padrao FROM tomador_servicos WHERE tomador_id = ? ORDER BY padrao DESC, id');
-      return linhas.map((t) => ({ ...t, servicos_padrao: (sp.all(t.id) as any[]).map((x) => ({ ...x, padrao: !!x.padrao })) }));
+      const sp = db.prepare('SELECT ts.servico_id, ts.valor, ts.descricao, ts.padrao, s.nome AS servico_nome FROM tomador_servicos ts LEFT JOIN servicos s ON s.id = ts.servico_id WHERE ts.tomador_id = ? ORDER BY ts.padrao DESC, ts.id');
+      // honorário do contrato assinado do cliente da carteira (sugestão de valor na cobrança avulsa)
+      const hon = db.prepare("SELECT valor FROM contratos WHERE empresa_id = ? AND status = 'ASSINADO' ORDER BY inicio DESC LIMIT 1");
+      return linhas.map((t) => ({ ...t, honorario: t.carteira_empresa_id ? (hon.get(t.carteira_empresa_id) as any)?.valor ?? null : null, servicos_padrao: (sp.all(t.id) as any[]).map((x) => ({ ...x, padrao: !!x.padrao })) }));
     });
     api.post('/api/empresas/:id/tomadores/planilha/analisar', { bodyLimit: 8 * 1024 * 1024 }, async (req) => {
       const id = Number((req.params as any).id); checarEmpresa(req, id);

@@ -1167,6 +1167,7 @@ async function telaCobrancas() {
       api('GET', `/api/empresas/${estado.empresaId}/tomadores`),
       api('GET', `/api/empresas/${estado.empresaId}/feriados`).then((r) => r.feriados_extra).catch(() => ''),
     ]);
+    const pixAuto = !!(await api('GET', `/api/empresas/${estado.empresaId}/pix-config`).catch(() => null))?.config?.ativo;
     if (!clientes.length) { aviso('Cadastre um cliente antes de gerar cobranças.'); return; }
     const daAba = (t) => (t.forma_cobranca ?? 'BOLETO') === st.carteira;
     clientes.sort((a, b) => daAba(b) - daAba(a) || (b.modo_faturamento === 'BOLETO') - (a.modo_faturamento === 'BOLETO') || a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -1183,11 +1184,12 @@ async function telaCobrancas() {
         <p class="sutil">Gera só a cobrança, sem emitir nota fiscal: boleto ou Pix, conforme a carteira do cliente. Os clientes da carteira aberta aparecem primeiro.</p>
         <div class="grade">
           <label class="largo">Cliente <select name="tomadorId" required>${clientes.map((t) => `<option value="${t.id}">${esc(t.nome)} — ${t.forma_cobranca === 'PIX' ? 'Pix' : 'boleto'}</option>`).join('')}</select></label>
-          <label class="largo" data-so-pix>Pix copia e cola <textarea name="pix" rows="3" placeholder="Cole aqui o código gerado no aplicativo do banco (pode informar depois)"></textarea><span class="dica">Gere a cobrança Pix no banco com o valor final (já com o desconto do cliente). O Kontor confere o código e monta o demonstrativo com o QR Code.</span></label>
+          ${pixAuto ? `<p class="largo banner" data-so-pix>O Kontor gera o Pix desta cobrança sozinho, com a chave Pix da empresa e o valor final (já com o desconto do cliente).</p>`
+            : `<label class="largo" data-so-pix>Pix copia e cola <textarea name="pix" rows="3" placeholder="Cole aqui o código gerado no aplicativo do banco (pode informar depois)"></textarea><span class="dica">Gere a cobrança Pix no banco com o valor final (já com o desconto do cliente). O Kontor confere o código e monta o demonstrativo com o QR Code. Para o Kontor gerar o Pix sozinho, cadastre a chave Pix em Empresas › Dados bancários.</span></label>`}
           <label class="largo">Descrição <input name="descricao" required maxlength="2000" placeholder="ex.: Honorários contábeis — outubro/2026"></label>
           <label>Valor antes do desconto (R$) <input name="valor" data-num required inputmode="decimal"><span class="dica" id="dica-desc-nb"></span></label>
           <label>Vencimento <input type="date" name="vencimento" required></label>
-          <label class="largo"><span><input type="checkbox" name="enviarEmail"> Enviar a cobrança por e-mail ao cliente</span><span class="dica" data-so-pix>No Pix, o e-mail só sai se o código já estiver colado.</span></label>
+          <label class="largo"><span><input type="checkbox" name="enviarEmail"> Enviar a cobrança por e-mail ao cliente</span>${pixAuto ? '' : '<span class="dica" data-so-pix>No Pix, o e-mail só sai se o código já estiver colado.</span>'}</label>
         </div>
         <p class="dica" id="aviso-nb"></p><p class="erro" id="erro-nb"></p>
         <div class="acoes"><button class="primario" type="submit">Gerar cobrança</button><button type="button" data-fechar>Cancelar</button></div>
@@ -1198,15 +1200,34 @@ async function telaCobrancas() {
       const ajustar = () => { const r = ajustarVencimento(f.vencimento.value, fer); if (r.aviso) { f.vencimento.value = r.data; $('#aviso-nb').textContent = r.aviso; } else $('#aviso-nb').textContent = ''; };
       const dicaDesc = () => { const t = cliente(); $('#dica-desc-nb').textContent = t.desconto_valor ? `Será abatido o desconto do cliente: ${brl(t.desconto_valor)} (${t.desconto_motivo}).` : ''; };
       f.tomadorId.addEventListener('change', dicaDesc);
+      // sugestão do cadastro: serviços padrão do cliente (valor e descrição)${'' if not contab else ' ou o honorário do contrato'}; o que a pessoa digitou não é trocado
+      const mesRef = (() => { const b = new Date(Date.now() - 3 * 3600e3); return b.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }); })();
+      const sugestao = (t) => {
+        const sv = (t.servicos_padrao ?? []).filter((x) => x.valor > 0);
+        const valor = sv.length ? sv.reduce((a, x) => a + Number(x.valor), 0) : (t.honorario ?? null);
+        const nomes = [...new Set(sv.map((x) => (x.descricao || x.servico_nome || '').trim()).filter(Boolean))];
+        const desc = nomes.length ? `${nomes.join(' + ')} — ${mesRef}` : t.honorario ? `Honorários contábeis — ${mesRef}` : '';
+        return { valor, desc };
+      };
+      let ultima = { valor: '', desc: '' };
+      const sugerir = () => {
+        const sg = sugestao(cliente());
+        const v = sg.valor != null ? String(Number(sg.valor).toFixed(2)).replace('.', ',') : '';
+        if (!f.valor.value || f.valor.value === ultima.valor) f.valor.value = v;
+        if (!f.descricao.value || f.descricao.value === ultima.desc) f.descricao.value = sg.desc;
+        ultima = { valor: v, desc: sg.desc };
+      };
+      f.tomadorId.addEventListener('change', sugerir);
       f.tomadorId.onchange = () => { const t = cliente(); dicaDesc(); f.vencimento.value = vencDe(t); f.enviarEmail.checked = !!t.enviar_email_auto; ajustar(); f.querySelectorAll('[data-so-pix]').forEach((x) => (x.hidden = !formaPix())); };
       f.vencimento.onchange = ajustar;
       f.tomadorId.onchange();
+      sugerir();
       f.onsubmit = async (ev) => {
         ev.preventDefault();
         const v = lerForm(f);
         const botao = f.querySelector('[type=submit]'); botao.disabled = true; botao.textContent = 'Gerando…';
         try {
-          const r = await api('POST', `/api/empresas/${estado.empresaId}/boleto-avulso`, { tomadorId: Number(v.tomadorId), descricao: v.descricao, valor: v.valor, vencimento: v.vencimento, enviarEmail: !!v.enviarEmail, pixCopiaCola: formaPix() ? (f.pix.value.trim() || null) : null });
+          const r = await api('POST', `/api/empresas/${estado.empresaId}/boleto-avulso`, { tomadorId: Number(v.tomadorId), descricao: v.descricao, valor: v.valor, vencimento: v.vencimento, enviarEmail: !!v.enviarEmail, pixCopiaCola: formaPix() && f.pix ? (f.pix.value.trim() || null) : null });
           d.close();
           st.carteira = r.cobranca.forma ?? 'BOLETO';
           const partes = [`${r.cobranca.forma === 'PIX' ? 'Cobrança Pix' : 'Boleto'} de ${brl(r.cobranca.valor)} (venc. ${dataBr(r.cobranca.vencimento)})`];
