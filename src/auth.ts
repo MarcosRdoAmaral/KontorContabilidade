@@ -110,7 +110,7 @@ const REGRAS: Regra[] = [
   { m: 'GET', r: /^\/api\/empresas\/\d+\/cora$/, mod: ['banco', 'empresas', 'cobrancas', 'emitir'] },
   { r: /^\/api\/empresas\/\d+\/cora\/(sincronizar)$/, mod: ['cobrancas', 'banco'] },
   { r: /^\/api\/empresas\/\d+\/cora(\/testar)?$/, mod: ['banco', 'empresas'] },
-  { r: /^\/api\/(empresas\/\d+\/(cobrancas|remessas|retorno|boleto-avulso)|cobrancas\/\d+\/(cancelar|pagar|reemitir|pix(\/gerar)?|email|carta)|empresas\/\d+\/pix-gerar|empresas\/\d+\/(modelos-whatsapp|demonstrativo)|remessas\/\d+\/arquivo)$/, mod: ['cobrancas'] },
+  { r: /^\/api\/(empresas\/\d+\/(cobrancas|remessas|retorno|boleto-avulso)|cobrancas\/\d+\/(cancelar|pagar|reemitir|pix(\/gerar)?|qrcode|email|carta)|empresas\/\d+\/pix-gerar|empresas\/\d+\/(modelos-whatsapp|demonstrativo)|remessas\/\d+\/arquivo)$/, mod: ['cobrancas'] },
   { m: 'GET', r: /^\/api\/cobrancas\/\d+\/(boleto|demonstrativo)$/, mod: ['cobrancas', 'notas', 'emitir'] },
   { m: 'POST', r: /^\/api\/(notas|faturar)$/, mod: ['emitir'] },
   { m: 'GET', r: /^\/api\/relatorios$|^\/api\/empresas\/\d+\/relatorios\/[a-z-]+$/, mod: ['relatorios'] },

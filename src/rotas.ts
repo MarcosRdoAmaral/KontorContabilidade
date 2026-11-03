@@ -739,6 +739,17 @@ export async function rotas(app: FastifyInstance) {
       return salvarConfigPix(id, ConfigPix.parse(req.body));
     });
     api.post('/api/empresas/:id/pix-gerar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => { const id = Number((req.params as any).id); checarEmpresa(req, id); return gerarPixPendentes(id); });
+    // QR Code do Pix da cobrança (PNG), para baixar e mandar ao cliente
+    api.get('/api/cobrancas/:id/qrcode', async (req, reply) => {
+      const id = Number((req.params as any).id);
+      cobrancaDoUsuario(req, id);
+      const c = obterCobranca(id);
+      if (!c?.pix_copia_cola) throw new ErroNegocio('Esta cobrança ainda não tem Pix.');
+      const QRCode = (await import('qrcode')).default;
+      const png = await QRCode.toBuffer(c.pix_copia_cola, { errorCorrectionLevel: 'M', margin: 2, width: 640 });
+      const nome = `Pix_${String(c.tomador_nome ?? 'cobranca').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')}_${c.vencimento}.png`;
+      return reply.type('image/png').header('Content-Disposition', `attachment; filename="${nome}"`).send(png);
+    });
     api.post('/api/cobrancas/:id/pix/gerar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id);
       cobrancaDoUsuario(req, id);

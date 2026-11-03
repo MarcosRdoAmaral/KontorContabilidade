@@ -48,6 +48,10 @@ test('Pix gerado pelo Kontor com a chave da empresa (InfinitePay ou outro banco)
     const nova = (await call('POST', `/api/empresas/${eid}/boleto-avulso`, { tomadorId: tid, descricao: 'Honorários', valor: 412.5, vencimento: '2027-03-10' }, t)).json.cobranca;
     assert.equal(nova.status, 'REGISTRADO'); assert.equal(lerPix(nova.pix_copia_cola).valor, 412.5);
     assert.equal((await call('GET', `/api/cobrancas/${nova.id}/demonstrativo`, undefined, t)).status, 200);
+    const png = await app.inject({ method: 'GET', url: `/api/cobrancas/${nova.id}/qrcode`, headers: { authorization: `Bearer ${t}` } });
+    assert.equal(png.statusCode, 200); assert.equal(png.headers['content-type'], 'image/png'); assert.equal(png.rawPayload.subarray(1, 4).toString(), 'PNG');
+    assert.match(String(png.headers['content-disposition']), /Pix_ABM_TRANSPORTES_LTDA_2027-03-10\.png/);
+    assert.equal((await call('GET', `/api/cobrancas/${pend.id}/qrcode`, undefined, t)).status, 200);
     // desativado: volta a ficar pendente para informar o Pix
     await call('PUT', `/api/empresas/${eid}/pix-config`, { ativo: false, tipo: 'ALEATORIA', chave: '7d9f0335-8dcc-4054-9bf9-0dbd61d36906', nome: 'Ciclo', cidade: 'Blumenau' }, t);
     const sem = (await call('POST', `/api/empresas/${eid}/boleto-avulso`, { tomadorId: tid, descricao: 'Honorários', valor: 100, vencimento: '2027-04-10' }, t)).json.cobranca;

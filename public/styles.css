@@ -824,3 +824,6 @@ main:focus, main:focus-visible { outline: none; }
 .rd-alt-item { margin: 8px 0 12px; }
 .rd-alt-item > b { display: block; margin-bottom: 4px; font-size: .86rem; }
 .rd-alt .tabela td, .rd-alt .tabela th { font-size: .84rem; }
+
+.pix-qr { display: grid; place-items: center; margin: 8px 0 12px; }
+.pix-qr img { width: 240px; height: 240px; background: #fff; padding: 6px; border-radius: 8px; }

@@ -1054,6 +1054,20 @@ function informarPixDialogo(c, aoSalvar) {
   });
 }
 
+/** Pix de uma cobrança: QR Code na tela, copiar o copia e cola e baixar a imagem do QR Code. */
+function pixDaCobranca(c) {
+  const nome = `Pix_${String(c.tomador_nome ?? 'cobranca').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')}_${c.vencimento}.png`;
+  abrirDialogo(`<h2>Pix — ${esc(c.tomador_nome)}</h2>
+    <p class="sutil">${brl(c.valor)} · vencimento ${dataBr(c.vencimento)}</p>
+    <div class="pix-qr"><img id="pix-qr-img" alt="QR Code do Pix"></div>
+    <label>Pix copia e cola <textarea rows="4" readonly id="pix-codigo" spellcheck="false" style="font-family:ui-monospace,Consolas,monospace;font-size:.8rem">${esc(c.pix_copia_cola)}</textarea></label>
+    <div class="acoes"><button class="primario" id="pix-baixar">Baixar QR Code (PNG)</button><button id="pix-copiar">Copiar código</button><button data-fechar>Fechar</button></div>`, () => {
+    baixarImagem(`/api/cobrancas/${c.id}/qrcode`, $('#pix-qr-img'));
+    $('#pix-baixar').onclick = () => baixar(`/api/cobrancas/${c.id}/qrcode`, nome);
+    $('#pix-copiar').onclick = async () => { try { await navigator.clipboard.writeText(c.pix_copia_cola); aviso('Pix copia e cola copiado.'); } catch { $('#pix-codigo').select(); aviso('Selecione o código e copie com Ctrl+C.'); } };
+  });
+}
+
 async function telaCobrancas() {
   const [lista, remessas, conta, cora] = await Promise.all([
     api('GET', `/api/empresas/${estado.empresaId}/cobrancas`),
@@ -1077,6 +1091,7 @@ async function telaCobrancas() {
     const pronto = c.forma === 'PIX' ? c.pix_copia_cola : c.nosso_numero;
     const principais = [
       c.forma === 'PIX' && podeEditar && ativo(c) && !c.pix_copia_cola ? `<button data-pix="${c.id}" class="primario">Informar Pix</button>` : '',
+      c.forma === 'PIX' && c.pix_copia_cola && c.status !== 'CANCELADO' ? `<button data-pixqr="${c.id}" title="QR Code e Pix copia e cola: copiar ou baixar a imagem">Pix</button>` : '',
       pronto && c.status !== 'CANCELADO' ? `<button data-demo="${c.id}">Demonstrativo</button>` : '',
       c.nosso_numero ? `<button data-boleto="${c.id}">Boleto</button>` : '',
       podeEditar && ativo(c) && pronto ? `<button data-email="${c.id}">E-mail</button>` : '',
@@ -1118,6 +1133,21 @@ async function telaCobrancas() {
   conteudo.querySelectorAll('[data-carteira]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); st.carteira = a.dataset.carteira; telaCobrancas(); }));
   conteudo.querySelectorAll('[data-carta]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.carta}/carta`, `Carta_Cobranca_${b.dataset.carta}.pdf`, true)));
   conteudo.querySelectorAll('[data-demo]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.demo}/demonstrativo`, `Demonstrativo_${b.dataset.demo}.pdf`, true)));
+  conteudo.querySelectorAll('[data-pixqr]').forEach((b) => (b.onclick = () => pixDaCobranca(lista.find((x) => x.id === Number(b.dataset.pixqr)))));
+  // "⋯": o menu abre por cima da tabela (posição fixa), sem ficar cortado pela rolagem da tabela
+  conteudo.querySelectorAll('details.cob-mais').forEach((dt) => dt.addEventListener('toggle', () => {
+    if (!dt.open) return;
+    conteudo.querySelectorAll('details.cob-mais[open]').forEach((o) => { if (o !== dt) o.open = false; });
+    const m = dt.querySelector('.cob-menu'), r = dt.querySelector('summary').getBoundingClientRect();
+    m.style.position = 'fixed'; m.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+    const alto = m.offsetHeight;
+    m.style.top = `${r.bottom + 4 + alto > window.innerHeight ? Math.max(8, r.top - 4 - alto) : r.bottom + 4}px`;
+  }));
+  if (!telaCobrancas.fecharMenus) {
+    telaCobrancas.fecharMenus = true;
+    document.addEventListener('click', (ev) => document.querySelectorAll('details.cob-mais[open]').forEach((o) => { if (!o.contains(ev.target)) o.open = false; }));
+    window.addEventListener('scroll', () => document.querySelectorAll('details.cob-mais[open]').forEach((o) => (o.open = false)), true);
+  }
   conteudo.querySelectorAll('[data-pix]').forEach((b) => (b.onclick = () => informarPixDialogo(lista.find((x) => x.id === Number(b.dataset.pix)), telaCobrancas)));
   conteudo.querySelectorAll('[data-email]').forEach((b) => (b.onclick = async () => {
     const c = lista.find((x) => x.id === Number(b.dataset.email));

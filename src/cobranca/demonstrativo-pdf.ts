@@ -40,7 +40,7 @@ export async function gerarDemonstrativoPdf(d: DadosDemonstrativo): Promise<Buff
     // cabeçalho do escritório
     let y = 12 * MM;
     if (d.emitente.logo) {
-      try { pdf.image(d.emitente.logo, PW / 2 - 35 * MM, y, { fit: [70 * MM, 20 * MM], align: 'center', valign: 'center' }); y += 22 * MM; }
+      try { pdf.image(d.emitente.logo, PW / 2 - 55 * MM, y, { fit: [110 * MM, 34 * MM], align: 'center', valign: 'center' }); y += 37 * MM; }
       catch { d.emitente.logo = null; }
     }
     if (!d.emitente.logo) { pdf.fillColor(AZUL).font('Helvetica-Bold').fontSize(16).text(d.emitente.nome, X, y, { width: W, align: 'center' }); y = pdf.y + 2 * MM; }
