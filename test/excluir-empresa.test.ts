@@ -5,13 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const html = fs.readFileSync('ferramentas/gerador-de-licencas.html', 'utf8');
+const nucleo = /<script id="nucleo">([\s\S]*?)<\/script>/.exec(html)![1];
+const ferr = new Function(nucleo + '; return { gerarChaves, emitirCodigoSuporte };')();
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kontor-excluir-'));
 Object.assign(process.env, { DATABASE_PATH: path.join(tmp, 'd.db'), STORAGE_DIR: tmp, MASTER_KEY: crypto.randomBytes(32).toString('base64'), SESSION_SECRET: 'x', NFSE_DESKTOP: '1', NFE_BUSCA_AUTOMATICA: '0', FECHAMENTO_AUTOMATICO: '0', AVISOS_AUTOMATICOS: '0', SITFIS_AUTOMATICO: '0' });
 
-test('excluir empresa: só o master, com a senha master, apagando tudo o que é dela', async () => {
+test('excluir empresa: só o master, com código de suporte, apagando tudo o que é dela', async () => {
   const { criarApp } = await import('../src/server.js');
   const { db } = await import('../src/db.js');
-  const { garantirMaster, hashSenha } = await import('../src/auth.js');
+  const { garantirMaster } = await import('../src/auth.js');
   const app = await criarApp();
   const call = async (method: any, url: string, payload?: any, token?: string) => {
     const r = await app.inject({ method, url, payload, headers: token ? { authorization: `Bearer ${token}` } : {} });
@@ -20,8 +23,12 @@ test('excluir empresa: só o master, com a senha master, apagando tudo o que é 
   try {
     const t = (await call('POST', '/api/setup', { escritorio: 'Ciclo', usuario: 'ana', nome: 'Ana', email: 'ana@x.com', senha: 'senha-segura-1' })).json.token;
     garantirMaster();
-    db.prepare("UPDATE usuarios SET senha_hash = ?, trocar_senha = 0 WHERE mestre = 1").run(hashSenha('senha-master-9'));
-    const tm = (await call('POST', '/api/login', { usuario: 'kontor', senha: 'senha-master-9' })).json.token;
+    // o master não tem senha: entra e confirma com um código de suporte assinado
+    const chaves = await ferr.gerarChaves();
+    const L = await import('../src/licenca.js');
+    L._teste.chave = () => chaves.publica;
+    const codigoSuporte = (await ferr.emitirCodigoSuporte(chaves.privada, L.codigoDoComputador(), 4)).codigo;
+    const tm = (await call('POST', '/api/login', { usuario: 'kontor', senha: codigoSuporte })).json.token;
     const base = { cod_municipio: '4202404', uf: 'SC', cliente_desde: '2020-01-01' };
     const esc = (await call('POST', '/api/escritorio/carteira', { ...base, documento: '06990590000123', razao_social: 'Ciclo', regime: 'SIMPLES', eh_escritorio: true }, t)).json.id;
     const alvo = (await call('POST', '/api/escritorio/carteira', { ...base, documento: '45723174000110', razao_social: 'Alfa', regime: 'SIMPLES', tem_funcionarios: true }, t)).json.id;
@@ -36,7 +43,7 @@ test('excluir empresa: só o master, com a senha master, apagando tudo o que é 
     assert.equal(res.clientes, 1);
     assert.equal((await call('POST', `/api/empresas/${alvo}/excluir`, { senha: 'errada' }, tm)).status, 400);
     assert.ok(db.prepare('SELECT 1 FROM empresas WHERE id = ?').get(alvo), 'senha errada não apaga');
-    const r = await call('POST', `/api/empresas/${alvo}/excluir`, { senha: 'senha-master-9' }, tm);
+    const r = await call('POST', `/api/empresas/${alvo}/excluir`, { senha: codigoSuporte }, tm);
     assert.equal(r.status, 200);
     assert.ok(fs.existsSync(r.json.copia), 'cópia de segurança antes de apagar');
     assert.equal(db.prepare('SELECT 1 FROM empresas WHERE id = ?').get(alvo), undefined);

@@ -19,8 +19,17 @@ export const MODULOS = {
 } as const;
 export type Modulo = keyof typeof MODULOS;
 export const TODOS_MODULOS = Object.keys(MODULOS) as Modulo[];
+/** Senha padrão das versões antigas (pública). Não é mais atribuída a ninguém; só continua proibida como senha nova. */
 export const SENHA_PADRAO = 'Kontor2026';
 export const LOGIN_MESTRE = 'KONTOR';
+/** Hash que nenhuma senha confere (conferirSenha só aceita scrypt): conta sem login por senha. */
+export const SEM_SENHA = '!';
+
+/** Senha provisória aleatória (12 caracteres, sem letras ou números que se confundem). Mostrada uma única vez a quem a gerou. */
+export function senhaProvisoria(): string {
+  const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from({ length: 12 }, () => alfabeto[crypto.randomInt(alfabeto.length)]).join('');
+}
 
 export interface Usuario {
   id: number;
@@ -163,7 +172,7 @@ export function hashSenha(senha: string): string {
 
 export function conferirSenha(senha: string, armazenado: string): boolean {
   const [alg, salB64, hB64] = armazenado.split('$');
-  if (alg !== 'scrypt') return false;
+  if (alg !== 'scrypt' || !salB64 || !hB64) return false;
   const h = crypto.scryptSync(senha, Buffer.from(salB64, 'base64'), 64);
   return crypto.timingSafeEqual(h, Buffer.from(hB64, 'base64'));
 }
@@ -171,9 +180,11 @@ export function conferirSenha(senha: string, armazenado: string): boolean {
 const VALIDADE_TOKEN_S = 12 * 3600;
 
 /** Token simples assinado com HMAC: base64url(payload).assinatura */
-export function gerarToken(usuarioId: number): string {
+export function gerarToken(usuarioId: number, expiraEmMs?: number): string {
   const v = (db.prepare('SELECT sessao_v FROM usuarios WHERE id = ?').get(usuarioId) as { sessao_v: number } | undefined)?.sessao_v ?? 0;
-  const payload = Buffer.from(JSON.stringify({ u: usuarioId, v, exp: Math.floor(Date.now() / 1000) + VALIDADE_TOKEN_S })).toString('base64url');
+  const padrao = Math.floor(Date.now() / 1000) + VALIDADE_TOKEN_S;
+  const exp = expiraEmMs ? Math.min(padrao, Math.floor(expiraEmMs / 1000)) : padrao;
+  const payload = Buffer.from(JSON.stringify({ u: usuarioId, v, exp })).toString('base64url');
   const sig = crypto.createHmac('sha256', config.sessionSecret).update(payload).digest('base64url');
   return `${payload}.${sig}`;
 }
@@ -243,15 +254,18 @@ export const sistemaConfigurado = () => (db.prepare('SELECT COUNT(*) AS n FROM u
 
 /**
  * Usuário master do Kontor (suporte): administrador que ninguém mais pode alterar ou redefinir.
- * Criado na primeira execução depois que o escritório existe; a senha inicial vale até o próprio master trocá-la.
+ * Não tem senha. Só entra com um código de suporte assinado pela chave privada do Kontor,
+ * gerado para este computador e com validade curta (ver acessoDeSuporte em licenca.ts).
+ * Instalações antigas tinham uma senha inicial fixa no código: ela é inutilizada aqui, a cada início.
  */
 export function garantirMaster(): void {
+  db.prepare('UPDATE usuarios SET senha_hash = ?, trocar_senha = 0, sessao_v = sessao_v + 1 WHERE mestre = 1 AND senha_hash <> ?').run(SEM_SENHA, SEM_SENHA);
   if (db.prepare('SELECT 1 FROM usuarios WHERE mestre = 1').get()) return;
   const esc = db.prepare('SELECT id FROM escritorios ORDER BY id LIMIT 1').get() as { id: number } | undefined;
   if (!esc) return;
   if (db.prepare('SELECT 1 FROM usuarios WHERE login = ?').get(LOGIN_MESTRE)) return; // nome já usado por outro usuário
   db.prepare("INSERT INTO usuarios (escritorio_id, nome, email, login, senha_hash, papel, tipo, mestre) VALUES (?,?,?,?,?,?,'adm',1)")
-    .run(esc.id, 'Kontor (master)', 'kontor@kontor.local', LOGIN_MESTRE, hashSenha('270820'), 'admin');
+    .run(esc.id, 'Kontor (master)', 'kontor@kontor.local', LOGIN_MESTRE, SEM_SENHA, 'admin');
 }
 
 /** Primeiro acesso: cria o escritório e o administrador. Só funciona enquanto não existe nenhum usuário. */

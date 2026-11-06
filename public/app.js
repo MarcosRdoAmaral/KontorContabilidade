@@ -341,10 +341,10 @@ $('#form-login').onsubmit = async (ev) => {
 };
 $('#sair').onclick = sair;
 
-// Esqueci minha senha: 1) informa o usuário e recebe um código por e-mail; 2) informa o código e a senha volta à padrão.
+// Esqueci minha senha: 1) informa o usuário e recebe um código por e-mail; 2) informa o código e a senha nova.
 $('#esqueci').onclick = () => abrirDialogo(`
   <form id="form-esqueci"><h2>Esqueci minha senha</h2>
-    <p class="sutil">Enviamos um código de 6 dígitos para o e-mail cadastrado no seu usuário. Ao informá-lo, sua senha volta para a senha padrão do sistema e você cria uma nova em seguida.</p>
+    <p class="sutil">Enviamos um código de 6 dígitos para o e-mail cadastrado no seu usuário. Com ele, você cria a sua senha nova.</p>
     <label>Usuário <input name="usuario" required autocapitalize="characters" style="text-transform:uppercase" value="${esc($('#form-login').usuario.value.trim().toUpperCase())}"></label>
     <p class="erro" id="erro-esqueci"></p>
     <div class="acoes"><button class="primario" type="submit">Enviar código por e-mail</button><button type="button" data-fechar>Fechar</button></div>
@@ -360,14 +360,17 @@ $('#esqueci').onclick = () => abrirDialogo(`
         <form id="form-codigo"><h2>Digite o código</h2>
           <p class="sutil">${esc(j.mensagem)}</p>
           <label>Código de 6 dígitos <input name="codigo" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"></label>
+          <label>Nova senha <input name="nova" type="password" minlength="8" required autocomplete="new-password"><span class="dica">Mínimo de 8 caracteres.</span></label>
+          <label>Repita a nova senha <input name="nova2" type="password" minlength="8" required autocomplete="new-password"></label>
           <p class="erro" id="erro-codigo"></p>
-          <div class="acoes"><button class="primario" type="submit">Redefinir para a senha padrão</button><button type="button" data-fechar>Fechar</button></div>
+          <div class="acoes"><button class="primario" type="submit">Salvar nova senha</button><button type="button" data-fechar>Fechar</button></div>
         </form>`;
       d.querySelectorAll('[data-fechar]').forEach((b) => (b.onclick = () => d.close()));
       $('#form-codigo').onsubmit = async (e2) => {
         e2.preventDefault();
+        if (e2.target.nova.value !== e2.target.nova2.value) return ($('#erro-codigo').textContent = 'As senhas novas não são iguais.');
         try {
-          const r2 = await fetch('/api/esqueci-senha/confirmar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario, codigo: e2.target.codigo.value.trim() }) });
+          const r2 = await fetch('/api/esqueci-senha/confirmar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario, codigo: e2.target.codigo.value.trim(), nova: e2.target.nova.value }) });
           const j2 = await r2.json();
           if (!r2.ok) throw new Error(j2.erro || 'Código inválido.');
           d.close(); $('#form-login').usuario.value = usuario; $('#form-login').senha.focus();
@@ -378,13 +381,13 @@ $('#esqueci').onclick = () => abrirDialogo(`
   };
 });
 
-/** Troca de senha. Obrigatória (sem como fechar) no primeiro acesso com senha padrão. */
+/** Troca de senha. Obrigatória (sem como fechar) no primeiro acesso com senha provisória. */
 function trocarSenha({ obrigatoria = false } = {}) {
   const d = abrirDialogo(`
     <form id="form-senha"><h2>${obrigatoria ? 'Crie sua senha' : 'Alterar minha senha'}</h2>
       ${obrigatoria ? '<p class="sutil">Você está usando uma senha provisória. Escolha uma senha só sua para continuar.</p>' : ''}
       <label>Senha atual <input name="atual" type="password" required autocomplete="current-password"></label>
-      <label>Nova senha <input name="nova" type="password" minlength="8" required autocomplete="new-password"><span class="dica">Mínimo de 8 caracteres e diferente da senha padrão.</span></label>
+      <label>Nova senha <input name="nova" type="password" minlength="8" required autocomplete="new-password"><span class="dica">Mínimo de 8 caracteres.</span></label>
       <label>Repita a nova senha <input name="nova2" type="password" minlength="8" required autocomplete="new-password"></label>
       <p class="erro" id="erro-senha"></p>
       <div class="acoes"><button class="primario" type="submit">Salvar senha</button>${obrigatoria ? '<button type="button" id="senha-sair">Sair</button>' : '<button type="button" data-fechar>Fechar</button>'}</div>
@@ -3438,7 +3441,7 @@ async function telaEmpresas() {
   }));
 }
 
-/** Exclusão definitiva de uma empresa: só o usuário master, confirmando com a senha master. */
+/** Exclusão definitiva de uma empresa: só o usuário master, confirmando com um código de suporte. */
 async function excluirEmpresa(e) {
   let r;
   try { r = await api('GET', `/api/empresas/${e.id}/exclusao`); } catch (err) { return aviso(mensagemErro(err)); }
@@ -3449,7 +3452,7 @@ async function excluirEmpresa(e) {
       ${itens.length ? `<ul>${itens.map(([n, t]) => `<li>${n} ${t}</li>`).join('')}</ul>` : ''}
       ${r.empresa.eh_escritorio ? '<p><strong>Atenção:</strong> esta é a empresa do escritório, que emite as notas e os boletos de honorários.</p>' : ''}
       Antes de apagar, o sistema guarda uma cópia de segurança do banco na pasta <em>antes-de-excluir</em>.</div>
-    <label>Senha master <input type="password" name="senha" required autocomplete="current-password"></label>
+    <label>Código de suporte <input type="password" name="senha" required autocomplete="off" spellcheck="false"><span class="dica">Um código de suporte válido para este computador (o mesmo tipo usado para entrar como KONTOR).</span></label>
     <p class="erro" id="erro-excluir-emp"></p>
     <div class="acoes"><button class="perigo" type="submit">Excluir definitivamente</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
     const f = d.querySelector('#form-excluir-emp');
@@ -3675,16 +3678,26 @@ async function telaUsuarios() {
   corpoConfig().querySelectorAll('[data-reset]').forEach((b) => (b.onclick = () => {
     const x = lista.find((y) => y.id === Number(b.dataset.reset));
     abrirDialogo(`<form id="form-reset"><h2>Redefinir senha</h2>
-      <p>A senha de <strong>${esc(x.login)}</strong> (${esc(x.nome)}) voltará para a senha padrão <strong>Kontor2026</strong> e a pessoa terá de criar uma nova no próximo acesso. Ela será desconectada agora.</p>
+      <p>O sistema vai gerar uma senha provisória para <strong>${esc(x.login)}</strong> (${esc(x.nome)}), que você entrega à pessoa. Ela terá de criar uma senha nova no próximo acesso e será desconectada agora.</p>
       <p class="erro" id="erro-reset"></p>
       <div class="acoes"><button class="primario" type="submit">Redefinir</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {
       $('#form-reset').onsubmit = async (ev) => {
         ev.preventDefault();
-        try { await api('POST', `/api/usuarios/${x.id}/redefinir-senha`, {}); d.close(); aviso(`Senha de ${x.login} redefinida para a senha padrão.`); telaUsuarios(); }
+        try { const r = await api('POST', `/api/usuarios/${x.id}/redefinir-senha`, {}); d.close(); telaUsuarios(); mostrarSenhaProvisoria(x.login, r.senhaProvisoria); }
         catch (e) { $('#erro-reset').textContent = mensagemErro(e); }
       };
     });
   }));
+}
+
+/** Mostra a senha provisória uma única vez (ela não fica guardada em lugar nenhum). */
+function mostrarSenhaProvisoria(login, senha) {
+  abrirDialogo(`<div><h2>Senha provisória</h2>
+    <p>Entregue esta senha a <strong>${esc(login)}</strong> por um canal reservado. Ela só aparece agora, e a pessoa terá de criar uma senha nova no primeiro acesso.</p>
+    <p style="font-family:ui-monospace,monospace;font-size:22px;letter-spacing:1px;user-select:all;padding:10px 14px;border:1px solid var(--borda, #444);border-radius:8px;display:inline-block">${esc(senha)}</p>
+    <div class="acoes"><button type="button" class="primario" id="copiar-provisoria">Copiar</button><button type="button" data-fechar>Fechar</button></div></div>`, () => {
+    $('#copiar-provisoria').onclick = async () => { try { await navigator.clipboard.writeText(senha); aviso('Senha copiada.'); } catch { aviso('Selecione a senha e copie manualmente.'); } };
+  });
 }
 
 function formUsuario(x, lista) {
@@ -3700,7 +3713,7 @@ function formUsuario(x, lista) {
         <label>Nome <input name="nome" required value="${esc(x?.nome ?? '')}"></label>
         <label>E-mail <input name="email" type="email" value="${esc(x?.email ?? '')}"><span class="dica">Necessário para o "esqueci minha senha".</span></label>
         <label>Perfil <select name="tipo"><option value="normal" ${x?.tipo !== 'adm' ? 'selected' : ''}>Normal (acessos marcados abaixo)</option><option value="adm" ${x?.tipo === 'adm' ? 'selected' : ''}>Administrador (acesso total)</option></select></label>
-        ${novo ? '<label>Senha inicial <input name="senha" type="password" minlength="8" autocomplete="new-password"><span class="dica">Em branco = senha padrão Kontor2026, e a pessoa será obrigada a trocá-la no primeiro acesso.</span></label>' : `<label class="largo"><span><input type="checkbox" name="ativo" ${x.ativo ? 'checked' : ''}> Usuário ativo (desmarque para bloquear o acesso)</span></label>`}
+        ${novo ? '<label>Senha inicial <input name="senha" type="password" minlength="8" autocomplete="new-password"><span class="dica">Em branco = o sistema gera uma senha provisória, e a pessoa será obrigada a trocá-la no primeiro acesso.</span></label>' : `<label class="largo"><span><input type="checkbox" name="ativo" ${x.ativo ? 'checked' : ''}> Usuário ativo (desmarque para bloquear o acesso)</span></label>`}
       </div>
       <fieldset id="grupo-modulos" style="margin-top:16px"><legend>Funcionalidades liberadas</legend>
         ${Object.entries(modulos).map(([k, nome]) => `<label><span><input type="checkbox" name="mod" value="${k}" ${marcado(k) ? 'checked' : ''}> ${esc(nome)}</span></label>`).join('')}
@@ -3723,7 +3736,8 @@ function formUsuario(x, lista) {
       try {
         if (novo) {
           const r = await api('POST', '/api/usuarios', { login: f.login.value.trim().toUpperCase(), nome: f.nome.value, email: f.email.value, senha: f.senha.value, tipo: f.tipo.value, permissoes, empresas });
-          aviso(r.senhaPadrao ? 'Usuário criado com a senha padrão Kontor2026 (troca obrigatória no primeiro acesso).' : 'Usuário criado.');
+          if (r.senhaProvisoria) { d.close(); telaUsuarios(); mostrarSenhaProvisoria(r.login ?? f.login.value.trim().toUpperCase(), r.senhaProvisoria); return; }
+          aviso('Usuário criado.');
         } else {
           await api('PUT', `/api/usuarios/${x.id}`, { nome: f.nome.value, email: f.email.value, tipo: f.tipo.value, permissoes, empresas, ativo: f.ativo.checked });
           aviso('Usuário atualizado.');
@@ -3987,7 +4001,7 @@ async function zerarDadosDialogo() {
     <label class="check"><input type="checkbox" name="clientes" checked> <span><strong>Clientes e empresas</strong>: ${r.clientes.carteira} cliente(s) da carteira e ${r.clientes.empresas} outra(s) empresa(s), com tudo o que é deles (obrigações, controle mensal, fechamentos, situação fiscal, senhas, certificados, contratos, notas, compras).</span></label>
     <label class="check"><input type="checkbox" name="movimento" checked> <span><strong>Movimento do escritório</strong>${r.escritorio ? ` (${esc(r.escritorio.razao_social)})` : ''}: ${itens.length ? itens.map(([n, t]) => `${n} ${t}`).join(', ') : 'nada registrado'}, além de extratos, cartões e estoque.</span></label>
     <div class="banner teste"><strong>Não dá para desfazer pelo sistema.</strong> Para voltar, só restaurando o backup (Arquivo &gt; Restaurar backup…).</div>
-    <label>Senha master <input type="password" name="senha" required autocomplete="current-password"></label>
+    <label>Código de suporte <input type="password" name="senha" required autocomplete="off" spellcheck="false"><span class="dica">Um código de suporte válido para este computador (o mesmo tipo usado para entrar como KONTOR).</span></label>
     <label>Digite ZERAR para confirmar <input name="confirmacao" required autocomplete="off"></label>
     <p class="erro" id="erro-zerar"></p>
     <div class="acoes"><button class="perigo" type="submit">Baixar backup e zerar</button><button type="button" data-fechar>Cancelar</button></div></form>`, (d) => {

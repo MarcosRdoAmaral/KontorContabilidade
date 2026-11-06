@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { db } from '../db.js';
-import { LOGIN_MESTRE, MODULOS, SENHA_PADRAO, conferirSenha, empresaPermitida, hashSenha, modulosDoUsuario, type Usuario } from '../auth.js';
+import { LOGIN_MESTRE, MODULOS, SENHA_PADRAO, conferirSenha, senhaProvisoria, empresaPermitida, hashSenha, modulosDoUsuario, type Usuario } from '../auth.js';
 import { ErroNegocio } from './emissao.js';
 import { enviarCodigoRecuperacao } from './email.js';
 
@@ -49,12 +49,14 @@ export function criarUsuario(caller: Usuario, d: z.infer<typeof NovoUsuario>) {
   if (db.prepare('SELECT 1 FROM usuarios WHERE login = ?').get(d.login)) throw new ErroNegocio('Já existe um usuário com este nome. Escolha outro.', 409);
   const email = (d.email || '').toLowerCase() || `${d.login.toLowerCase()}${SEM_EMAIL}`;
   if (db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new ErroNegocio('Este e-mail já está em uso por outro usuário.', 409);
-  const trocar = d.senha ? 0 : 1;
+  if (d.senha && d.senha === SENHA_PADRAO) throw new ErroNegocio('Escolha uma senha diferente da senha padrão das versões antigas.');
+  // sem senha informada: provisória aleatória, mostrada uma vez ao administrador; a troca é obrigatória no primeiro acesso
+  const provisoria = d.senha ? null : senhaProvisoria();
   const id = Number(db.prepare(`INSERT INTO usuarios (escritorio_id, nome, email, login, senha_hash, papel, tipo, permissoes, trocar_senha) VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(caller.escritorio_id, d.nome, email, d.login, hashSenha(d.senha || SENHA_PADRAO), d.tipo === 'adm' ? 'admin' : 'operador', d.tipo,
-      d.tipo === 'adm' ? null : JSON.stringify(modulosValidos(d.permissoes)), trocar).lastInsertRowid);
+    .run(caller.escritorio_id, d.nome, email, d.login, hashSenha(d.senha || provisoria!), d.tipo === 'adm' ? 'admin' : 'operador', d.tipo,
+      d.tipo === 'adm' ? null : JSON.stringify(modulosValidos(d.permissoes)), provisoria ? 1 : 0).lastInsertRowid);
   vincularEmpresas(caller, id, d.empresas);
-  return { id, senhaPadrao: !d.senha };
+  return { id, senhaProvisoria: provisoria };
 }
 
 function alvo(caller: Usuario, id: number) {
@@ -86,14 +88,17 @@ export function editarUsuario(caller: Usuario, id: number, d: z.infer<typeof Edi
 export function redefinirSenha(caller: Usuario, id: number) {
   const a = alvo(caller, id);
   if (a.mestre) throw new ErroNegocio('A senha do usuário master não pode ser redefinida por outra pessoa.', 403);
-  db.prepare('UPDATE usuarios SET senha_hash = ?, trocar_senha = 1, sessao_v = sessao_v + 1 WHERE id = ?').run(hashSenha(SENHA_PADRAO), id);
+  const provisoria = senhaProvisoria();
+  db.prepare('UPDATE usuarios SET senha_hash = ?, trocar_senha = 1, sessao_v = sessao_v + 1 WHERE id = ?').run(hashSenha(provisoria), id);
+  return provisoria;
 }
 
 export function trocarMinhaSenha(u: Usuario, atual: string, nova: string) {
+  if (u.mestre) throw new ErroNegocio('O acesso de suporte não tem senha: ele entra só com código de suporte.', 400);
   const r = db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(u.id) as { senha_hash: string };
   if (!conferirSenha(atual, r.senha_hash)) throw new ErroNegocio('A senha atual está incorreta.', 400);
   if (nova.length < 8) throw new ErroNegocio('A nova senha precisa ter pelo menos 8 caracteres.');
-  if (nova === SENHA_PADRAO) throw new ErroNegocio('Escolha uma senha diferente da senha padrão.');
+  if (nova === SENHA_PADRAO) throw new ErroNegocio('Escolha uma senha diferente da senha padrão das versões antigas.');
   if (nova === atual) throw new ErroNegocio('A nova senha precisa ser diferente da atual.');
   db.prepare('UPDATE usuarios SET senha_hash = ?, trocar_senha = 0, sessao_v = sessao_v + 1 WHERE id = ?').run(hashSenha(nova), u.id);
 }
@@ -122,16 +127,18 @@ export async function solicitarRecuperacao(login: string) {
   await enviarCodigoRecuperacao(a.escritorio_id, a.email, a.nome, codigo);
 }
 
-/** Código correto: a senha volta para a padrão (Kontor2026) e a troca passa a ser obrigatória. */
-export function confirmarRecuperacao(login: string, codigo: string) {
+/** Código correto: o próprio usuário define a senha nova na mesma hora (nenhuma senha conhecida fica valendo no meio do caminho). */
+export function confirmarRecuperacao(login: string, codigo: string, nova: string) {
   const a = db.prepare('SELECT id, mestre FROM usuarios WHERE (login = ? OR email = ?) AND ativo = 1').get(login.trim().toUpperCase(), login.trim().toLowerCase()) as any;
   const r = a && !a.mestre ? (db.prepare('SELECT * FROM recuperacao_senha WHERE usuario_id = ?').get(a.id) as any) : null;
   const invalido = () => new ErroNegocio('Código incorreto ou vencido. Peça um novo código.', 400);
   if (!r || r.expira_em < Date.now() || r.tentativas >= 5) throw invalido();
   const ok = crypto.timingSafeEqual(Buffer.from(hashCodigo(codigo.trim())), Buffer.from(r.codigo_hash));
   if (!ok) { db.prepare('UPDATE recuperacao_senha SET tentativas = tentativas + 1 WHERE usuario_id = ?').run(a.id); throw invalido(); }
+  if (nova.length < 8) throw new ErroNegocio('A nova senha precisa ter pelo menos 8 caracteres.');
+  if (nova === SENHA_PADRAO) throw new ErroNegocio('Escolha uma senha diferente da senha padrão das versões antigas.');
   db.prepare('UPDATE recuperacao_senha SET expira_em = 0 WHERE usuario_id = ?').run(a.id);
-  db.prepare('UPDATE usuarios SET senha_hash = ?, trocar_senha = 1, sessao_v = sessao_v + 1 WHERE id = ?').run(hashSenha(SENHA_PADRAO), a.id);
+  db.prepare('UPDATE usuarios SET senha_hash = ?, trocar_senha = 0, sessao_v = sessao_v + 1 WHERE id = ?').run(hashSenha(nova), a.id);
 }
 
 // ---------- Tentativas de login ----------

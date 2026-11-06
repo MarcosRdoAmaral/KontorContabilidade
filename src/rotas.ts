@@ -10,7 +10,7 @@ import { EdicaoUsuario, NovoUsuario, confirmarRecuperacao, criarUsuario, editarU
 import { config } from './config.js';
 import { camposDesconhecidos, exemplo, listarModelos, ModeloEditado, renderizar, restaurarModelo, salvarModelo } from './servicos/modelos-email.js';
 import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
-import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual } from './licenca.js';
+import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual, acessoDeSuporte } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, ConfigPix, configPixPublica, gerarPixCobranca, gerarPixPendentes, salvarConfigPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
@@ -187,9 +187,14 @@ export async function rotas(app: FastifyInstance) {
     const chave = nome.toUpperCase();
     if (loginBloqueado(chave)) return reply.code(429).send({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
     const usr = db.prepare('SELECT * FROM usuarios WHERE (login = ? OR email = ?) AND ativo = 1').get(chave, nome.toLowerCase()) as any;
-    if (!usr || !conferirSenha(c.senha, usr.senha_hash)) { registrarFalha(chave); return reply.code(401).send({ erro: 'Usuário ou senha incorretos.' }); }
+    // master (suporte Kontor): sem senha; entra só com código de suporte assinado, deste computador e ainda válido
+    let expiraSuporte: string | undefined;
+    if (usr?.mestre) {
+      try { expiraSuporte = acessoDeSuporte(c.senha); } catch { registrarFalha(chave); return reply.code(401).send({ erro: 'Usuário ou senha incorretos.' }); }
+      req.log.warn({ usuario: usr.login, expira: expiraSuporte }, 'Acesso de suporte (master) com código assinado');
+    } else if (!usr || !conferirSenha(c.senha, usr.senha_hash)) { registrarFalha(chave); return reply.code(401).send({ erro: 'Usuário ou senha incorretos.' }); }
     limparFalhas(chave);
-    return { token: gerarToken(usr.id), usuario: { id: usr.id, nome: usr.nome, login: usr.login, papel: usr.papel, tipo: usr.tipo }, trocar_senha: !!usr.trocar_senha };
+    return { token: gerarToken(usr.id, expiraSuporte ? Date.parse(expiraSuporte) : undefined), usuario: { id: usr.id, nome: usr.nome, login: usr.login, papel: usr.papel, tipo: usr.tipo }, trocar_senha: !!usr.trocar_senha };
   });
 
   // Esqueci minha senha: manda um código ao e-mail cadastrado; ao confirmá-lo a senha volta para a padrão.
@@ -200,9 +205,9 @@ export async function rotas(app: FastifyInstance) {
     return respostaRecuperacao;
   });
   app.post('/api/esqueci-senha/confirmar', async (req) => {
-    const d = z.object({ usuario: z.string().min(1), codigo: z.string().regex(/^\d{6}$/, 'O código tem 6 dígitos') }).parse(req.body);
-    confirmarRecuperacao(d.usuario, d.codigo);
-    return { ok: true, mensagem: 'Pronto! Sua senha agora é a senha padrão (Kontor2026). Entre com ela e o sistema pedirá que você crie uma nova.' };
+    const d = z.object({ usuario: z.string().min(1), codigo: z.string().regex(/^\d{6}$/, 'O código tem 6 dígitos'), nova: z.string().min(8, 'A nova senha precisa ter pelo menos 8 caracteres') }).parse(req.body);
+    confirmarRecuperacao(d.usuario, d.codigo, d.nova);
+    return { ok: true, mensagem: 'Pronto! Sua nova senha já vale. Entre com ela.' };
   });
 
   app.register(async (api) => {
@@ -216,29 +221,29 @@ export async function rotas(app: FastifyInstance) {
       const naoContratados = modulosPermitidos(u(req)).filter((m) => MODULOS_PAGOS[m] && !lib.includes(m)).map((m) => ({ id: m, nome: MODULOS_PAGOS[m].nome, resumo: MODULOS_PAGOS[m].resumo }));
       return { ...resto, email, modulos: modulosDoUsuario(u(req)), todosModulos: MODULOS, naoContratados };
     });
-    // ---------- Exclusão de empresa: só o usuário master, confirmando com a senha dele ----------
+    // ---------- Exclusão de empresa: só o usuário master, confirmando com um código de suporte ----------
     const soMaster = (req: any) => { if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode excluir empresas.', 403); };
     api.get('/api/empresas/:id/exclusao', async (req) => { soMaster(req); return resumoExclusao(u(req).escritorio_id, Number((req.params as any).id)); });
     api.post('/api/empresas/:id/excluir', async (req, reply) => {
       soMaster(req);
-      const { senha } = z.object({ senha: z.string().min(1, 'Informe a senha master') }).parse(req.body);
+      const { senha } = z.object({ senha: z.string().min(1, 'Informe o código de suporte') }).parse(req.body);
       const chave = `EXCLUIR:${u(req).id}`;
       if (loginBloqueado(chave)) return reply.code(429).send({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
-      const hash = (db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(u(req).id) as any).senha_hash;
-      if (!conferirSenha(senha, hash)) { registrarFalha(chave); throw new ErroNegocio('Senha master incorreta.', 400); }
+      // o master não tem senha: a confirmação é um código de suporte válido (deste computador e dentro da validade)
+      try { acessoDeSuporte(senha); } catch { registrarFalha(chave); throw new ErroNegocio('Código de suporte incorreto ou vencido.', 400); }
       limparFalhas(chave);
       return excluirEmpresa(u(req).escritorio_id, Number((req.params as any).id));
     });
-    // ---------- Zerar dados (Configurações > Backup): só o usuário master, com a senha dele ----------
+    // ---------- Zerar dados (Configurações > Backup): só o usuário master, com um código de suporte ----------
     api.get('/api/zerar', async (req) => { if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode zerar os dados.', 403); return resumoZerar(u(req).escritorio_id); });
     api.post('/api/zerar', async (req, reply) => {
       if (!u(req).mestre) throw new ErroNegocio('Só o usuário master pode zerar os dados.', 403);
-      const { senha, confirmacao, ...escopo } = z.object({ senha: z.string().min(1, 'Informe a senha master'), confirmacao: z.string(), clientes: z.boolean(), movimento: z.boolean() }).parse(req.body);
+      const { senha, confirmacao, ...escopo } = z.object({ senha: z.string().min(1, 'Informe o código de suporte'), confirmacao: z.string(), clientes: z.boolean(), movimento: z.boolean() }).parse(req.body);
       if (confirmacao.trim().toUpperCase() !== 'ZERAR') throw new ErroNegocio('Digite ZERAR para confirmar.', 400);
       const chave = `ZERAR:${u(req).id}`;
       if (loginBloqueado(chave)) return reply.code(429).send({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
-      const hash = (db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(u(req).id) as any).senha_hash;
-      if (!conferirSenha(senha, hash)) { registrarFalha(chave); throw new ErroNegocio('Senha master incorreta.', 400); }
+      // o master não tem senha: a confirmação é um código de suporte válido (deste computador e dentro da validade)
+      try { acessoDeSuporte(senha); } catch { registrarFalha(chave); throw new ErroNegocio('Código de suporte incorreto ou vencido.', 400); }
       limparFalhas(chave);
       return zerarDados(u(req).escritorio_id, EscopoZerar.parse(escopo));
     });
@@ -267,8 +272,7 @@ export async function rotas(app: FastifyInstance) {
       return { ok: true };
     });
     api.post('/api/usuarios/:id/redefinir-senha', async (req) => {
-      redefinirSenha(u(req), Number((req.params as any).id));
-      return { ok: true };
+      return { ok: true, senhaProvisoria: redefinirSenha(u(req), Number((req.params as any).id)) };
     });
 
     // ---------- Empresas (prestadores) ----------

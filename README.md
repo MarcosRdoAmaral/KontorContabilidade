@@ -137,9 +137,9 @@ Marco da versão 2: emissão de NFS-e nacional, faturamento por cliente (nota / 
 ## Acesso e permissões (v2.3.0)
 
 - Login por **usuário** (sempre em maiúsculas), definido na criação. Há dois perfis: **Administrador** (acesso total, cria usuários e redefine senhas) e **Normal** (só as funcionalidades marcadas e, opcionalmente, só as empresas marcadas). As regras são aplicadas no servidor (`src/auth.ts`, lista `REGRAS`), não só no menu.
-- Usuário **master** `KONTOR`: criado após o primeiro acesso, administrador que nenhum outro usuário altera ou redefine.
-- Senha padrão `Kontor2026`: usada quando um administrador redefine a senha ou o usuário é criado sem senha; a troca é obrigatória no próximo acesso.
-- "Esqueci minha senha": envia um código de 6 dígitos (15 min) ao e-mail do usuário, usando o SMTP configurado em Configurações > E-mail; ao confirmar o código a senha volta à padrão.
+- Usuário **master** `KONTOR` (suporte): criado após o primeiro acesso, administrador que nenhum outro usuário altera ou redefine. **Não tem senha** (1.47.0): entra só com um **código de suporte** `KS1.…` assinado pela chave privada de licenças (Ed25519), gerado em `ferramentas/gerador-de-licencas.html` (item 3) para o código do computador do cliente, com validade de no máximo 24 h. A sessão termina quando o código expira. A antiga senha fixa do master é inutilizada a cada início do sistema.
+- Usuário criado sem senha ou senha redefinida pelo administrador: o sistema gera uma **senha provisória aleatória** (12 caracteres), mostrada uma única vez; a troca é obrigatória no primeiro acesso. Não existe mais senha padrão; a antiga (`Kontor2026`) continua proibida como senha nova.
+- "Esqueci minha senha": envia um código de 6 dígitos (15 min) ao e-mail do usuário, usando o SMTP configurado em Configurações > E-mail; com o código, o próprio usuário define a senha nova.
 - **Configurações** reúne Minha conta, Usuários e acessos, E-mail, Backup, Licença e Atualizações (busca automática ao abrir, a cada hora e ao voltar à janela, com botão "Verificar agora").
 
 ## Manual do usuário

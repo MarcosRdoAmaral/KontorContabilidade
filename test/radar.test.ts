@@ -103,9 +103,9 @@ test('Radar de Oportunidades: pesquisa (demonstração e cache), CRM, painel, pe
     assert.equal(R.painelRadar(2).kpis.totalLeads, 0);
     // permissões: usuário sem o módulo radar não acessa; com ele, não mexe na configuração
     const criar = async (login: string, perms: string[]) => {
-      await call('POST', '/api/usuarios', { login, nome: login, email: `${login}@x.com`, tipo: 'normal', permissoes: perms, empresas: [] }, t);
-      const l1 = (await call('POST', '/api/login', { usuario: login.toUpperCase(), senha: 'Kontor2026' })).json;
-      await call('PUT', '/api/me/senha', { atual: 'Kontor2026', nova: `${login}-nova-123` }, l1.token);
+      const provisoria = (await call('POST', '/api/usuarios', { login, nome: login, email: `${login}@x.com`, tipo: 'normal', permissoes: perms, empresas: [] }, t)).json.senhaProvisoria;
+      const l1 = (await call('POST', '/api/login', { usuario: login.toUpperCase(), senha: provisoria })).json;
+      await call('PUT', '/api/me/senha', { atual: provisoria, nova: `${login}-nova-123` }, l1.token);
       return (await call('POST', '/api/login', { usuario: login.toUpperCase(), senha: `${login}-nova-123` })).json.token;
     };
     const sem = await criar('joao', ['carteira']), com = await criar('maria', ['radar']);

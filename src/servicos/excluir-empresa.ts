@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { ErroNegocio } from './emissao.js';
 
 /**
- * Exclusão definitiva de uma empresa (só o usuário master, com a senha dele).
+ * Exclusão definitiva de uma empresa (só o usuário master, confirmando com um código de suporte).
  * Apaga a empresa e tudo o que é dela, seguindo as chaves estrangeiras do banco: notas, cobranças, clientes
  * (tomadores), serviços, compras, despesas, extratos, obrigações, contratos etc. Antes, faz uma cópia de segurança
  * do banco inteiro em "antes-de-excluir", para desfazer se preciso.

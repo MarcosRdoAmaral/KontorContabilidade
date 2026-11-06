@@ -242,3 +242,31 @@ export function exigirLimite(tipo: 'empresas' | 'clientes', documento?: string |
   const nome = tipo === 'empresas' ? (max === 1 ? '1 empresa' : `${max} empresas`) : (max === 1 ? '1 cliente' : `${max} clientes`);
   throw new ErroNegocio(`O plano ${s.planoNome} permite ${nome}. Para cadastrar mais, altere o plano em Configurações > Licença.`, 402);
 }
+
+// ---- Acesso de suporte (usuário master) ----
+/** Validade máxima de um código de suporte: mesmo que o gerador peça mais, o sistema não aceita. */
+export const SUPORTE_MAX_HORAS = 24;
+
+/**
+ * Confere um código de suporte (KS1.<carga>.<assinatura>), gerado no "Gerador de licenças" com a chave privada do Kontor.
+ * Carga: SUPORTE|<código do computador>|<expira em, ISO>|<aleatório>. Só vale neste computador e até expirar.
+ * Retorna a data de expiração ou lança ErroNegocio (sempre com a mesma mensagem, para não ajudar quem tenta adivinhar).
+ */
+export function acessoDeSuporte(codigo: string): string {
+  const invalido = () => new ErroNegocio('Usuário ou senha incorretos.', 401);
+  const chave = _teste.chave();
+  const partes = String(codigo ?? '').trim().split('.');
+  if (!chave || partes.length !== 3 || partes[0] !== 'KS1') throw invalido();
+  let ok = false;
+  try {
+    const pub = crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: chave }, format: 'jwk' });
+    ok = crypto.verify(null, Buffer.from(partes[1], 'base64url'), pub, Buffer.from(partes[2], 'base64url'));
+  } catch { ok = false; }
+  if (!ok) throw invalido();
+  const [tipo, maquina, expira] = Buffer.from(partes[1], 'base64url').toString('utf8').split('|');
+  const fim = Date.parse(expira ?? '');
+  const agora = _teste.agora().getTime();
+  if (tipo !== 'SUPORTE' || soHex(maquina ?? '') !== soHex(codigoDoComputador())) throw invalido();
+  if (!Number.isFinite(fim) || fim < agora || fim > agora + (SUPORTE_MAX_HORAS * 3600e3) + 5 * 60e3) throw invalido();
+  return new Date(fim).toISOString();
+}
