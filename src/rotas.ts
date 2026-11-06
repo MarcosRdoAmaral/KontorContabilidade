@@ -682,7 +682,7 @@ export async function rotas(app: FastifyInstance) {
       return listarCobrancas(id);
     });
 
-    // ---- cobrança bancária (Ailos) ----
+    // ---- cobrança bancária (remessa e retorno) ----
     const cobrancaDoUsuario = (req: FastifyRequest, id: number) => {
       const c = obterCobranca(id);
       if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
@@ -883,7 +883,7 @@ export async function rotas(app: FastifyInstance) {
       return reply.type('application/xml').header('Content-Disposition', `attachment; filename="${nome}"`).send(xml);
     });
 
-    // ---------- Extrato bancário (PDF Ailos), classificação e conciliação ----------
+    // ---------- Extrato bancário (PDF), classificação e conciliação ----------
     api.post('/api/empresas/:id/extrato/importar', { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
       const id = Number((req.params as any).id); checarEmpresa(req, id);
       const d = z.object({ nome: z.string().max(200).default('extrato.pdf'), pdfBase64: z.string().min(100) }).parse(req.body);
@@ -928,7 +928,7 @@ export async function rotas(app: FastifyInstance) {
       excluirImportacao(Number(p.id), Number(p.iid)); return { ok: true };
     });
 
-    // ---------- Fatura do cartão de crédito (PDF Ailos Cartões) ----------
+    // ---------- Fatura do cartão de crédito (PDF) ----------
     api.post('/api/empresas/:id/cartao/importar', { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
       const id = Number((req.params as any).id); checarEmpresa(req, id);
       const d = z.object({ nome: z.string().max(200).default('fatura.pdf'), pdfBase64: z.string().min(100) }).parse(req.body);

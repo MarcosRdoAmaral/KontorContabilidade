@@ -9,7 +9,7 @@ const dinheiro = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'));
 const ehDinheiro = (s: string) => /^-?\d{1,3}(\.\d{3})*,\d{2}$|^-?\d+,\d{2}$/.test(s);
 
 // ---------------------------------------------------------------------------
-// Leitura do PDF da fatura (Ailos Cartões / Sipag): colunas Data, Descrição, Crédito R$ e Débito R$
+// Leitura do PDF da fatura (layout homologado de emissor de cartão): colunas Data, Descrição, Crédito R$ e Débito R$
 // ---------------------------------------------------------------------------
 export type TipoCartao = 'COMPRA' | 'ANUIDADE' | 'ENCARGO' | 'CREDITO' | 'PAGAMENTO';
 export interface ItemCartao {
@@ -37,7 +37,7 @@ export async function lerPdfFatura(pdf: Buffer): Promise<FaturaLida> {
   const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
   let doc: any;
   try { doc = await pdfjs.getDocument({ data: new Uint8Array(pdf), verbosity: 0, useSystemFonts: false }).promise; }
-  catch { throw new ErroNegocio('Não foi possível abrir o PDF. Confira se é a fatura exportada pelo Ailos Cartões.'); }
+  catch { throw new ErroNegocio('Não foi possível abrir o PDF. Confira se é a fatura em PDF baixada do emissor do cartão.'); }
 
   const out: FaturaLida = { vencimento: '', itens: [], avisos: [] };
   const linhasTexto: string[] = [];
@@ -98,10 +98,10 @@ export async function lerPdfFatura(pdf: Buffer): Promise<FaturaLida> {
       out.itens.push({ data: anoDaCompra(data.s.trim(), out.vencimento || '9999-12-31'), descricao: descricao || desc, cidade, parcelaAtual: pa, parcelaTotal: pt, cartaoFinal: secao === 'GASTOS' ? final : null, valor, tipo });
     }
   }
-  if (!out.vencimento) throw new ErroNegocio('Não encontrei o vencimento da fatura. Por enquanto só a fatura do Ailos Cartões (PDF) é aceita.');
+  if (!out.vencimento) throw new ErroNegocio('Não encontrei o vencimento da fatura. Este modelo de fatura ainda não é reconhecido pelo sistema.');
   // as datas dependem do vencimento, que vem no cabeçalho (antes dos lançamentos); refaz por segurança
   for (const it of out.itens) if (it.data.startsWith('9999')) throw new ErroNegocio('Não foi possível determinar as datas da fatura.');
-  if (!out.itens.length) throw new ErroNegocio('Nenhum lançamento encontrado no PDF. Por enquanto só a fatura do Ailos Cartões é aceita.');
+  if (!out.itens.length) throw new ErroNegocio('Nenhum lançamento encontrado no PDF. Este modelo de fatura ainda não é reconhecido pelo sistema.');
 
   const i = linhasTexto.findIndex((t) => /Pagamento m[íi]nimo/.test(t));
   if (i >= 0) { const n = (linhasTexto[i + 1] ?? '').match(/[\d.]+,\d{2}/g); if (n && n.length >= 2) { out.pagamentoMinimo = dinheiro(n[0]!); out.totalFatura = dinheiro(n[1]!); } }

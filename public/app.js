@@ -1076,7 +1076,7 @@ async function telaEmitir(param) {
 }
 
 // ---------------------------------------------------------------------------
-// Cobranças (boletos Ailos): boleto em PDF, remessa CNAB 240 e retorno
+// Cobranças (boleto por convênio com remessa e retorno): boleto em PDF, remessa CNAB e retorno
 // ---------------------------------------------------------------------------
 const STATUS_COBRANCA = {
   AGUARDANDO_BANCO: 'Pendente (sem boleto)', A_REMETER: 'Boleto pronto', REMETIDO: 'Enviado ao banco', REGISTRADO: 'Registrado no banco',
@@ -1175,9 +1175,9 @@ async function telaCobrancas() {
       <a href="#" data-carteira="PIX" class="${pix ? 'ativo' : ''}">Carteira Pix <span class="contagem">${daCarteira('PIX').length}</span>${faltaPix ? ` <span class="selo-estado" style="--c:var(--g-pend)">${faltaPix} sem Pix</span>` : ''}</a>
     </nav>
     <p class="sutil">${pix ? `Cobranças dos clientes da carteira Pix: com a chave Pix da empresa cadastrada (Empresas › Dados bancários), o Kontor gera o Pix de cada cobrança sozinho; sem ela, gere a cobrança no aplicativo do banco, clique em <strong>Informar Pix</strong> e cole o código copia e cola. O Kontor confere o código e o valor e monta o demonstrativo com o QR Code. ${brl(aberto)} em aberto.`
-      : `Boletos do convênio Ailos, com remessa e retorno. O demonstrativo de cobrança vai junto no e-mail. ${brl(aberto)} em aberto.`} A carteira de cada cliente fica no cadastro dele (Faturamento e cobrança).</p>
+      : `Boletos do convênio bancário, com remessa e retorno. O demonstrativo de cobrança vai junto no e-mail. ${brl(aberto)} em aberto.`} A carteira de cada cliente fica no cadastro dele (Faturamento e cobrança).</p>
     ${coraAtiva ? `<div class="banner">Cobrança pela <strong>Cora</strong>${cora.ambiente === 'teste' ? ' (ambiente de teste)' : ''}: os boletos são registrados na Cora na hora, com Pix, e a baixa é automática (a cada 10 minutos).${cora.saldo != null ? ` Saldo na Cora: <strong>${brl(cora.saldo)}</strong>.` : ''}</div>` : ''}
-    ${!pix && !conta && !coraAtiva ? `<div class="banner teste">Os dados bancários (Ailos) desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
+    ${!pix && !conta && !coraAtiva ? `<div class="banner teste">Os dados bancários desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
     ${vis.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Vencimento</th><th>Cliente</th><th>Nota</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
       ${vis.map((c) => `<tr><td>${dataBr(c.vencimento)}${ativo(c) && c.vencimento < hoje ? ' <span class="dica erro">vencido</span>' : ''}</td>
         <td>${esc(c.tomador_nome)}<br><span class="dica">${esc((c.descricao ?? '').slice(0, 60))}</span>${c.desconto > 0 ? `<br><span class="dica">desconto de ${brl(c.desconto)}: ${esc(c.desconto_motivo ?? '')}</span>` : ''}</td>
@@ -1187,7 +1187,7 @@ async function telaCobrancas() {
     </tbody></table></div>` : `<div class="vazio">${pix ? 'Nenhuma cobrança na carteira Pix. Marque “Pix copia e cola” como carteira no cadastro do cliente (Faturamento e cobrança).' : 'Nenhum boleto registrado. Escolha “Nota + cobrança” ou “Somente a cobrança” ao emitir.'}</div>`}
     ${!pix && remessas.length ? `<h2>Remessas geradas</h2><div class="rolagem"><table class="tabela"><thead><tr><th>Nº</th><th>Data</th><th>Títulos</th><th class="num">Valor</th><th></th></tr></thead><tbody>
       ${remessas.map((r) => `<tr><td>${r.numero}</td><td>${esc(r.criado_em)}</td><td>${r.qtd_titulos}</td><td class="num">${brl(r.valor_total)}</td><td><button data-remessa="${r.id}" data-nome="${esc(r.nome_arquivo)}">Baixar arquivo</button></td></tr>`).join('')}</tbody></table></div>
-      <p class="dica">Envie o arquivo no Ailos Conta Online: Cobrança Bancária → Arquivo de Cobrança. O arquivo de retorno fica no mesmo menu; importe-o aqui para dar baixa nos pagamentos.</p>` : ''}`;
+      <p class="dica">Envie o arquivo de remessa no internet banking do banco, na área de cobrança. Baixe lá o arquivo de retorno e importe-o aqui para dar baixa nos pagamentos.</p>` : ''}`;
   conteudo.querySelectorAll('[data-carteira]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); st.carteira = a.dataset.carteira; telaCobrancas(); }));
   conteudo.querySelectorAll('[data-carta]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.carta}/carta`, `Carta_Cobranca_${b.dataset.carta}.pdf`, true)));
   conteudo.querySelectorAll('[data-demo]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.demo}/demonstrativo`, `Demonstrativo_${b.dataset.demo}.pdf`, true)));
@@ -1432,15 +1432,15 @@ async function telaCobrancas() {
 }
 
 // ---------------------------------------------------------------------------
-// Dados bancários (convênio de cobrança Ailos)
+// Dados bancários (convênio de cobrança com remessa e retorno)
 // ---------------------------------------------------------------------------
 async function telaBanco() {
-  const c = (await api('GET', `/api/empresas/${estado.empresaId}/conta-bancaria`)) ?? { cooperativa_nome: 'Ailos', carteira: '01', multa_pct: 2, juros_pct_mes: 1 };
+  const c = (await api('GET', `/api/empresas/${estado.empresaId}/conta-bancaria`)) ?? { cooperativa_nome: '', carteira: '01', multa_pct: 2, juros_pct_mes: 1 };
   const cora = await api('GET', `/api/empresas/${estado.empresaId}/cora`).catch(() => null);
   const pixCfg = await api('GET', `/api/empresas/${estado.empresaId}/pix-config`).catch(() => null);
   const px = pixCfg?.config;
   conteudo.innerHTML = `
-    <div class="topo"><div><p class="sutil"><a href="#/empresas">← Empresas</a></p><h1>Dados bancários</h1><p class="sutil">${esc(empresa().razao_social)} — cobrança pela Cora (API) ou Ailos (remessa e retorno)</p></div></div>
+    <div class="topo"><div><p class="sutil"><a href="#/empresas">← Empresas</a></p><h1>Dados bancários</h1><p class="sutil">${esc(empresa().razao_social)} — cobrança pela Cora (API) ou por convênio com remessa e retorno</p></div></div>
     <form id="form-pixk" class="cartao" style="margin-bottom:20px">
       <h2 style="margin-top:0">Pix gerado pelo Kontor ${px ? (px.ativo ? '<span class="selo-estado" style="--c:var(--verde)">ativo</span>' : '<span class="selo-estado" style="--c:var(--laranja)">desativado</span>') : ''}</h2>
       <p class="dica">Para os clientes da carteira Pix: o Kontor monta o Pix copia e cola e o QR Code de cada cobrança, com o valor certo, usando a chave Pix da empresa (InfinitePay ou qualquer outro banco). O dinheiro cai direto na conta dessa chave, sem taxa do Kontor. A baixa do pagamento continua manual (botão Pago, ou pelo extrato).</p>
@@ -1457,7 +1457,7 @@ async function telaBanco() {
     </form>
     <form id="form-cora" class="cartao" style="margin-bottom:20px">
       <h2 style="margin-top:0">Banco Cora ${cora ? (cora.ativa ? '<span class="selo-estado" style="--c:var(--verde)">ativa</span>' : '<span class="selo-estado" style="--c:var(--laranja)">desativada</span>') : ''}</h2>
-      <p class="dica">Com a Cora, o boleto (com Pix) é registrado direto pelo sistema, a baixa é automática e o extrato vem da API, sem arquivo de remessa. Para gerar as credenciais: app ou Cora Web › <strong>Integrações via API</strong> › <strong>Integração direta</strong>; baixe o <em>Client ID</em>, o <em>certificado</em> e a <em>chave privada</em> (arquivos .pem). Teste e produção têm credenciais diferentes. Se a empresa tiver Cora ativa, os novos boletos saem pela Cora; os já emitidos pelo Ailos continuam com remessa e retorno.</p>
+      <p class="dica">Com a Cora, o boleto (com Pix) é registrado direto pelo sistema, a baixa é automática e o extrato vem da API, sem arquivo de remessa. Para gerar as credenciais: app ou Cora Web › <strong>Integrações via API</strong> › <strong>Integração direta</strong>; baixe o <em>Client ID</em>, o <em>certificado</em> e a <em>chave privada</em> (arquivos .pem). Teste e produção têm credenciais diferentes. Se a empresa tiver Cora ativa, os novos boletos saem pela Cora; os já emitidos pelo convênio continuam com remessa e retorno.</p>
       <div class="grade">
         <label>Ambiente <select name="ambiente"><option value="producao" ${cora?.ambiente !== 'teste' ? 'selected' : ''}>Produção</option><option value="teste" ${cora?.ambiente === 'teste' ? 'selected' : ''}>Teste (stage)</option></select></label>
         <label>Client ID <input name="client_id" maxlength="120" autocomplete="off" value="${esc(cora?.client_id ?? '')}"></label>
@@ -1481,7 +1481,7 @@ async function telaBanco() {
         <label>Convênio de cobrança <input name="convenio" required inputmode="numeric" maxlength="6" value="${esc(c.convenio ?? '')}"></label>
         <label>Carteira <input name="carteira" required maxlength="2" value="${esc(c.carteira ?? '01')}"></label>
         <label>Formato do arquivo
-          <select name="layout"><option value="CNAB400" ${c.layout !== 'CNAB240' ? 'selected' : ''}>CNAB 400 (padrão Ailos)</option><option value="CNAB240" ${c.layout === 'CNAB240' ? 'selected' : ''}>CNAB 240</option></select></label>
+          <select name="layout"><option value="CNAB400" ${c.layout !== 'CNAB240' ? 'selected' : ''}>CNAB 400</option><option value="CNAB240" ${c.layout === 'CNAB240' ? 'selected' : ''}>CNAB 240</option></select></label>
       </div></fieldset>
       <fieldset><legend>Numeração (para quem já emitia boletos em outro sistema)</legend>
         <p class="dica">O nosso número nunca pode repetir. Se esta conta já emitiu boletos antes do Kontor, informe aqui o <strong>próximo</strong> número livre (último usado + 1) e o número da próxima remessa. Depois que houver boletos emitidos, só é possível aumentar.</p>
@@ -2321,7 +2321,7 @@ async function telaExtrato() {
   const tabCat = (titulo, l, cor) => `<div class="cartao"><h2 style="margin-top:0">${titulo} <span class="sutil">· ${brl(soma(l))}</span></h2>
     ${l.length ? `<table class="tabela"><tbody>${agrupar(l).map(([c, v]) => `<tr><td>${esc(c)}</td><td class="num" style="color:${cor}">${brl(v)}</td><td class="num sutil">${Math.round(v / soma(l) * 100)}%</td></tr>`).join('')}</tbody></table>` : '<p class="sutil">Nada neste mês.</p>'}</div>`;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Extrato e conciliação</h1><p class="sutil">Importe o extrato em PDF do Ailos, classifique entradas e saídas e ligue os recebimentos aos boletos. As <strong>saídas classificadas</strong> são lançadas automaticamente em <a href="#/despesas">Despesas e balanço</a> (exceto “Cartão de crédito” e “Transferências”); entradas como “Outras receitas” entram nas receitas.</p></div>
+    <div class="topo"><div><h1>Extrato e conciliação</h1><p class="sutil">Importe o extrato bancário em PDF, classifique entradas e saídas e ligue os recebimentos aos boletos. As <strong>saídas classificadas</strong> são lançadas automaticamente em <a href="#/despesas">Despesas e balanço</a> (exceto “Cartão de crédito” e “Transferências”); entradas como “Outras receitas” entram nas receitas.</p></div>
       <div><label>Mês ${d.meses.length ? `<select id="mes-ext">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-ext" value="${mes}">`}</label>
         ${coraExt?.ativa ? '<button class="primario" id="cora-ext">Sincronizar com a Cora</button>' : ''}
         <button ${coraExt?.ativa ? '' : 'class="primario"'} id="imp-ext">Importar extrato (PDF)</button><input type="file" id="arq-ext" accept="application/pdf,.pdf" hidden></div></div>
@@ -2347,7 +2347,7 @@ async function telaExtrato() {
     </tbody></table></div>
     <h3>Importações</h3>
     <table class="tabela"><tbody>${d.importacoes.map((i) => `<tr><td>${esc(i.arquivo)}</td><td>${i.periodo_ini ? dataBr(i.periodo_ini) + ' a ' + dataBr(i.periodo_fim) : ''}</td><td class="num">${i.qtd} lançamentos</td><td class="num">${podeExcluirRegistros() ? `<a href="#" data-exi="${i.id}">excluir</a>` : ''}</td></tr>`).join('')}</tbody></table>`
-    : '<div class="vazio">Nenhum lançamento neste mês. Importe o extrato em PDF (Ailos Conta Online → Extrato → Conta corrente → exportar PDF).</div>'}`;
+    : '<div class="vazio">Nenhum lançamento neste mês. Importe o extrato da conta corrente em PDF, exportado do internet banking.</div>'}`;
 
   $('#mes-ext').onchange = (ev) => { telaExtrato.mes = ev.target.value || mesAtual(); telaExtrato(); };
   const arq = $('#arq-ext');
@@ -2428,7 +2428,7 @@ async function telaCartao() {
   const porCat = Object.entries(gastos.reduce((a, x) => ({ ...a, [x.categoria ?? 'Sem classificação']: (a[x.categoria ?? 'Sem classificação'] ?? 0) + x.valor }), {})).sort((a, b) => b[1] - a[1]);
   const vis = d.lancamentos.filter((l) => ({ todos: true, sem: l.valor > 0 && !l.categoria, parcel: !!l.parcela_total }[filtro]));
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Fatura do cartão</h1><p class="sutil">Importe a fatura do cartão de crédito em PDF (Ailos Cartões), classifique os gastos e eles entram em <a href="#/despesas">Despesas e balanço</a> como “Crédito”, no mês do vencimento da fatura. O pagamento da fatura no extrato (“Cartão de crédito”) não é contado de novo.</p></div>
+    <div class="topo"><div><h1>Fatura do cartão</h1><p class="sutil">Importe a fatura do cartão de crédito em PDF, classifique os gastos e eles entram em <a href="#/despesas">Despesas e balanço</a> como “Crédito”, no mês do vencimento da fatura. O pagamento da fatura no extrato (“Cartão de crédito”) não é contado de novo.</p></div>
       <div><label>Mês do vencimento ${d.meses.length ? `<select id="mes-car">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-car" value="${mes}">`}</label>
         <button class="primario" id="imp-car">Importar fatura (PDF)</button><input type="file" id="arq-car" accept="application/pdf,.pdf" hidden></div></div>
     <div id="res-car"></div>
@@ -2449,7 +2449,7 @@ async function telaCartao() {
     </tbody></table></div>
     <h3>Faturas importadas</h3>
     <table class="tabela"><tbody>${d.faturas.map((f) => `<tr><td>${esc(f.arquivo)}</td><td>vence ${dataBr(f.vencimento)}</td><td class="num">${f.total_fatura != null ? brl(f.total_fatura) : ''}</td><td class="num">${f.qtd} lançamentos</td><td class="num">${podeExcluirRegistros() ? `<a href="#" data-exf="${f.id}">excluir</a>` : ''}</td></tr>`).join('')}</tbody></table>`
-    : '<div class="vazio">Nenhuma fatura neste mês. Importe o PDF da fatura (Ailos Cartões → Fatura → baixar PDF).</div>'}`;
+    : '<div class="vazio">Nenhuma fatura neste mês. Importe o PDF da fatura do cartão, baixado no app ou site do emissor.</div>'}`;
   $('#mes-car').onchange = (ev) => { telaCartao.mes = ev.target.value || mesAtual(); telaCartao(); };
   const arq = $('#arq-car');
   $('#imp-car').onclick = () => arq.click();
@@ -2941,7 +2941,7 @@ async function formTomador(t, aoSalvar, opcoes = {}) {
           </select></label>
         <label class="largo" data-cobranca>Carteira de cobrança
           <select name="forma_cobranca">
-            <option value="BOLETO" ${t.forma_cobranca !== 'PIX' ? 'selected' : ''}>Boleto bancário (Ailos)</option>
+            <option value="BOLETO" ${t.forma_cobranca !== 'PIX' ? 'selected' : ''}>Boleto bancário</option>
             <option value="PIX" ${t.forma_cobranca === 'PIX' ? 'selected' : ''}>Pix copia e cola (QR Code no demonstrativo, sem boleto)</option>
           </select><span class="dica" data-dica-pix>No Pix, o escritório gera a cobrança no banco e cola o código em Cobranças; o Kontor monta o demonstrativo com o QR Code.</span></label>
         <label data-cobranca>Vencimento da cobrança
@@ -4745,7 +4745,7 @@ async function telaHonorarios(aba) {
   const abas = [['contratos', 'Contratos'], ['reajustes', 'Reajustes'], ['decimo', '13º honorário'], ['inadimplencia', 'Em atraso'], ['modelos', 'Modelos de contrato'], ['faturamento', 'Configurar faturamento']];
   if (!abas.some((a) => a[0] === aba)) aba = 'contratos';
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Contratos e honorários</h1><p class="sutil">Contrato assinado vira faturamento mensal automático pela empresa do escritório: NFS-e e/ou boleto Ailos na data combinada.</p></div></div>
+    <div class="topo"><div><h1>Contratos e honorários</h1><p class="sutil">Contrato assinado vira faturamento mensal automático pela empresa do escritório: NFS-e e/ou boleto na data combinada.</p></div></div>
     <nav class="abas">${abas.map(([k, n]) => `<a href="#/honorarios/${k}" class="${k === aba ? 'ativo' : ''}">${n}</a>`).join('')}</nav>
     <div id="ho-corpo"></div>`;
   return { contratos: abaContratos, reajustes: abaReajustes, decimo: abaDecimo, inadimplencia: abaInadimplencia, modelos: abaModelos, faturamento: abaFaturamento }[aba]();
@@ -5045,7 +5045,7 @@ async function abaFaturamento() {
     <dl class="dados">
       <dt>Empresa do escritório</dt><dd>${e ? `${esc(e.razao_social)} (${fmtDoc(e.documento)}) ${ok(true)}` : `${ok(false)} — marque em <a href="#/empresas">Cadastros &gt; Empresas</a> &gt; Editar &gt; “Esta é a empresa do escritório”.`}</dd>
       <dt>Emissão da NFS-e</dt><dd>${!e ? '—' : e.modo_emissao === 'PORTAL' ? 'Pelo portal (só boletos aqui)' : e.tem_certificado ? `Certificado A1 ${ok(true)}` : `${ok(false)} — envie o certificado em Empresas.`}</dd>
-      <dt>Boleto (Ailos)</dt><dd>${!e ? '—' : cfg.contaBancaria ? `Dados bancários ${ok(true)}` : `${ok(false)} — preencha em Empresas &gt; Dados bancários (só para “Nota + boleto” e “Só boleto”).`}</dd>
+      <dt>Boleto</dt><dd>${!e ? '—' : cfg.contaBancaria ? `Dados bancários ${ok(true)}` : `${ok(false)} — preencha em Empresas &gt; Dados bancários (só para “Nota + boleto” e “Só boleto”).`}</dd>
     </dl>
     ${e ? `<form id="form-fat" class="grade" style="margin-top:16px;max-width:640px">
       <label class="largo">Serviço de honorários (da empresa do escritório) <select name="servicoId" data-num><option value="">Escolha…</option>${cfg.servicos.map((s) => `<option value="${s.id}" ${s.id === cfg.servicoId ? 'selected' : ''}>${esc(s.nome)} — ${esc(s.descricao)}</option>`).join('')}</select>

@@ -14,7 +14,7 @@ import { ESCOPO_PADRAO, ESCOPO_PADRAO_V1, FALTA, MODELO_PADRAO, MODELO_PADRAO_V1
  * O contrato assinado vira faturamento recorrente sem trabalho manual: o cliente da carteira passa a ser um
  * cliente (tomador) da empresa do escritório, com o serviço de honorários e o valor do contrato como serviço padrão
  * e a emissão automática ligada no dia escolhido. A tela "Emissão automática" (empresa do escritório) faz o resto:
- * NFS-e e/ou boleto Ailos, envio por e-mail, cobrança e baixa pelo retorno do banco.
+ * NFS-e e/ou boleto, envio por e-mail, cobrança e baixa pelo retorno do banco.
  */
 
 const hojeBr = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);

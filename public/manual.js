@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.47.0';
+export const MANUAL_VERSAO = '1.47.1';
 
 export const MANUAL = [
   {
@@ -285,7 +285,7 @@ export const MANUAL = [
       <h3>Logo</h3>
       <p>O botão <strong>Logo</strong> envia a imagem que aparece no DANFSe (PDF da nota) dessa empresa.</p>
       <h3>Dados bancários</h3>
-      <p>O botão <strong>Dados bancários</strong> da linha da empresa abre a configuração da cobrança (convênio Ailos): agência, conta, convênio, carteira, formato CNAB, numeração do próximo boleto e da próxima remessa, multa, juros, instrução e <em>feriados municipais</em>. Sem isso não é possível gerar boletos. Se já emitia boletos em outro sistema, informe o próximo número livre para o nosso número nunca repetir.</p>`,
+      <p>O botão <strong>Dados bancários</strong> da linha da empresa abre a configuração da cobrança (convênio bancário com remessa e retorno): agência, conta, convênio, carteira, formato CNAB, numeração do próximo boleto e da próxima remessa, multa, juros, instrução e <em>feriados municipais</em>. Sem isso não é possível gerar boletos. Se já emitia boletos em outro sistema, informe o próximo número livre para o nosso número nunca repetir.</p>`,
   },
   {
     id: 'clientes', titulo: 'Clientes', resumo: 'Tomadores, forma de faturar, vencimento e serviços padrão.',
@@ -366,11 +366,11 @@ export const MANUAL = [
       <p>Escolha o mês. Cada item aparece como <em>Pronta</em>, <em>Agendada</em> (ainda não chegou a data), <em>Emitida</em>, <em>Com erro</em> ou <em>Pulada</em>. Use <em>Emitir</em> em um item, <strong>Emitir prontas</strong> para todos de uma vez, <em>Pular</em> para ignorar o mês ou <em>Tentar de novo</em> nos que deram erro. Conforme o cliente, gera nota, nota + boleto ou só boleto.</p>`,
   },
   {
-    id: 'cobrancas', titulo: 'Cobranças, boletos e Pix', resumo: 'Carteira boleto (Ailos, remessa e retorno), carteira Pix e o demonstrativo de cobrança.',
+    id: 'cobrancas', titulo: 'Cobranças, boletos e Pix', resumo: 'Carteira boleto (convênio com remessa e retorno), carteira Pix e o demonstrativo de cobrança.',
     corpo: `
       <p>A tela <strong>Cobranças</strong> tem duas carteiras. Cada cliente fica em uma delas, escolhida no cadastro dele (Faturamento e cobrança &gt; <em>Carteira de cobrança</em>):</p>
       <ul>
-        <li><strong>Carteira boleto:</strong> boleto do convênio Ailos, com remessa e retorno, como sempre. A situação mostra pendente, pronto, enviado ao banco, registrado, pago ou cancelado.</li>
+        <li><strong>Carteira boleto:</strong> boleto do convênio bancário, com remessa e retorno, como sempre. A situação mostra pendente, pronto, enviado ao banco, registrado, pago ou cancelado.</li>
         <li><strong>Carteira Pix:</strong> sem boleto. O escritório gera a cobrança Pix no aplicativo do banco, clica em <em>Informar Pix</em> e cola o código <em>Pix copia e cola</em>. O Kontor confere o código (formato e dígito de conferência) e recusa se o valor do Pix for diferente do valor da cobrança. Depois disso a cobrança fica como <em>Pix pronto, a receber</em>. O código também pode ser colado já em <em>Nova cobrança</em>. Quando o cliente pagar, use <em>Marcar pago</em>. <strong>Pix gerado pelo Kontor:</strong> cadastre a chave Pix da empresa (InfinitePay ou qualquer banco) em Empresas &gt; Dados bancários &gt; <em>Pix gerado pelo Kontor</em>. A partir daí, cada cobrança da carteira Pix já sai com o Pix copia e cola e o QR Code no valor certo, sem precisar abrir o aplicativo do banco; o dinheiro cai direto na conta da chave. O botão <em>Gerar o Pix das cobranças pendentes</em> resolve as que já estavam lançadas, e no <em>Informar Pix</em> há o botão <em>Gerar com a chave Pix da empresa</em>. A baixa do pagamento continua manual. Faça um Pix de teste de pequeno valor antes de enviar aos clientes.</li>
       </ul>
       <h3>Demonstrativo de cobrança</h3>
@@ -384,14 +384,14 @@ export const MANUAL = [
         <li>No Kontor, escolha o ambiente, informe o Client ID, cole (ou escolha o arquivo do certificado e da chave e clique em <em>Salvar Cora</em>. O sistema confere se a chave pertence ao certificado. A chave fica criptografada neste computador e nunca é mostrada de novo.</li>
         <li>Clique em <em>Testar conexão</em>: se estiver tudo certo, aparece o saldo da conta.</li>
       </ol>
-      <p>Regras da Cora: o boleto mínimo é de R$ 5,00; o cliente precisa ter CPF/CNPJ, endereço e CEP completos (se faltar, o motivo aparece na cobrança e, depois de corrigir o cadastro, <em>Atualizar da Cora</em> registra de novo). A Cora não altera um boleto: <em>Reemitir</em> cancela o antigo na Cora e cria outro. Boleto já pago na Cora não pode ser cancelado. O desconto por pagamento antecipado (antes do vencimento) não é enviado à Cora, que só aceita desconto até o vencimento. Os boletos antigos do Ailos continuam com remessa e retorno.</p>
+      <p>Regras da Cora: o boleto mínimo é de R$ 5,00; o cliente precisa ter CPF/CNPJ, endereço e CEP completos (se faltar, o motivo aparece na cobrança e, depois de corrigir o cadastro, <em>Atualizar da Cora</em> registra de novo). A Cora não altera um boleto: <em>Reemitir</em> cancela o antigo na Cora e cria outro. Boleto já pago na Cora não pode ser cancelado. O desconto por pagamento antecipado (antes do vencimento) não é enviado à Cora, que só aceita desconto até o vencimento. Os boletos antigos do convênio continuam com remessa e retorno.</p>
       <h3>Multa, juros e desconto por cliente</h3>
       <p>No cadastro do cliente, aba <strong>Descontos</strong>, você pode definir <em>multa</em> e <em>juros ao mês</em> próprios (em branco vale o padrão dos dados bancários da empresa; 0 isenta o cliente) e um <em>desconto por pagamento antecipado</em>: um percentual do boleto, válido até certo número de dias antes do vencimento (0 = até o vencimento). O desconto vai na remessa ao banco como desconto até a data e sai nas instruções impressas; depois do prazo vale o valor cheio. O boleto guarda as condições vigentes na data em que foi criado, então mudar o cadastro depois não altera boletos já emitidos.</p>
-      <h3>Fluxo com o banco (Ailos)</h3>
+      <h3>Fluxo com o banco (remessa e retorno)</h3>
       <ol>
         <li>Configure os <em>Dados bancários</em> da empresa (em Empresas).</li>
         <li>Os boletos são gerados na emissão, no faturamento automático ou como <strong>boleto avulso</strong>.</li>
-        <li>Gere a <strong>remessa</strong> (arquivo CNAB) e envie no Ailos Conta Online: Cobrança Bancária &gt; Arquivo de Cobrança.</li>
+        <li>Gere a <strong>remessa</strong> (arquivo CNAB) e envie no internet banking do banco, na área de cobrança.</li>
         <li>Depois do pagamento, baixe o <strong>arquivo de retorno</strong> no mesmo menu e importe aqui para dar baixa automática.</li>
       </ol>
       <h3>Outras ações</h3>
@@ -453,7 +453,7 @@ export const MANUAL = [
   {
     id: 'extrato', titulo: 'Extrato e conciliação', resumo: 'Importar o extrato em PDF, classificar e ligar aos boletos.',
     corpo: `
-      <p>Hoje o sistema lê o extrato em PDF do <strong>Ailos</strong> (outros bancos entram depois).</p>
+      <p>O sistema lê o extrato da conta corrente em PDF nos formatos de banco já homologados; outros bancos entram aos poucos. Se o PDF não for reconhecido, o sistema avisa.</p>
       <p>Se a empresa usa a <strong>Cora</strong>, o botão <em>Sincronizar com a Cora</em> traz os lançamentos e o saldo direto da conta, sem PDF, com a mesma classificação e conciliação.</p>
       <ol>
         <li>Em <strong>Extrato e conciliação</strong>, clique em <em>Importar extrato (PDF)</em>. O sistema confere o total lido com o saldo do próprio extrato.</li>
@@ -468,7 +468,7 @@ export const MANUAL = [
   {
     id: 'cartao', titulo: 'Fatura do cartão de crédito', resumo: 'Importar a fatura em PDF e levar os gastos para as despesas.',
     corpo: `
-      <p>Em <strong>Financeiro &gt; Fatura do cartão</strong> importe o PDF da fatura do <strong>Ailos Cartões</strong>. O sistema lê cada compra (data, estabelecimento, cidade, parcela e final do cartão) e confere a soma com os totais impressos na própria fatura.</p>
+      <p>Em <strong>Financeiro &gt; Fatura do cartão</strong> importe o PDF da fatura do cartão (formatos de emissor já homologados). O sistema lê cada compra (data, estabelecimento, cidade, parcela e final do cartão) e confere a soma com os totais impressos na própria fatura.</p>
       <ol>
         <li>Clique em <em>Importar fatura (PDF)</em>. Importar o mesmo arquivo duas vezes é recusado.</li>
         <li>Classifique cada gasto (a categoria é lembrada para compras parecidas, inclusive no extrato bancário). Anuidade e encargos já entram como <em>Tarifas e juros</em>.</li>
@@ -537,7 +537,7 @@ export const MANUAL = [
         <dt>A Sefin não respondeu</dt><dd>Use <em>Consultar na Sefin</em> na nota. Se ela existir, é recuperada; senão, reenvie.</dd>
         <dt>Não consigo gerar boleto</dt><dd>Falta preencher os Dados bancários da empresa (Empresas &gt; Dados bancários).</dd>
         <dt>Não encontro uma opção no menu</dt><dd>Seu usuário pode não ter a permissão; peça ao administrador em Configurações &gt; Usuários e acessos.</dd>
-        <dt>Extrato não confere</dt><dd>O sistema compara o total lido com o do PDF e avisa a diferença; confirme se o PDF é do Ailos e do período completo.</dd>
+        <dt>Extrato não confere</dt><dd>O sistema compara o total lido com o do PDF e avisa a diferença; confirme se o PDF é de um banco homologado e do período completo.</dd>
       </dl>`,
   },
 ];

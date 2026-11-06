@@ -9,7 +9,7 @@ porta local (38246), instalador, licença e atualizações próprios — os dois
 - **Carteira de clientes**: regime (MEI, Simples, Presumido, Real, imune, PF), responsável, situação, contato e perfil (empregados, ICMS, ISS). Busca na Receita pelo CNPJ.
 - **Obrigações e prazos**: catálogo editável (DAS, DCTFWeb, eSocial, FGTS Digital, EFD-Reinf, EFD-Contribuições, IRPJ/CSLL, ECD, ECF, EFD ICMS/IPI, ISS, 13º…) com regras de vencimento (dia fixo com antecipa/adia, último dia útil, N-ésimo dia útil, com ou sem sábado) e feriados; tarefas por cliente e competência com responsável, protocolo, dispensa com motivo e entrega em lote; exceções por cliente. `src/servicos/obrigacoes.ts`.
 - **Certificados e procurações**: A1 do sistema + A3, e-CPF e procurações cadastrados, com situação e renovação. `src/servicos/certificados.ts`.
-- **Contratos e honorários**: modelos com campos `{{...}}`, PDF do contrato, via assinada, e o contrato assinado liga o faturamento automático (NFS-e e/ou boleto Ailos) na empresa do escritório; reajuste por IPCA/IGP-M/INPC (Banco Central, SGS) ou percentual fixo; 13º honorário; inadimplência. `src/servicos/honorarios.ts`.
+- **Contratos e honorários**: modelos com campos `{{...}}`, PDF do contrato, via assinada, e o contrato assinado liga o faturamento automático (NFS-e e/ou boleto) na empresa do escritório; reajuste por IPCA/IGP-M/INPC (Banco Central, SGS) ou percentual fixo; 13º honorário; inadimplência. `src/servicos/honorarios.ts`.
 - **Captura de documentos**: NF-e recebidas de todos os clientes (Distribuição DF-e) e pacote ZIP do mês por cliente. `src/servicos/captura.ts`.
 - **Avisos**: resumo diário por e-mail de atrasos, vencimentos, certificados e reajustes. `src/servicos/avisos.ts`.
 
@@ -127,10 +127,10 @@ Chave pública de licenciamento configurada: teste de 30 dias a partir do primei
 ## Versão 2.0.0
 Marco da versão 2: emissão de NFS-e nacional, faturamento por cliente (nota / nota + boleto / só boleto), envio por e-mail e WhatsApp, atualização automática e controle de licença por computador. A integração bancária dos boletos é a próxima etapa.
 
-## Versão 2.1.0 – Boletos Ailos (CNAB 240)
-- **Dados bancários** por empresa (agência, conta, convênio, carteira, multa e juros) e boleto em PDF no padrão Ailos 085 (nosso número, código de barras ITF e linha digitável conferidos com o exemplo do manual).
+## Versão 2.1.0 – Boletos com remessa e retorno (CNAB 240)
+- **Dados bancários** por empresa (agência, conta, convênio, carteira, multa e juros) e boleto em PDF no padrão do banco conveniado (nosso número, código de barras ITF e linha digitável conferidos com o exemplo do manual).
 - **Um comando:** *Nota + boleto* emite a nota, gera o boleto e envia nota (PDF/XML) e boleto por e-mail. *Somente boleto* gera e envia só o boleto.
-- **Remessa CNAB 240** (segmentos P, Q e R) gerada na tela **Cobranças**; envie o arquivo no Ailos Conta Online. **Retorno** (segmentos T e U): importe o arquivo para registrar entradas, rejeições, liquidações e baixas automaticamente.
+- **Remessa CNAB 240** (segmentos P, Q e R) gerada na tela **Cobranças**; envie o arquivo no internet banking do banco. **Retorno** (segmentos T e U): importe o arquivo para registrar entradas, rejeições, liquidações e baixas automaticamente.
 - Cancelar um boleto já enviado gera pedido de baixa na próxima remessa. O número do boleto e da remessa nunca retrocedem.
 - O cadastro do cliente passou a ter cidade e UF (necessários ao boleto); o sistema avisa antes de emitir a nota se faltar algum dado.
 

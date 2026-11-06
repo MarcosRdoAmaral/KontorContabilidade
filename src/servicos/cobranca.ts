@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { ajustarVencimento } from './diautil.js';
 import { ErroNegocio } from './emissao.js';
 import { gerarRemessa400 } from '../cobranca/ailos400.js';
-import { codigoBarras, descreverMotivo, gerarRemessa, lerRetornoAuto, linhaDigitavel, nossoNumero, MOVIMENTO_RETORNO, type ContaAilos, type Titulo } from '../cobranca/ailos.js';
+import { BANCO_BOLETO, codigoBarras, descreverMotivo, gerarRemessa, lerRetornoAuto, linhaDigitavel, nossoNumero, MOVIMENTO_RETORNO, type ContaAilos, type Titulo } from '../cobranca/ailos.js';
 import { gerarBoletoPdf, type DadosBoleto } from '../cobranca/boleto-pdf.js';
 import { gerarDemonstrativoPdf } from '../cobranca/demonstrativo-pdf.js';
 import { lerPix, montarPix } from '../cobranca/pix.js';
@@ -13,7 +13,7 @@ const hojeBr = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10
 const soDig = (s: string) => s.replace(/\D/g, '');
 
 // ---------------------------------------------------------------------------
-// Conta bancária (convênio de cobrança do Ailos)
+// Conta bancária (convênio de cobrança com remessa e retorno)
 // ---------------------------------------------------------------------------
 export const ContaBancaria = z.object({
   cooperativa_nome: z.string().trim().min(2, 'Informe o nome da cooperativa').max(30),
@@ -188,7 +188,7 @@ function dadosDoBoleto(c: any): DadosBoleto {
     nossoNumero: c.nosso_numero, numeroDocumento: c.nota_id ? `NFS-e ${(db.prepare('SELECT n_nfse FROM notas WHERE id = ?').get(c.nota_id) as any)?.n_nfse ?? ''}`.trim() : `COB ${c.id}`,
     vencimento: c.vencimento, valor: c.valor, emissao: c.emissao ?? c.criado_em.slice(0, 10), carteira: conta.carteira,
     instrucoes: mensagens(conta, c).length ? mensagens(conta, c) : ['Não receber após o vencimento sem consultar o beneficiário.'],
-    linhaDigitavel: c.linha_digitavel, codigoBarras: c.codigo_barras,
+    linhaDigitavel: c.linha_digitavel, codigoBarras: c.codigo_barras, banco: BANCO_BOLETO,
   };
 }
 
@@ -396,7 +396,7 @@ export function processarRetorno(empresaId: number, texto: string) {
       const rotulo = MOVIMENTO_RETORNO[i.movimento] ?? `Movimento ${i.movimento}`;
       switch (i.movimento) {
         case '02': if (c.status !== 'PAGO') db.prepare("UPDATE cobrancas SET status = 'REGISTRADO', observacao_banco = NULL WHERE id = ?").run(c.id); resumo.registrados++; break;
-        case '03': db.prepare("UPDATE cobrancas SET status = 'REJEITADO', observacao_banco = ? WHERE id = ?").run(motivos || 'Entrada rejeitada pelo banco (veja o motivo no Ailos Conta Online)', c.id); resumo.rejeitados++; resumo.detalhes.push(`${c.id}: ${motivos}`); break;
+        case '03': db.prepare("UPDATE cobrancas SET status = 'REJEITADO', observacao_banco = ? WHERE id = ?").run(motivos || 'Entrada rejeitada pelo banco (veja o motivo no internet banking do banco)', c.id); resumo.rejeitados++; resumo.detalhes.push(`${c.id}: ${motivos}`); break;
         case '06': case '15': case '17': case '76': case '77':
           db.prepare("UPDATE cobrancas SET status = 'PAGO', pago_em = ?, valor_pago = ?, baixa_pendente = 0, observacao_banco = NULL WHERE id = ?").run(i.dataCredito ?? i.dataOcorrencia ?? hojeBr(), i.valorPago || c.valor, c.id); resumo.pagos++; break;
         case '09': case '10': if (c.status !== 'PAGO') db.prepare("UPDATE cobrancas SET status = 'CANCELADO', baixa_pendente = 0 WHERE id = ?").run(c.id); resumo.baixados++; break;

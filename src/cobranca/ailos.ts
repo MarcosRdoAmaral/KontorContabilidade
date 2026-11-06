@@ -3,6 +3,9 @@
  * Baseado no "Manual Técnico de Cobrança Bancária – CNAB 240" do Sistema Ailos (versão 09, abr/2021).
  */
 
+/** Identificação do banco impressa no boleto deste convênio. */
+export const BANCO_BOLETO = { nome: 'AILOS', subtitulo: 'SISTEMA DE COOPERATIVAS DE CRÉDITO', localPagamento: 'Pagar preferencialmente nas cooperativas do Sistema AILOS.' };
+
 // ---------------------------------------------------------------------------
 // Formatação de campos
 // ---------------------------------------------------------------------------

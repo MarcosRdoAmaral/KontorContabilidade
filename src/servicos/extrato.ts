@@ -8,7 +8,7 @@ import { marcarPago } from './cobranca.js';
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 // ---------------------------------------------------------------------------
-// Leitura do PDF (extrato de conta corrente Ailos/Viacredi, gerado pelo Conta Online)
+// Leitura do PDF (extrato de conta corrente no layout homologado, banco 085)
 // ---------------------------------------------------------------------------
 export interface LancamentoLido { data: string; descricao: string; documento: string; valor: number; saldo: number }
 export interface ExtratoLido {
@@ -93,8 +93,8 @@ export async function lerPdfExtrato(pdf: Buffer): Promise<ExtratoLido> {
   out.nome = cab.match(/Nome: (.+?)(?: \||$)/)?.[1]?.trim();
   out.agencia = cab.match(/Ag[êe]ncia: ([\d-]+)/)?.[1];
   out.conta = cab.match(/Conta: ([\d-]+)/)?.[1];
-  if (/Banco: (\d+)/.test(cab) && cab.match(/Banco: (\d+)/)![1] !== '085') out.avisos.push('Este extrato não parece ser do Ailos/Viacredi (banco 085).');
-  if (!out.lancamentos.length) throw new ErroNegocio('Nenhum lançamento encontrado no PDF. Por enquanto só o extrato de conta corrente do Ailos é aceito.');
+  if (/Banco: (\d+)/.test(cab) && cab.match(/Banco: (\d+)/)![1] !== '085') out.avisos.push('Este extrato é de um banco cujo formato ainda não é lido pelo sistema; confira os lançamentos.');
+  if (!out.lancamentos.length) throw new ErroNegocio('Nenhum lançamento encontrado no PDF. Este modelo de extrato ainda não é reconhecido pelo sistema.');
 
   // conferência: o saldo precisa fechar linha a linha e bater com a linha TOTAL do banco
   let ant = out.saldoAnterior;

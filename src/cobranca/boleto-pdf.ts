@@ -14,6 +14,8 @@ export interface DadosBoleto {
   instrucoes: string[];
   linhaDigitavel: string;
   codigoBarras: string;
+  /** Identificação do banco impressa no boleto (vem do módulo da integração). */
+  banco: { nome: string; subtitulo: string; localPagamento: string };
 }
 
 const MM = 72 / 25.4;
@@ -42,8 +44,8 @@ export function desenharBoleto(pdf: PDFKit.PDFDocument, b: DadosBoleto, y0 = 14 
       pdf.fillColor('#000').font(negrito ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).text(val, x + 2, y + h - 11.5, { width: w - 4, align: alinhar, lineBreak: false });
     };
     const cabecalho = (y: number, titulo: string, comLinha: boolean) => {
-      pdf.fillColor('#000').font('Helvetica-Bold').fontSize(14).text('AILOS', X, y + 6, { lineBreak: false });
-      pdf.fontSize(5.5).font('Helvetica').text('SISTEMA DE COOPERATIVAS DE CRÉDITO', X, y + 21, { lineBreak: false });
+      pdf.fillColor('#000').font('Helvetica-Bold').fontSize(14).text(b.banco.nome, X, y + 6, { lineBreak: false });
+      pdf.fontSize(5.5).font('Helvetica').text(b.banco.subtitulo, X, y + 21, { lineBreak: false });
       pdf.moveTo(X + 36 * MM, y).lineTo(X + 36 * MM, y + 10 * MM).lineWidth(1.2).stroke('#000');
       pdf.moveTo(X + 50 * MM, y).lineTo(X + 50 * MM, y + 10 * MM).stroke('#000');
       pdf.font('Helvetica-Bold').fontSize(13).text('085-0', X + 38 * MM, y + 8, { lineBreak: false });
@@ -72,7 +74,7 @@ export function desenharBoleto(pdf: PDFKit.PDFDocument, b: DadosBoleto, y0 = 14 
     // -------- Ficha de compensação --------
     cabecalho(y, '', true); y += 10 * MM;
     const w = (mm: number) => mm * MM;
-    campo('Local de pagamento', 'Pagar preferencialmente nas cooperativas do Sistema AILOS.', X, y, w(136)); campo('Vencimento', dataBr(b.vencimento), X + w(136), y, w(50), w(9), 'right', true); y += w(9);
+    campo('Local de pagamento', b.banco.localPagamento, X, y, w(136)); campo('Vencimento', dataBr(b.vencimento), X + w(136), y, w(50), w(9), 'right', true); y += w(9);
     campo('Beneficiário', b.beneficiario.nome, X, y, w(98)); campo('CNPJ/CPF', doc(b.beneficiario.documento), X + w(98), y, w(38)); campo('Agência / Código do Beneficiário', b.agenciaCodigo, X + w(136), y, w(50), w(9), 'right'); y += w(9);
     campo('Data do documento', dataBr(b.emissao), X, y, w(30)); campo('Nº do documento', b.numeroDocumento, X + w(30), y, w(32)); campo('Espécie doc.', 'DS', X + w(62), y, w(22));
     campo('Aceite', 'N', X + w(84), y, w(14)); campo('Data do processamento', dataBr(b.emissao), X + w(98), y, w(38)); campo('Nosso número', b.nossoNumero, X + w(136), y, w(50), w(9), 'right'); y += w(9);
