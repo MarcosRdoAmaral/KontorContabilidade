@@ -908,3 +908,15 @@ input.invalido { border-color: #c0392b !important; box-shadow: 0 0 0 2px rgba(19
 .tabela-controle th:nth-child(2), .tabela-controle td:nth-child(2) { left: 36px; box-shadow: 6px 0 8px -6px var(--sombra); }
 .tabela-controle tr.marcada td:nth-child(-n+2) { background: color-mix(in srgb, var(--laranja) 12%, var(--superficie)); }
 .ct-tabela .tabela { overflow: visible; }
+
+/* ---------- Abas das telas abertas (topo) ---------- */
+.abas-app { flex: 1 1 auto; min-width: 0; margin-right: auto; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: thin; padding: 2px 0; }
+.aba-app { display: flex; align-items: center; flex: 0 1 200px; min-width: 110px; max-width: 220px; border: 1px solid var(--linha); border-radius: 10px 10px 4px 4px; background: var(--superficie); }
+.aba-app .aba-ir { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 6px 8px 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .88rem; color: var(--tinta-2); }
+.aba-app .aba-fechar { border: 0; background: transparent; padding: 2px 8px; margin-right: 4px; font-size: 1.05rem; line-height: 1; color: var(--tinta-2); border-radius: 6px; }
+.aba-app .aba-fechar:hover { background: var(--superficie-2); color: var(--tinta); }
+.aba-app:hover .aba-ir { color: var(--tinta); }
+.aba-app.ativa { border-color: var(--laranja); background: var(--laranja-fundo); box-shadow: inset 0 -2px 0 var(--laranja); }
+.aba-app.ativa .aba-ir { color: var(--tinta); font-weight: 600; }
+.aba-nova { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; font-size: 1.2rem; line-height: 1; color: var(--tinta-2); }
+@media (max-width: 700px) { .aba-app { min-width: 90px; } }

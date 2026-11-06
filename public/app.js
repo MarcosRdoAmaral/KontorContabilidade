@@ -466,6 +466,7 @@ async function iniciar() {
   if (estado.usuario.trocar_senha) { $('#app').hidden = true; return trocarSenha({ obrigatoria: true }); }
   await carregarEmpresas();
   atualizarLicenca();
+  iniciarAbas(); // depois das empresas: reabre a aba que estava ativa
   // ao abrir, começa pela primeira tela do menu liberada para o usuário
   const nomeInicial = location.hash.split('/')[1];
   if (!nomeInicial || !telaPermitida(nomeInicial)) location.hash = '#/' + telaInicial();
@@ -501,6 +502,7 @@ function rotear() {
     estado.naoSalvo = null;
   }
   const [, nomeHash, param] = location.hash.split('/');
+  abasNavegou(); // a aba ativa passa a mostrar esta tela
   const nome = nomeHash || telaInicial();
   if ($('#dialogo').open) $('#dialogo').close(); // trocar de tela fecha a janela aberta
   document.querySelectorAll('#menu details.grupo').forEach((g) => { const ativo = [...g.querySelectorAll('a')].some((a) => a.getAttribute('href') === `#/${nome}` && !a.hidden); g.classList.toggle('tem-ativo', ativo); if (ativo) g.open = true; });
@@ -6459,6 +6461,104 @@ function iconesMenu() {
     if (ICONES[chave]) a.insertAdjacentHTML('afterbegin', icone(chave));
   });
   document.querySelectorAll('.lateral-rodape [data-icone]').forEach((el) => { if (!el.querySelector('svg.ico')) el.insertAdjacentHTML('afterbegin', icone(el.dataset.icone)); });
+}
+
+// ---------------------------------------------------------------------------
+// Abas no topo: cada funcionalidade aberta pelo menu fica numa aba, como no navegador
+// ---------------------------------------------------------------------------
+const abas = { lista: [], ativa: null, pendente: null, seq: 0 };
+const ABAS_MAX = 10;
+const chaveAbas = () => `kontor-abas:${estado.usuario?.id ?? ''}`;
+const telaDoHash = (h) => (String(h || '').split('/')[1] || 'inicio');
+function tituloDaAba(h) {
+  const [, nome = 'inicio', param] = String(h || '').split('/');
+  if (nome === 'relatorios' && param === 'documentacao') return 'Documentação';
+  if (nome === 'config') return 'Configurações';
+  const a = document.querySelector(`#menu a[href="#/${nome}"]`);
+  const t = a?.textContent.trim();
+  return t || { inicio: 'Início', nota: 'Nota', painel: 'Visão geral' }[nome] || nome.replace(/-/g, ' ').replace(/^./, (x) => x.toUpperCase());
+}
+function guardarAbas() { try { localStorage.setItem(chaveAbas(), JSON.stringify({ lista: abas.lista, ativa: abas.ativa })); } catch {} }
+function carregarAbas() {
+  try {
+    const g = JSON.parse(localStorage.getItem(chaveAbas()) || 'null');
+    if (g && Array.isArray(g.lista)) {
+      abas.lista = g.lista.filter((x) => x && typeof x.hash === 'string' && x.hash.startsWith('#/')).slice(0, ABAS_MAX);
+      abas.ativa = abas.lista.some((x) => x.id === g.ativa) ? g.ativa : abas.lista[0]?.id ?? null;
+      abas.seq = Math.max(0, ...abas.lista.map((x) => Number(x.id) || 0));
+    }
+  } catch {}
+}
+function novaAba(hash) {
+  if (abas.lista.length >= ABAS_MAX) { const i = abas.lista.findIndex((x) => x.id !== abas.ativa); abas.lista.splice(i < 0 ? 0 : i, 1); } // limite: sai a mais antiga
+  const aba = { id: ++abas.seq, hash };
+  abas.lista.push(aba);
+  return aba;
+}
+/** Chamado a cada troca de tela: a aba ativa (ou a escolhida no clique) passa a mostrar o endereço atual. */
+function abasNavegou() {
+  if (!$('#abas-app')) return;
+  const h = location.hash || '#/';
+  let alvo = null;
+  if (abas.pendente === 'nova' || abas.pendente === 'vazia') { alvo = novaAba(h); alvo.vazia = abas.pendente === 'vazia'; }
+  else if (abas.pendente != null) alvo = abas.lista.find((x) => x.id === abas.pendente) ?? null;
+  abas.pendente = null;
+  alvo ??= abas.lista.find((x) => x.id === abas.ativa) ?? novaAba(h);
+  if (alvo.vazia && alvo.hash !== h) delete alvo.vazia; // usou a aba nova por um link da tela
+  alvo.hash = h; abas.ativa = alvo.id;
+  pintarAbas(); guardarAbas();
+}
+function irParaAba(aba) {
+  if (aba.hash === location.hash) { abas.ativa = aba.id; pintarAbas(); guardarAbas(); return; }
+  abas.pendente = aba.id; location.hash = aba.hash;
+}
+function abrirEmAba(hash) {
+  const tela = telaDoHash(hash);
+  const ja = abas.lista.find((x) => telaDoHash(x.hash) === tela);
+  if (ja) return irParaAba(ja);
+  const atual = abas.lista.find((x) => x.id === abas.ativa);
+  if (atual?.vazia) { delete atual.vazia; abas.pendente = atual.id; location.hash = hash; return; } // aba nova (+) ainda sem uso: abre nela
+  if (hash === location.hash) { const a = novaAba(hash); abas.ativa = a.id; pintarAbas(); guardarAbas(); return; }
+  abas.pendente = 'nova'; location.hash = hash;
+}
+function fecharAba(id) {
+  const i = abas.lista.findIndex((x) => x.id === id);
+  if (i < 0) return;
+  abas.lista.splice(i, 1);
+  if (abas.ativa !== id) { pintarAbas(); guardarAbas(); return; }
+  const prox = abas.lista[Math.min(i, abas.lista.length - 1)];
+  if (prox) irParaAba(prox);
+  else { abas.pendente = 'nova'; abas.ativa = null; if (location.hash === '#/inicio') abasNavegou(); else location.hash = '#/inicio'; }
+}
+function pintarAbas() {
+  const caixa = $('#abas-app'); if (!caixa) return;
+  caixa.innerHTML = abas.lista.map((a) => `<div class="aba-app ${a.id === abas.ativa ? 'ativa' : ''}" data-aba="${a.id}" title="${esc(tituloDaAba(a.hash))}">
+      <button type="button" class="aba-ir">${esc(tituloDaAba(a.hash))}</button>${abas.lista.length > 1 ? `<button type="button" class="aba-fechar" data-fechar-aba="${a.id}" aria-label="Fechar aba">×</button>` : ''}</div>`).join('')
+    + '<button type="button" class="aba-nova" id="aba-nova" title="Nova aba (Início)" aria-label="Nova aba">+</button>';
+  caixa.querySelectorAll('[data-aba]').forEach((el) => {
+    const aba = abas.lista.find((x) => x.id === Number(el.dataset.aba));
+    el.querySelector('.aba-ir').onclick = () => irParaAba(aba);
+    el.onauxclick = (ev) => { if (ev.button === 1 && abas.lista.length > 1) { ev.preventDefault(); fecharAba(aba.id); } }; // botão do meio fecha
+  });
+  caixa.querySelectorAll('[data-fechar-aba]').forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); fecharAba(Number(b.dataset.fecharAba)); }));
+  $('#aba-nova').onclick = () => { abas.pendente = 'vazia'; if (location.hash === '#/inicio') abasNavegou(); else location.hash = '#/inicio'; };
+  caixa.querySelector('.aba-app.ativa')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+function iniciarAbas() {
+  const barra = $('#barra-topo');
+  if (!barra || $('#abas-app')) return;
+  barra.insertAdjacentHTML('afterbegin', '<div class="abas-app" id="abas-app" role="tablist" aria-label="Telas abertas"></div>');
+  carregarAbas();
+  // menu lateral e rodapé: abre a funcionalidade numa aba (ou volta para a aba dela, se já estiver aberta)
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest('#menu a[href^="#/"], .lateral-rodape a[href^="#/"]');
+    if (!a || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button !== 0) return;
+    ev.preventDefault();
+    abrirEmAba(a.getAttribute('href'));
+  });
+  // a aba ativa guardada abre no lugar da tela inicial
+  const ativa = abas.lista.find((x) => x.id === abas.ativa);
+  if (ativa && ativa.hash !== location.hash) { abas.pendente = ativa.id; location.hash = ativa.hash; } else abasNavegou();
 }
 
 /** Barra do topo: sininho com os lembretes do usuário e o menu do usuário. */
