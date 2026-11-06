@@ -252,7 +252,7 @@ export interface FiltroTarefas { mes?: string; empresaId?: number; responsavelId
 
 /** Tarefas do mês (gera as que faltam) e, se pedido, todas as atrasadas de meses anteriores. */
 export function listarTarefas(escritorioId: number, f: FiltroTarefas, hoje = hojeBr()) {
-  const cond: string[] = ['e.escritorio_id = ?'];
+  const cond: string[] = ['e.escritorio_id = ?', "(e.situacao = 'ATIVO' OR t.status NOT IN ('PENDENTE','ANDAMENTO'))"]; // cliente inativo não tem mais tarefa em aberto na lista
   const p: any[] = [escritorioId];
   if (f.mes) {
     gerarTarefas(escritorioId, f.mes);

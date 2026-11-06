@@ -970,7 +970,7 @@ export async function rotas(app: FastifyInstance) {
           SUM(n.status IN ('REJEITADA','ERRO_COMUNICACAO','PENDENTE')) AS pendencias,
           ROUND(SUM(CASE WHEN n.status = 'AUTORIZADA' THEN n.valor_servico ELSE 0 END), 2) AS faturado
         FROM empresas e LEFT JOIN notas n ON n.empresa_id = e.id AND substr(n.competencia,1,7) = ? AND n.ambiente = e.ambiente
-        WHERE e.escritorio_id = ? ${filtroCliente} GROUP BY e.id ORDER BY faturado DESC`).all(...params);
+        WHERE e.escritorio_id = ? AND e.ativo = 1 AND e.situacao = 'ATIVO' ${filtroCliente} GROUP BY e.id ORDER BY faturado DESC`).all(...params);
     });
 
     // ---------- Painel financeiro, despesas e balanço ----------

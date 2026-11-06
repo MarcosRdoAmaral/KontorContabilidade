@@ -371,7 +371,7 @@ export function xmlRecebida(empresaId: number, chave: string) {
 export async function buscarAutomaticamente(): Promise<void> {
   const agora = new Date().toISOString();
   const empresas = db.prepare(`SELECT d.empresa_id FROM nfe_distribuicao d JOIN empresas e ON e.id = d.empresa_id
-    WHERE d.automatica = 1 AND e.ativo = 1 AND e.cert_pfx_enc IS NOT NULL AND (d.proxima_consulta IS NULL OR d.proxima_consulta <= ?)`).all(agora) as { empresa_id: number }[];
+    WHERE d.automatica = 1 AND e.ativo = 1 AND e.situacao = 'ATIVO' AND e.cert_pfx_enc IS NOT NULL AND (d.proxima_consulta IS NULL OR d.proxima_consulta <= ?)`).all(agora) as { empresa_id: number }[];
   for (const { empresa_id } of empresas) {
     if ((esperaPorErro.get(empresa_id) ?? 0) > Date.now()) continue;
     try { await buscarNaSefaz(empresa_id, { automatica: true }); } catch { /* erro fica registrado em nfe_distribuicao.ultimo_erro */ }

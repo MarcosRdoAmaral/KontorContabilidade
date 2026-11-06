@@ -2106,7 +2106,7 @@ async function relatorioFiscal(tipo) {
   const corpo = conteudo.querySelector('.rel-corpo');
   corpo.innerHTML = '<p class="sutil">Carregando os clientes…</p>';
   const cart = await api('GET', '/api/escritorio/carteira').catch(() => []);
-  const lista = (Array.isArray(cart) ? cart : cart.clientes ?? []).filter((c) => c.situacao !== 'ENCERRADO').sort((a, b) => (a.nome_fantasia || a.razao_social).localeCompare(b.nome_fantasia || b.razao_social));
+  const lista = (Array.isArray(cart) ? cart : cart.clientes ?? []).filter((c) => c.situacao === 'ATIVO').sort((a, b) => (a.nome_fantasia || a.razao_social).localeCompare(b.nome_fantasia || b.razao_social));
   const nome = (c) => c.nome_fantasia || c.razao_social;
   const resp = [...new Set(lista.map((c) => c.responsavel).filter(Boolean))].sort();
   corpo.innerHTML = tipo === 'pend' ? `<form id="form-fis" class="filtros grade">
@@ -4516,7 +4516,7 @@ function formCert(c, tab, carteira, inicial = null) {
   c ??= { tipo: 'A3', ...(inicial ?? {}) };
   abrirDialogo(`<form id="form-cert"><h2>${novo ? 'Cadastrar certificado ou procuração' : 'Editar'}</h2><div class="grade">
       <label>Tipo <select name="tipo">${Object.entries(tab.tiposCertificado).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
-      <label class="largo">Cliente <select name="empresa_id" data-num><option value="">— nenhum (do escritório ou de um sócio)</option>${carteira.map((e) => `<option value="${e.id}">${esc(e.nome_fantasia || e.razao_social)}</option>`).join('')}</select></label>
+      <label class="largo">Cliente <select name="empresa_id" data-num><option value="">— nenhum (do escritório ou de um sócio)</option>${carteira.filter((e) => e.situacao === 'ATIVO' || e.id === c?.empresa_id).map((e) => `<option value="${e.id}">${esc(e.nome_fantasia || e.razao_social)}</option>`).join('')}</select></label>
       <label class="largo" data-a1>Arquivo do certificado (.pfx ou .p12) <input type="file" name="arquivo" accept=".pfx,.p12"></label>
       <label data-a1>Senha do certificado <input type="password" name="senha" autocomplete="off"></label>
       <p class="dica largo" data-a1>Titular, CNPJ e validade são lidos do próprio arquivo. O certificado fica guardado criptografado na empresa do cliente e passa a ser usado para emitir NFS-e, buscar NF-e e capturar documentos.</p>
@@ -4683,7 +4683,7 @@ async function formContrato(c) {
   const [carteira, modelos, tab] = await Promise.all([api('GET', '/api/escritorio/carteira'), api('GET', '/api/escritorio/modelos'), tabelasEscritorio()]);
   const novo = !c;
   c ??= { inicio: hoje(), dia_emissao: 1, dia_vencimento: 10, modo_faturamento: 'NOTA_BOLETO', indice: 'IPCA', decimo_terceiro: false, escopo: tab.escopoPadrao };
-  const clientes = carteira.filter((e) => !e.eh_escritorio && (e.situacao !== 'ENCERRADO' || e.id === c.empresa_id));
+  const clientes = carteira.filter((e) => !e.eh_escritorio && (e.situacao === 'ATIVO' || e.id === c.empresa_id));
   abrirDialogo(`<form id="form-ct"><h2>${novo ? 'Novo contrato' : `Editar contrato ${String(c.numero).padStart(4, '0')}`}</h2><div class="grade">
       <label class="largo">Cliente <select name="empresa_id" data-num required ${novo ? '' : 'disabled'}><option value="">Escolha…</option>${clientes.map((e) => `<option value="${e.id}">${esc(e.nome_fantasia || e.razao_social)} — ${fmtDoc(e.documento)}</option>`).join('')}</select></label>
       <label>Modelo <select name="modelo_id" data-num>${modelos.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select></label>
@@ -6661,7 +6661,7 @@ async function detalheRadar(cnpj, equipe = []) {
         <label>Próximo contato <input type="date" name="proximo_contato" value="${l.proximo_contato ?? ''}"></label>
         <label>Origem do lead <select name="origem">${opts(cfg.origens, l.origem)}</select></label>
         <label class="largo" id="rd-motivo" ${l.estagio === 'NAO_INTERESSADO' ? '' : 'hidden'}>Motivo da perda <input name="motivo_perda" value="${esc(l.motivo_perda ?? '')}" maxlength="500"></label>
-        <label class="largo">Cliente vinculado na carteira <select name="empresa_id"><option value="">Nenhum</option>${clientes.filter((c) => !c.eh_escritorio).map((c) => `<option value="${c.id}" ${l.empresa_id === c.id ? 'selected' : ''}>${esc(c.nome_fantasia || c.razao_social)} · ${fmtDoc(c.documento)}</option>`).join('')}</select></label>
+        <label class="largo">Cliente vinculado na carteira <select name="empresa_id"><option value="">Nenhum</option>${clientes.filter((c) => !c.eh_escritorio && (c.situacao === 'ATIVO' || c.id === l.empresa_id)).map((c) => `<option value="${c.id}" ${l.empresa_id === c.id ? 'selected' : ''}>${esc(c.nome_fantasia || c.razao_social)} · ${fmtDoc(c.documento)}</option>`).join('')}</select></label>
         <label class="largo">Observações <textarea name="observacoes" rows="3">${esc(l.observacoes ?? '')}</textarea></label>
         <label class="largo rd-chk"><input type="checkbox" name="consentimento_contato" ${l.consentimento_contato ? 'checked' : ''}> A empresa autorizou receber contatos e mensagens comerciais${l.consentimento_em ? ` <span class="dica">(desde ${dataBr(l.consentimento_em)})</span>` : ''}</label>
         <div class="acoes largo"><button class="primario" type="submit">Salvar</button>${l.estagio === 'CONVERTIDO' && !e.na_carteira && podeCarteira && !e.demonstracao ? '<button type="button" id="rd-cad">Cadastrar na carteira de clientes</button>' : ''}<button type="button" class="perigo" id="rd-exc">Remover da carteira de prospecção</button></div>

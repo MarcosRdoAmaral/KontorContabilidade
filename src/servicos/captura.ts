@@ -37,7 +37,7 @@ export function statusCaptura(escritorioId: number, mes: string, empresas: numbe
          AND NOT EXISTS (SELECT 1 FROM nfse_capturadas c WHERE c.empresa_id = e.id AND c.chave = n.chave_acesso)) AS nfse_sistema,
       (SELECT COUNT(*) FROM nfse_capturadas c WHERE c.empresa_id = e.id AND c.papel = 'TOMADOR' AND c.xml IS NOT NULL AND c.competencia BETWEEN ? AND ?) AS nfse_tomadas
     FROM empresas e LEFT JOIN nfe_distribuicao d ON d.empresa_id = e.id LEFT JOIN adn_distribuicao a ON a.empresa_id = e.id
-    WHERE e.escritorio_id = ? AND (e.na_carteira = 1 OR e.eh_escritorio = 1) AND e.situacao != 'ENCERRADO' ${filtro} ORDER BY e.eh_escritorio DESC, cliente`).all(de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, escritorioId, ...(empresas ?? [])) as any[];
+    WHERE e.escritorio_id = ? AND (e.na_carteira = 1 OR e.eh_escritorio = 1) AND e.situacao = 'ATIVO' ${filtro} ORDER BY e.eh_escritorio DESC, cliente`).all(de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, de, ate, escritorioId, ...(empresas ?? [])) as any[];
   const agora = new Date().toISOString();
   const esc = db.prepare('SELECT cert_validade, (cert_pfx_enc IS NOT NULL) AS tem FROM empresas WHERE escritorio_id = ? AND eh_escritorio = 1 ORDER BY id LIMIT 1').get(escritorioId) as any;
   const escOk = !!esc?.tem && !(esc.cert_validade && esc.cert_validade < agora);

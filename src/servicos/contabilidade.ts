@@ -190,7 +190,7 @@ export async function enviarFechamento(empresaId: number, mes: string) {
 export async function fechamentoAutomatico(hoje = hojeBr()): Promise<number> {
   const mes = mesAnterior(hoje), dia = Number(hoje.slice(8, 10));
   const candidatas = db.prepare(`SELECT id, fechamento_dia, fechamento_ultimo, fechamento_em, fechamento_resultado FROM empresas
-    WHERE fechamento_ativo = 1 AND fechamento_dia IS NOT NULL AND contabilidade_email IS NOT NULL`).all() as any[];
+    WHERE ativo = 1 AND situacao = 'ATIVO' AND fechamento_ativo = 1 AND fechamento_dia IS NOT NULL AND contabilidade_email IS NOT NULL`).all() as any[];
   let enviados = 0;
   for (const c of candidatas) {
     if (dia < c.fechamento_dia || c.fechamento_ultimo === mes) continue;

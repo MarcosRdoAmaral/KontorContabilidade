@@ -132,7 +132,7 @@ export function configurarAdn(empresaId: number, automatica: boolean) {
 export async function buscarAdnAutomaticamente(): Promise<void> {
   const agora = new Date().toISOString();
   const empresas = db.prepare(`SELECT a.empresa_id FROM adn_distribuicao a JOIN empresas e ON e.id = a.empresa_id
-    WHERE a.automatica = 1 AND e.situacao != 'ENCERRADO' AND ((e.cert_pfx_enc IS NOT NULL AND (e.cert_validade IS NULL OR e.cert_validade > ?)) OR e.nfse_procuracao = 1)
+    WHERE a.automatica = 1 AND e.ativo = 1 AND e.situacao = 'ATIVO' AND ((e.cert_pfx_enc IS NOT NULL AND (e.cert_validade IS NULL OR e.cert_validade > ?)) OR e.nfse_procuracao = 1)
       AND (a.proxima_consulta IS NULL OR a.proxima_consulta <= ?)`).all(agora, agora) as { empresa_id: number }[];
   for (const { empresa_id } of empresas) {
     if ((esperaPorErro.get(empresa_id) ?? 0) > Date.now()) continue;

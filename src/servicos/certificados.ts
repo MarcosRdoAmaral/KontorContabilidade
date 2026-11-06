@@ -42,7 +42,7 @@ export interface LinhaCert {
 /** Todos os certificados do escritório, do que vence primeiro para o último. */
 export function listarCertificados(escritorioId: number, hoje = hojeBr()): LinhaCert[] {
   const doSistema = db.prepare(`SELECT id, COALESCE(nome_fantasia, razao_social) AS cliente, documento, cert_titular, cert_validade FROM empresas
-    WHERE escritorio_id = ? AND cert_pfx_enc IS NOT NULL AND cert_validade IS NOT NULL AND situacao != 'ENCERRADO'`).all(escritorioId) as any[];
+    WHERE escritorio_id = ? AND cert_pfx_enc IS NOT NULL AND cert_validade IS NOT NULL AND situacao = 'ATIVO'`).all(escritorioId) as any[];
   const cadastrados = db.prepare(`SELECT c.*, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento AS documento_cliente FROM certificados c
     LEFT JOIN empresas e ON e.id = c.empresa_id WHERE c.escritorio_id = ?`).all(escritorioId) as any[];
   const lista: LinhaCert[] = [

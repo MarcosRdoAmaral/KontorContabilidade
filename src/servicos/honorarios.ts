@@ -516,7 +516,7 @@ export function listarDecimoTerceiro(escritorioId: number, ano: number) {
       ex.status, ex.nota_id, ex.cobranca_id, ex.mensagem
     FROM contratos c JOIN empresas e ON e.id = c.empresa_id
     LEFT JOIN agenda_execucoes ex ON ex.tomador_id = c.tomador_id AND ex.servico_id = ? AND ex.competencia = ?
-    WHERE c.escritorio_id = ? AND c.status = 'ASSINADO' AND c.decimo_terceiro = 1 ORDER BY cliente`).all(cfg.servicoId ?? 0, comp13(ano), escritorioId) as any[])
+    WHERE c.escritorio_id = ? AND c.status = 'ASSINADO' AND c.decimo_terceiro = 1 AND e.situacao = 'ATIVO' ORDER BY cliente`).all(cfg.servicoId ?? 0, comp13(ano), escritorioId) as any[])
     .map((l) => ({ ...l, status: l.status ?? (l.tomador_id ? 'PRONTA' : 'SEM_FATURAMENTO') }));
 }
 
