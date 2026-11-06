@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
 import { exigirLimite } from '../licenca.js';
-import { codMunicipioValido, documentoValido, limparDoc, soDigitos } from '../nfse/validacao.js';
+import { codMunicipioValido, cpfValido, documentoValido, limparDoc, soDigitos } from '../nfse/validacao.js';
 import { REGIMES, limparTarefasQueNaoSeAplicam, listarTarefas, regimeDe, resumoTarefas } from './obrigacoes.js';
 import { listarCertificados, resumoCertificados } from './certificados.js';
 import { resumoSituacoes } from './situacao-fiscal.js';
@@ -32,7 +32,8 @@ export const ClienteCarteira = z.object({
   cliente_desde: opcional(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
   encerrado_em: opcional(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
   contato_nome: opcional(z.string().trim().max(120)),
-  contato_fone: z.string().nullish().transform((f) => (f ? soDigitos(f) || null : null)),
+  contato_fone: z.string().nullish().transform((f) => (f ? soDigitos(f).replace(/^55(?=\d{10,11}$)/, '') || null : null))
+    .refine((f) => !f || /^\d{10,11}$/.test(f), 'Telefone inválido: informe DDD e número, como (48)99999-9999'),
   tem_funcionarios: z.boolean().default(false),
   contribuinte_icms: z.boolean().default(false),
   contribuinte_iss: z.boolean().default(true),
@@ -46,7 +47,7 @@ export const ClienteCarteira = z.object({
   cidade: opcional(z.string().trim().max(80)),
   crc: opcional(z.string().trim().max(30)),
   rep_nome: opcional(z.string().trim().max(150)),
-  rep_cpf: z.string().nullish().transform((c) => (c ? soDigitos(c) || null : null)).refine((c) => !c || c.length === 11, 'CPF do representante deve ter 11 dígitos'),
+  rep_cpf: z.string().nullish().transform((c) => (c ? soDigitos(c) || null : null)).refine((c) => !c || cpfValido(c), 'CPF do representante inválido'),
   rep_rg: opcional(z.string().trim().max(30)),
   rep_nacionalidade: opcional(z.string().trim().max(40)),
   rep_estado_civil: opcional(z.string().trim().max(40)),

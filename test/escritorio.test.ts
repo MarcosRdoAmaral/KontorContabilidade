@@ -202,6 +202,9 @@ test('escritório: carteira, obrigações, certificados, contratos, honorários 
         cep: '89065345', logradouro: 'Rua Otto Anlauf Junior', numero: '44', bairro: 'Salto do Norte', cidade: 'Blumenau', crc: 'SC-009017' }, t);
       assert.equal(re.status, 200, JSON.stringify(re.json));
       assert.equal((await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11222333000181', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', rep_cpf: '123' }, t)).status, 400, 'CPF do representante incompleto');
+      assert.equal((await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11222333000181', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', rep_cpf: '390.533.447-06' }, t)).status, 400, 'CPF do representante com dígito errado');
+      assert.equal((await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11222333000181', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', contato_fone: '(48)9999' }, t)).status, 400, 'telefone incompleto');
+      assert.equal((await call('PUT', `/api/escritorio/carteira/${simples}`, { ...base, documento: '11222333000181', razao_social: 'Padaria Boa Ltda', regime: 'SIMPLES', email: 'ana@x' }, t)).status, 400, 'e-mail sem domínio');
       tx = (await call('GET', `/api/escritorio/contratos/${ct.id}/texto`, undefined, t)).json;
       assert.deepEqual(tx.faltas, []);
       assert.match(tx.texto, /com sede na Rua Augusto Vivian, nº 184, Itoupava Central, Blumenau, Santa Catarina, Cep 89\.075-120/);

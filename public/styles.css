@@ -827,3 +827,6 @@ main:focus, main:focus-visible { outline: none; }
 
 .pix-qr { display: grid; place-items: center; margin: 8px 0 12px; }
 .pix-qr img { width: 240px; height: 240px; background: #fff; padding: 6px; border-radius: 8px; }
+
+/* campo com valor inválido (CPF, CNPJ, telefone, e-mail) */
+input.invalido { border-color: #c0392b !important; box-shadow: 0 0 0 2px rgba(192, 57, 43, .15); }

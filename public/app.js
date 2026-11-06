@@ -21,6 +21,59 @@ const mesAtual = () => new Date().toISOString().slice(0, 7);
 const mesAnterior = (m) => { const [a, b] = m.split('-').map(Number); return b === 1 ? `${a - 1}-12` : `${a}-${String(b - 1).padStart(2, '0')}`; };
 const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 const fmtDoc = (d) => !d ? '' : d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d;
+const fmtFone = (f) => { const d = String(f ?? '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''); return d.length === 11 ? `(${d.slice(0, 2)})${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)})${d.slice(2, 6)}-${d.slice(6)}` : String(f ?? ''); };
+/** Mesmas regras do servidor (src/nfse/validacao.ts): CPF, CNPJ numérico ou alfanumérico. */
+function cpfValido(c) {
+  c = String(c ?? '').replace(/\D/g, '');
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false;
+  for (const t of [9, 10]) { let s = 0; for (let i = 0; i < t; i++) s += Number(c[i]) * (t + 1 - i); if (((s * 10) % 11) % 10 !== Number(c[t])) return false; }
+  return true;
+}
+function cnpjValido(c) {
+  c = String(c ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+  if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(c) || /^(\d)\1{13}$/.test(c)) return false;
+  const dv = (b) => { let s = 0, p = 2; for (let i = b.length - 1; i >= 0; i--) { s += (b.charCodeAt(i) - 48) * p; p = p === 9 ? 2 : p + 1; } const r = 11 - (s % 11); return r >= 10 ? 0 : r; };
+  const d1 = dv(c.slice(0, 12)), d2 = dv(c.slice(0, 12) + d1);
+  return c.endsWith(`${d1}${d2}`);
+}
+const emailValido = (e) => /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(String(e ?? '').trim());
+/** Formata enquanto digita: CPF 000.000.000-00, CNPJ 00.000.000/0000-00, telefone (00)00000-0000. */
+function mascararDoc(v) {
+  const c = String(v ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 14);
+  if (c.length <= 11 && !/[A-Z]/.test(c)) return c.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2');
+  return c.replace(/^(\w{2})(\w)/, '$1.$2').replace(/^(\w{2})\.(\w{3})(\w)/, '$1.$2.$3').replace(/\.(\w{3})(\w)/, '.$1/$2').replace(/(\w{4})(\d{1,2})$/, '$1-$2');
+}
+function mascararFone(v) {
+  let d = String(v ?? '').replace(/\D/g, '');
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2); // colado com +55
+  d = d.slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : '';
+  const meio = d.length === 11 ? 5 : 4;
+  return `(${d.slice(0, 2)})${d.slice(2, 2 + meio)}${d.length > 2 + meio ? '-' + d.slice(2 + meio) : ''}`;
+}
+/**
+ * Liga máscara e validação aos campos marcados: data-doc (CPF ou CNPJ), data-cpf, data-fone e type=email.
+ * A mensagem aparece ao sair do campo e o formulário não envia com valor inválido.
+ */
+function ligarMascaras(form) {
+  const regras = [
+    ['[data-doc]', mascararDoc, (v) => { const c = v.replace(/[^0-9A-Z]/gi, ''); return c.length === 11 ? (cpfValido(c) ? '' : 'CPF inválido.') : c.length === 14 ? (cnpjValido(c) ? '' : 'CNPJ inválido.') : 'Informe um CPF (11 dígitos) ou CNPJ (14).'; }],
+    ['[data-cpf]', (v) => mascararDoc(String(v).replace(/\D/g, '').slice(0, 11)), (v) => (cpfValido(v) ? '' : 'CPF inválido.')],
+    ['[data-fone]', mascararFone, (v) => (/^\d{10,11}$/.test(v.replace(/\D/g, '')) ? '' : 'Telefone incompleto: use (DDD)número.')],
+    ['input[type=email]', null, (v) => (emailValido(v) ? '' : 'E-mail inválido.')],
+  ];
+  for (const [sel, mascara, validar] of regras) for (const el of form.querySelectorAll(sel)) {
+    const conferir = () => {
+      const msg = el.value.trim() ? validar(el.value.trim()) : '';
+      el.setCustomValidity(msg); el.title = msg; el.classList.toggle('invalido', !!msg);
+      return msg;
+    };
+    if (mascara) { el.value = mascara(el.value); el.addEventListener('input', () => { el.value = mascara(el.value); if (el.classList.contains('invalido')) conferir(); }); }
+    el.addEventListener('blur', conferir);
+    el.addEventListener('invalid', () => { el.classList.add('invalido'); });
+    if (el.value.trim()) conferir();
+  }
+}
 const numero = (v) => (v === '' || v == null ? null : Number(String(v).replace(/\./g, '').replace(',', '.')));
 const STATUS = { AUTORIZADA: 'Autorizada', CANCELADA: 'Cancelada', REJEITADA: 'Rejeitada', ERRO_COMUNICACAO: 'Sem resposta', PENDENTE: 'Pendente' };
 const carimbo = (s, grande) => `<span class="carimbo ${s}${grande ? ' grande' : ''}">${STATUS[s] ?? s}</span>`;
@@ -2810,6 +2863,7 @@ function ligarConsultaCnpj(form, modo) {
       preencher('nome_fantasia', d.nome_fantasia);
       preencher('email', d.email);
       preencher('fone', d.fone);
+      preencher('contato_fone', d.fone && mascararFone(d.fone));
       preencher('cep', d.cep);
       preencher('cod_municipio', d.cod_municipio);
       preencher('uf', d.uf);
@@ -4187,7 +4241,7 @@ function maisAcoesCliente(c) {
     (pode('situacao') || pode('visao')) && ['#/monitor', 'Monitor fiscal'],
   ].filter(Boolean);
   abrirDialogo(`<h2>${esc(c.nome_fantasia || c.razao_social)}</h2>
-    <dl class="dados"><dt>CNPJ/CPF</dt><dd>${fmtDoc(c.documento)}</dd><dt>Contato</dt><dd>${esc(c.contato_nome ?? '—')}${c.contato_fone ? ' · ' + esc(c.contato_fone) : ''}</dd>
+    <dl class="dados"><dt>CNPJ/CPF</dt><dd>${fmtDoc(c.documento)}</dd><dt>Contato</dt><dd>${esc(c.contato_nome ?? '—')}${c.contato_fone ? ' · ' + esc(fmtFone(c.contato_fone)) : ''}</dd>
       <dt>E-mail</dt><dd>${esc(c.email ?? '—')}</dd><dt>Cliente desde</dt><dd>${dataBr(c.cliente_desde) || '—'}</dd>
       ${c.observacoes ? `<dt>Observações</dt><dd>${esc(c.observacoes)}</dd>` : ''}</dl>
     <div class="acoes">${itens.map(([h, t]) => `<button data-ir="${h}">${t}</button>`).join('')}</div>
@@ -4201,13 +4255,44 @@ function maisAcoesCliente(c) {
   });
 }
 
+/** País e a nacionalidade que vai na qualificação do contrato ("FULANO, brasileiro(a), casado(a)…"). */
+const NACIONALIDADES = [['Brasil', 'brasileiro(a)'], ['Alemanha', 'alemão(ã)'], ['Angola', 'angolano(a)'], ['Argentina', 'argentino(a)'], ['Austrália', 'australiano(a)'],
+  ['Áustria', 'austríaco(a)'], ['Bélgica', 'belga'], ['Bolívia', 'boliviano(a)'], ['Cabo Verde', 'cabo-verdiano(a)'], ['Canadá', 'canadense'], ['Chile', 'chileno(a)'],
+  ['China', 'chinês(a)'], ['Colômbia', 'colombiano(a)'], ['Coreia do Sul', 'sul-coreano(a)'], ['Costa Rica', 'costarriquenho(a)'], ['Cuba', 'cubano(a)'],
+  ['Dinamarca', 'dinamarquês(a)'], ['Egito', 'egípcio(a)'], ['Equador', 'equatoriano(a)'], ['Espanha', 'espanhol(a)'], ['Estados Unidos', 'norte-americano(a)'],
+  ['Filipinas', 'filipino(a)'], ['Finlândia', 'finlandês(a)'], ['França', 'francês(a)'], ['Grécia', 'grego(a)'], ['Guatemala', 'guatemalteco(a)'], ['Guiana', 'guianense'],
+  ['Haiti', 'haitiano(a)'], ['Holanda (Países Baixos)', 'holandês(a)'], ['Honduras', 'hondurenho(a)'], ['Hungria', 'húngaro(a)'], ['Índia', 'indiano(a)'],
+  ['Irlanda', 'irlandês(a)'], ['Israel', 'israelense'], ['Itália', 'italiano(a)'], ['Japão', 'japonês(a)'], ['Líbano', 'libanês(a)'], ['México', 'mexicano(a)'],
+  ['Moçambique', 'moçambicano(a)'], ['Nicarágua', 'nicaraguense'], ['Nigéria', 'nigeriano(a)'], ['Noruega', 'norueguês(a)'], ['Nova Zelândia', 'neozelandês(a)'],
+  ['Panamá', 'panamenho(a)'], ['Paraguai', 'paraguaio(a)'], ['Peru', 'peruano(a)'], ['Polônia', 'polonês(a)'], ['Portugal', 'português(a)'],
+  ['Reino Unido', 'britânico(a)'], ['República Dominicana', 'dominicano(a)'], ['Romênia', 'romeno(a)'], ['Rússia', 'russo(a)'], ['Senegal', 'senegalês(a)'],
+  ['Síria', 'sírio(a)'], ['Suécia', 'sueco(a)'], ['Suíça', 'suíço(a)'], ['Suriname', 'surinamês(a)'], ['Turquia', 'turco(a)'], ['Ucrânia', 'ucraniano(a)'],
+  ['Uruguai', 'uruguaio(a)'], ['Venezuela', 'venezuelano(a)']];
+const ESTADOS_CIVIS = ['solteiro(a)', 'casado(a)', 'divorciado(a)', 'viúvo(a)', 'separado(a) judicialmente', 'em união estável'];
+const opcoesLista = (lista, atual, vazio) => {
+  const extra = atual && !lista.includes(atual) ? [atual] : []; // valor digitado antes da lista continua disponível
+  return `<option value="">${vazio}</option>` + [...lista, ...extra].map((v) => `<option ${v === atual ? 'selected' : ''}>${esc(v)}</option>`).join('');
+};
+/** Lista de países (Brasil primeiro e já marcado em cadastro novo) e "Outro país", que abre um campo para digitar. */
+function seletorNacionalidade(atual) {
+  const v = atual ?? 'brasileiro(a)';
+  const conhecida = NACIONALIDADES.some(([, n]) => n === v) || !v;
+  return `<select name="rep_nacionalidade">${NACIONALIDADES.map(([p, n]) => `<option value="${esc(n)}" ${n === v ? 'selected' : ''}>${esc(p)} — ${esc(n)}</option>`).join('')}
+    <option value="__outra" ${conhecida ? '' : 'selected'}>Outro país…</option></select>
+    <input name="rep_nacionalidade_outra" maxlength="40" placeholder="Nacionalidade (ex.: tailandês(a))" value="${conhecida ? '' : esc(v)}" ${conhecida ? 'hidden disabled' : ''}>`;
+}
+function ligarNacionalidade(f) {
+  const outra = () => { const o = f.rep_nacionalidade.value === '__outra'; f.rep_nacionalidade_outra.hidden = !o; f.rep_nacionalidade_outra.disabled = !o; f.rep_nacionalidade_outra.required = o; if (o) f.rep_nacionalidade_outra.focus(); };
+  f.rep_nacionalidade.onchange = outra;
+}
+
 function formCliente(c, tab, equipe, jaTemEscritorio = false) {
   const novo = !c || !!c._novo; // _novo: cadastro novo já preenchido (ex.: lead convertido no Radar)
   c = { regime: 'SIMPLES', situacao: 'ATIVO', contribuinte_iss: true, cliente_desde: hoje(), uf: 'SC', ...(novo ? c ?? {} : c) };
   abrirDialogo(`
     <form id="form-cli"><h2>${novo ? 'Novo cliente' : 'Editar cliente'}</h2>
       <fieldset><legend>Identificação</legend><div class="grade">
-        <label>CNPJ / CPF <span class="linha-campo"><input name="documento" required value="${esc(c.documento ?? '')}"><button type="button" data-buscar-cnpj>Buscar CNPJ</button></span><span class="dica" data-cnpj-info>Com o CNPJ, os dados vêm da Receita Federal.</span></label>
+        <label>CNPJ / CPF <span class="linha-campo"><input name="documento" required data-doc inputmode="numeric" value="${esc(c.documento ?? '')}"><button type="button" data-buscar-cnpj>Buscar CNPJ</button></span><span class="dica" data-cnpj-info>Com o CNPJ, os dados vêm da Receita Federal.</span></label>
         <label class="largo">Razão social / nome <input name="razao_social" required value="${esc(c.razao_social ?? '')}"></label>
         <label>Nome fantasia <input name="nome_fantasia" value="${esc(c.nome_fantasia ?? '')}"></label>
         <label>CNAE principal <input name="cnae" value="${esc(c.cnae ?? '')}"></label>
@@ -4227,10 +4312,10 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
       </div></fieldset>
       <fieldset><legend>Representante legal (vai no contrato)</legend><div class="grade">
         <label class="largo">Nome <input name="rep_nome" value="${esc(c.rep_nome ?? '')}" placeholder="Sócio administrador ou titular"></label>
-        <label>CPF <input name="rep_cpf" value="${esc(c.rep_cpf ?? '')}"></label>
+        <label>CPF <input name="rep_cpf" data-cpf inputmode="numeric" value="${esc(c.rep_cpf ?? '')}"></label>
         <label>RG <input name="rep_rg" value="${esc(c.rep_rg ?? '')}"></label>
-        <label>Nacionalidade <input name="rep_nacionalidade" value="${esc(c.rep_nacionalidade ?? '')}" placeholder="brasileiro(a)"></label>
-        <label>Estado civil <input name="rep_estado_civil" value="${esc(c.rep_estado_civil ?? '')}" placeholder="casado(a)"></label>
+        <label>Nacionalidade ${seletorNacionalidade(c.rep_nacionalidade)}</label>
+        <label>Estado civil <select name="rep_estado_civil">${opcoesLista(ESTADOS_CIVIS, c.rep_estado_civil, 'Selecione')}</select></label>
         <label>Profissão <input name="rep_profissao" value="${esc(c.rep_profissao ?? '')}" placeholder="empresário(a)"></label>
       </div></fieldset>
       <fieldset><legend>Atendimento</legend><div class="grade">
@@ -4240,7 +4325,7 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
         <label>Cliente desde <input type="date" name="cliente_desde" value="${esc(c.cliente_desde ?? '')}"></label>
         <label id="lbl-enc">Encerrado em <input type="date" name="encerrado_em" value="${esc(c.encerrado_em ?? '')}"><span class="dica">Obrigações de períodos até esta data continuam na agenda.</span></label>
         <label>Contato <input name="contato_nome" value="${esc(c.contato_nome ?? '')}"></label>
-        <label>Telefone / WhatsApp <input name="contato_fone" value="${esc(c.contato_fone ?? '')}"></label>
+        <label>Telefone / WhatsApp <input name="contato_fone" data-fone inputmode="tel" placeholder="(00)00000-0000" value="${esc(c.contato_fone ?? '')}"></label>
         <label>E-mail <input name="email" type="email" value="${esc(c.email ?? '')}"><span class="dica">Recebe notas, boletos e contratos.</span></label>
       </div></fieldset>
       <fieldset><legend>Perfil (define as obrigações)</legend><div class="grade">
@@ -4261,10 +4346,14 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
     // a consulta da Receita informa a opção pelo Simples: vira o regime (só para cliente novo)
     f.op_simp_nac.onchange = () => { if (novo) f.regime.value = { 2: 'MEI', 3: 'SIMPLES' }[f.op_simp_nac.value] ?? (f.regime.value === 'SIMPLES' || f.regime.value === 'MEI' ? 'PRESUMIDO' : f.regime.value); };
     ligarConsultaCnpj(f, 'empresa');
+    ligarMascaras(f);
+    ligarNacionalidade(f);
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const dados = lerForm(f);
       delete dados.op_simp_nac;
+      if (dados.rep_nacionalidade === '__outra') dados.rep_nacionalidade = dados.rep_nacionalidade_outra;
+      delete dados.rep_nacionalidade_outra;
       dados.uf = dados.uf ? dados.uf.toUpperCase() : null;
       try {
         if (novo) await api('POST', '/api/escritorio/carteira', dados); else await api('PUT', `/api/escritorio/carteira/${c.id}`, dados);
