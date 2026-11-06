@@ -10,7 +10,7 @@ import { EdicaoUsuario, NovoUsuario, confirmarRecuperacao, criarUsuario, editarU
 import { config } from './config.js';
 import { camposDesconhecidos, exemplo, listarModelos, ModeloEditado, renderizar, restaurarModelo, salvarModelo } from './servicos/modelos-email.js';
 import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, configPublica, enviarNotaPorEmail, historicoEmails, salvarAssinatura, salvarConfig, testarConfig } from './servicos/email.js';
-import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual, acessoDeSuporte } from './licenca.js';
+import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual, acessoDeSuporte, codigoDoComputador } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, ConfigPix, configPixPublica, gerarPixCobranca, gerarPixPendentes, salvarConfigPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
@@ -164,6 +164,11 @@ const VERSAO: string = (() => {
 
 export async function rotas(app: FastifyInstance) {
   // ---------- Primeiro acesso ----------
+  // Código do computador para pedir o acesso de suporte (usuário KONTOR) sem precisar entrar: só responde a quem está neste mesmo computador.
+  app.get('/api/suporte/computador', async (req, reply) => {
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.ip)) return reply.code(403).send({ erro: 'Disponível apenas no computador onde o Kontor está instalado.' });
+    return { codigo: codigoDoComputador() };
+  });
   app.get('/api/setup/status', async () => ({ configurado: sistemaConfigurado(), desktop: config.desktop, versao: VERSAO }));
 
   app.post('/api/setup', async (req, reply) => {

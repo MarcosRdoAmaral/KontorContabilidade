@@ -342,6 +342,18 @@ $('#form-login').onsubmit = async (ev) => {
 $('#sair').onclick = sair;
 
 // Esqueci minha senha: 1) informa o usuário e recebe um código por e-mail; 2) informa o código e a senha nova.
+$('#cod-suporte').onclick = async () => {
+  try {
+    const r = await fetch('/api/suporte/computador'); const j = await r.json();
+    if (!r.ok) throw new Error(j.erro);
+    abrirDialogo(`<h2>Código deste computador</h2>
+      <p class="sutil">Envie este código ao suporte Kontor para receber o acesso de suporte (usuário KONTOR). Ele só vale neste computador.</p>
+      <input id="cod-comp" readonly value="${esc(j.codigo)}" style="width:100%;font-family:monospace" onfocus="this.select()">
+      <div class="acoes"><button class="primario" id="cod-copiar">Copiar código</button><button data-fechar>Fechar</button></div>`, () => {
+      $('#cod-copiar').onclick = async () => { try { await navigator.clipboard.writeText(j.codigo); aviso('Código copiado.'); } catch { $('#cod-comp').select(); aviso('Selecione o código e copie com Ctrl+C.'); } };
+    });
+  } catch (e) { $('#erro-login').textContent = e.message; }
+};
 $('#esqueci').onclick = () => abrirDialogo(`
   <form id="form-esqueci"><h2>Esqueci minha senha</h2>
     <p class="sutil">Enviamos um código de 6 dígitos para o e-mail cadastrado no seu usuário. Com ele, você cria a sua senha nova.</p>
