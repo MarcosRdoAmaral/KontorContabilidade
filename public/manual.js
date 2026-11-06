@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.46.5';
+export const MANUAL_VERSAO = '1.46.6';
 
 export const MANUAL = [
   {
@@ -120,7 +120,7 @@ export const MANUAL = [
         <li>O envio marca a data de envio e lança os valores de DARF, FGTS e sindicato no Controle mensal. Cliente sem e-mail aparece como pendente. <em>Ver prévia</em> mostra o que seria enviado sem enviar.</li>
       </ul>
       <h3>Senhas e acessos</h3>
-      <p>Em Escritório &gt; Senhas e acessos ficam o CPF do responsável, o código de acesso e a atividade do Simples Nacional, e a senha previdenciária de cada cliente. As senhas são guardadas criptografadas e só aparecem ao clicar em <em>Mostrar</em> (voltam a ficar escondidas depois de um minuto), com o botão <em>Copiar</em>. Só quem tem a permissão “Senhas e acessos dos clientes” vê essa tela; ela não vem liberada por padrão para usuários novos.</p>
+      <p>No cadastro do cliente (Carteira de clientes &gt; Editar), o quadro <em>Senhas e acessos</em> guarda o código de acesso e a atividade do Simples Nacional (o CPF usado é o do representante legal), e a senha previdenciária. As senhas são guardadas criptografadas e só aparecem ao clicar em <em>Mostrar senhas guardadas</em> (voltam a ficar escondidas depois de um minuto), com o botão <em>Copiar</em>. Para trocar, digite a nova; para apagar, marque a opção correspondente. Só quem tem a permissão “Senhas e acessos dos clientes” vê esse quadro; ela não vem liberada por padrão para usuários novos.</p>
       <h3>Importar a planilha antiga</h3>
       <p>O botão <em>Importar planilha</em> lê a planilha de controle (.xlsx): as senhas do Simples e previdenciária são ligadas pelo CNPJ; o canal de envio (aba Fiscal), pelo nome do cliente. A prévia mostra a quem cada linha foi ligada antes de importar.</p>`,
   },

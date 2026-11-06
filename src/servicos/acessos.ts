@@ -27,6 +27,13 @@ export function listarAcessos(escritorioId: number, empresas: number[] | null = 
     .map((l) => ({ ...l, tem_codigo: !!l.tem_codigo, tem_prev: !!l.tem_prev }));
 }
 
+/** Acessos de um cliente (sem os segredos), para o cadastro do cliente na Carteira. */
+export function acessoDoCliente(escritorioId: number, empresaId: number) {
+  const l = listarAcessos(escritorioId, [empresaId])[0];
+  if (!l) throw new ErroNegocio('Cliente não encontrado.', 404);
+  return l;
+}
+
 export function salvarAcesso(escritorioId: number, usuarioId: number, empresaId: number, d: z.infer<typeof Acesso>) {
   if (!db.prepare('SELECT 1 FROM empresas WHERE id = ? AND escritorio_id = ?').get(empresaId, escritorioId)) throw new ErroNegocio('Cliente não encontrado.', 404);
   const atual = db.prepare('SELECT * FROM acessos_cliente WHERE empresa_id = ?').get(empresaId) as any;
@@ -35,6 +42,8 @@ export function salvarAcesso(escritorioId: number, usuarioId: number, empresaId:
     ON CONFLICT(empresa_id) DO UPDATE SET sn_cpf_responsavel = excluded.sn_cpf_responsavel, sn_codigo_enc = excluded.sn_codigo_enc, sn_atividade = excluded.sn_atividade,
       prev_senha_enc = excluded.prev_senha_enc, observacoes = excluded.observacoes, usuario_id = excluded.usuario_id, atualizado_em = datetime('now')`)
     .run(empresaId, d.sn_cpf_responsavel ?? null, seg(d.sn_codigo, atual?.sn_codigo_enc ?? null), d.sn_atividade ?? null, seg(d.prev_senha, atual?.prev_senha_enc ?? null), d.observacoes ?? null, usuarioId);
+  // um CPF só: o do Simples é o do representante legal; completa o cadastro do cliente quando ele ainda não tem
+  if (d.sn_cpf_responsavel) db.prepare("UPDATE empresas SET rep_cpf = ? WHERE id = ? AND (rep_cpf IS NULL OR rep_cpf = '')").run(d.sn_cpf_responsavel, empresaId);
   return { ok: true };
 }
 

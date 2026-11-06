@@ -64,6 +64,11 @@ test('controle mensal de entregas, senhas dos clientes e importação da planilh
     const bruto = db.prepare('SELECT sn_codigo_enc FROM acessos_cliente WHERE empresa_id = ?').get(pad) as any;
     assert.ok(!bruto.sn_codigo_enc.includes('123.456'), 'guardado criptografado');
     assert.deepEqual((await call('POST', `/api/escritorio/acessos/${pad}/revelar`, undefined, t)).json, { sn_codigo: '123.456.789/012', prev_senha: 'abc123' });
+    assert.equal((db.prepare('SELECT rep_cpf FROM empresas WHERE id = ?').get(pad) as any).rep_cpf, '39053344705', 'o CPF do Simples completa o do representante legal');
+    // o cadastro do cliente lê os acessos de um cliente só, sem os segredos
+    const um = (await call('GET', `/api/escritorio/acessos/${pad}`, undefined, t)).json;
+    assert.equal(um.empresa_id, pad); assert.equal(um.tem_codigo, true); assert.equal(um.sn_codigo, undefined); assert.equal(um.prev_senha_enc, undefined);
+    assert.equal((await call('GET', '/api/escritorio/acessos/999999', undefined, t)).status, 404);
     // trocar só a atividade mantém o código
     await call('PUT', `/api/escritorio/acessos/${pad}`, { sn_cpf_responsavel: '39053344705', sn_atividade: 'Indústria' }, t);
     assert.equal((await call('POST', `/api/escritorio/acessos/${pad}/revelar`, undefined, t)).json.sn_codigo, '123.456.789/012');

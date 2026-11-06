@@ -19,7 +19,7 @@ import { automaticaParaTodos, capturarTodos, notasDoMes, pacoteDoMes, statusAutX
 import { xmlSaida } from './servicos/nfe-saidas.js';
 import { atualizarReceitas, consultarDeclaracaoPgdas, buscarPgdas, transmitirPgdasZerado, sincronizarControle, ATIVIDADES_PGDAS, AtividadesCliente, EntradaPgdas, TRIBUTOS_SN, arquivoFechamento, calcularPgdas, enviarFechamento, fechamentoDoCliente, mensagemFechamento, resumoFechamentos, salvarAtividades, transmitirDctfweb, transmitirPgdas } from './servicos/fechamento.js';
 import { AREAS, LinhaControle, listarControle, salvarLinha } from './servicos/controle-mensal.js';
-import { Acesso, listarAcessos, revelarAcesso, salvarAcesso } from './servicos/acessos.js';
+import { Acesso, acessoDoCliente, listarAcessos, revelarAcesso, salvarAcesso } from './servicos/acessos.js';
 import { analisarControle, importarControle } from './servicos/importar-controle.js';
 import { DocumentoFgts, ResultadoFgts, detalheFgts, documentoFgts, salvarDocumentoFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
@@ -399,6 +399,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
 
     // ---------- Senhas e acessos dos clientes ----------
     api.get('/api/escritorio/acessos', async (req) => listarAcessos(u(req).escritorio_id, empresasDoUsuario(u(req))));
+    api.get('/api/escritorio/acessos/:id', async (req) => { checar(req, id(req)); return acessoDoCliente(u(req).escritorio_id, id(req)); });
     api.put('/api/escritorio/acessos/:id', async (req) => { checar(req, id(req)); return salvarAcesso(u(req).escritorio_id, u(req).id, id(req), Acesso.parse(req.body)); });
     api.post('/api/escritorio/acessos/:id/revelar', async (req) => { checar(req, id(req)); return revelarAcesso(u(req).escritorio_id, id(req)); });
 

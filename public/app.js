@@ -4318,6 +4318,14 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
         <label>Estado civil <select name="rep_estado_civil">${opcoesLista(ESTADOS_CIVIS, c.rep_estado_civil, 'Selecione')}</select></label>
         <label>Profissão <input name="rep_profissao" value="${esc(c.rep_profissao ?? '')}" placeholder="empresário(a)"></label>
       </div></fieldset>
+      ${pode('senhas') ? `<fieldset id="cli-acessos"><legend>Senhas e acessos</legend>
+        <p class="dica">O CPF usado no Simples Nacional é o do representante legal, informado acima. Ficam criptografados. As senhas guardadas só aparecem ao clicar em “Mostrar” e voltam a ficar escondidas depois de um minuto.</p><div class="grade">
+        <label>Código de acesso do Simples <span class="linha-campo"><input name="ac_sn_codigo" autocomplete="off" data-segredo="sn_codigo"></span></label>
+        <label>Atividade (Simples) <input name="ac_sn_atividade" maxlength="120" placeholder="Ex.: Revenda, Serviços Anexo III, Fator R"></label>
+        <label>Senha previdenciária <span class="linha-campo"><input name="ac_prev_senha" autocomplete="off" data-segredo="prev_senha"></span></label>
+        <label class="largo">Observações dos acessos <input name="ac_observacoes" maxlength="500"></label>
+        <div class="largo" id="ac-mostrar"></div>
+      </div></fieldset>` : ''}
       <fieldset><legend>Atendimento</legend><div class="grade">
         <label>Regime tributário <select name="regime">${Object.entries(tab.regimes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
         <label>Responsável <select name="responsavel_id" data-num>${opcoesEquipe(equipe, c.responsavel_id)}</select></label>
@@ -4348,19 +4356,67 @@ function formCliente(c, tab, equipe, jaTemEscritorio = false) {
     ligarConsultaCnpj(f, 'empresa');
     ligarMascaras(f);
     ligarNacionalidade(f);
+    const acessos = pode('senhas') ? ligarAcessosCliente(f, novo ? null : c.id) : null;
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const dados = lerForm(f);
       delete dados.op_simp_nac;
       if (dados.rep_nacionalidade === '__outra') dados.rep_nacionalidade = dados.rep_nacionalidade_outra;
       delete dados.rep_nacionalidade_outra;
+      for (const k of Object.keys(dados)) if (k.startsWith('ac_')) delete dados[k];
       dados.uf = dados.uf ? dados.uf.toUpperCase() : null;
       try {
-        if (novo) await api('POST', '/api/escritorio/carteira', dados); else await api('PUT', `/api/escritorio/carteira/${c.id}`, dados);
-        d.close(); aviso('Cliente salvo.'); await carregarEmpresas(); telaCarteira();
+        const idCli = novo ? (await api('POST', '/api/escritorio/carteira', dados)).id : (await api('PUT', `/api/escritorio/carteira/${c.id}`, dados), c.id);
+        let falhaAcessos = '';
+        if (acessos) await acessos.salvar(idCli).catch((e) => (falhaAcessos = mensagemErro(e)));
+        d.close(); aviso(falhaAcessos ? `Cliente salvo, mas as senhas e acessos não: ${falhaAcessos} Abra o cliente de novo para corrigir.` : 'Cliente salvo.'); await carregarEmpresas(); telaCarteira();
       } catch (e) { $('#erro-cli').textContent = mensagemErro(e); }
     };
   });
+}
+
+/** Senhas e acessos dentro do cadastro do cliente: carrega o que está guardado (sem os segredos), mostra sob pedido e salva junto. */
+function ligarAcessosCliente(f, empresaId) {
+  let atual = null;
+  const caixa = f.querySelector('#ac-mostrar');
+  const pintar = () => {
+    const temCod = !!atual?.tem_codigo, temPrev = !!atual?.tem_prev;
+    f.ac_sn_codigo.placeholder = temCod ? 'Guardado — digite só para trocar' : '';
+    f.ac_prev_senha.placeholder = temPrev ? 'Guardada — digite só para trocar' : '';
+    caixa.innerHTML = temCod || temPrev ? `<button type="button" id="ac-ver">Mostrar senhas guardadas</button>
+      <label class="check"><input type="checkbox" name="ac_apagar_codigo" ${temCod ? '' : 'disabled'}> Apagar o código do Simples</label>
+      <label class="check"><input type="checkbox" name="ac_apagar_prev" ${temPrev ? '' : 'disabled'}> Apagar a senha previdenciária</label><div id="ac-revelado"></div>` : '';
+    const ver = caixa.querySelector('#ac-ver');
+    if (ver) ver.onclick = async () => {
+      try {
+        const sg = await api('POST', `/api/escritorio/acessos/${empresaId}/revelar`);
+        const rot = { sn_codigo: 'Código do Simples', prev_senha: 'Senha previdenciária' };
+        const alvo = caixa.querySelector('#ac-revelado');
+        alvo.innerHTML = Object.entries(rot).filter(([k]) => sg[k]).map(([k, r]) => `<p>${r}: <code>${esc(sg[k])}</code> <button type="button" data-copiar="${esc(sg[k])}">Copiar</button></p>`).join('');
+        alvo.querySelectorAll('[data-copiar]').forEach((b) => (b.onclick = () => navigator.clipboard?.writeText(b.dataset.copiar).then(() => aviso('Copiado.'))));
+        setTimeout(() => { if (alvo.isConnected) alvo.innerHTML = ''; }, 60e3);
+      } catch (e) { aviso(mensagemErro(e)); }
+    };
+  };
+  if (empresaId) api('GET', `/api/escritorio/acessos/${empresaId}`).then((a) => {
+    atual = a;
+    // cadastros antigos: o CPF que só estava nas senhas passa para o representante legal
+    if (a.sn_cpf_responsavel && !f.rep_cpf.value.trim()) { f.rep_cpf.value = mascararDoc(a.sn_cpf_responsavel); f.rep_cpf.dispatchEvent(new Event('blur')); }
+    f.ac_sn_atividade.value = a.sn_atividade ?? ''; f.ac_observacoes.value = a.observacoes ?? '';
+    pintar();
+  }).catch(() => {});
+  return {
+    async salvar(id) {
+      const v = (n) => f[n].value.trim();
+      const mudou = !!(v('ac_sn_codigo') || v('ac_prev_senha') || f.ac_apagar_codigo?.checked || f.ac_apagar_prev?.checked
+        || v('rep_cpf').replace(/\D/g, '') !== (atual?.sn_cpf_responsavel ?? '') || v('ac_sn_atividade') !== (atual?.sn_atividade ?? '') || v('ac_observacoes') !== (atual?.observacoes ?? ''));
+      if (!mudou) return;
+      const corpo = { sn_cpf_responsavel: v('rep_cpf') || null, sn_atividade: v('ac_sn_atividade'), observacoes: v('ac_observacoes') };
+      if (v('ac_sn_codigo')) corpo.sn_codigo = v('ac_sn_codigo'); else if (f.ac_apagar_codigo?.checked) corpo.sn_codigo = '';
+      if (v('ac_prev_senha')) corpo.prev_senha = v('ac_prev_senha'); else if (f.ac_apagar_prev?.checked) corpo.prev_senha = '';
+      await api('PUT', `/api/escritorio/acessos/${id}`, corpo);
+    },
+  };
 }
 
 async function obrigacoesDoCliente(c, equipe) {
@@ -5302,23 +5358,57 @@ const CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'E-mail', OUTRO: 'Outro' };
 async function telaControle() {
   const f = telaControle.filtro ??= { mes: (() => { const d = new Date(Date.now() - 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })(), area: 'FISCAL', q: '', pendentes: false, todosDp: false };
   if (f.area === 'CONTABIL') f.area = 'FISCAL';
+  f.pagina ??= 1; f.porPagina ??= (() => { try { return Number(localStorage.getItem('ct-por-pagina')) || 25; } catch { return 25; } })();
+  const sel = (telaControle.sel ??= new Set()); // clientes marcados para as ações em lote
   // o fechamento vem antes: ao carregar, ele lança no controle o valor das guias já emitidas
   const fech = f.area === 'CONTABIL' ? { resumo: {} } : await api('GET', `/api/escritorio/fechamento?mes=${f.mes}`).catch(() => ({ resumo: {} }));
   const lista = await api('GET', `/api/escritorio/controle?mes=${f.mes}&area=${f.area}`);
   telaControle.tabelas = fech;
   const AREA = { FISCAL: 'Fiscal', DP: 'Departamento pessoal' }; // a aba Contábil volta depois
+  const [ano, mm] = f.mes.split('-');
+  const compAtiva = `${MESES_NOME[Number(mm) - 1].replace(/^./, (x) => x.toUpperCase())}/${ano}`;
+  const botao = (id, ico, rot, tit, cls = '') => `<button id="${id}" class="ct-acao ${cls}" title="${esc(tit)}">${icone(ico)}<span>${rot}</span></button>`;
+  const acoes = f.area === 'DP'
+    ? [botao('ct-dctf-lote', 'aviao', 'Transmitir DCTFWeb', 'Transmite a DCTFWeb sem movimento dos clientes marcados como sem folha'),
+      botao('ct-dctf-busca', 'busca', 'Buscar DARFs', 'Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF'),
+      botao('ct-env-lote', 'envelope', 'Enviar DARFs por e-mail', 'Envia por e-mail o DARF aos clientes que ainda não receberam')]
+    : [botao('ct-pg-busca', 'busca', 'Buscar DAS', 'Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS'),
+      botao('ct-pg-zerado', 'aviao', 'Transmitir PGDAS-D zerados', 'Transmite o PGDAS-D zerado dos clientes marcados como sem movimento'),
+      botao('ct-env-lote', 'envelope', 'Enviar DAS por e-mail', 'Envia por e-mail o DAS aos clientes que ainda não receberam')];
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Controle mensal</h1><p class="sutil">Entregas de cada cliente na competência: impostos e guias do fiscal, folha e encargos do departamento pessoal e a contabilização. Tudo é salvo ao sair de cada campo.</p></div>
-      <div>${f.area === 'DP' ? '<button id="ct-dctf-lote" title="Transmite a DCTFWeb dos clientes marcados como sem folha">Transmitir DCTFWeb sem movimento (lote)</button> <button id="ct-dctf-busca" title="Para DCTFWeb transmitida por outro sistema: busca o recibo e gera o DARF">Buscar DARFs já transmitidos</button> <button id="ct-envio-dp" title="Envia aos clientes os documentos do DP que chegam na pasta do escritório">Envio automático do DP</button> ' : ''}${f.area === 'FISCAL' ? '<button id="ct-pg-busca" title="Para PGDAS-D transmitido por outro sistema: busca a declaração e gera o DAS">Buscar DAS já transmitidos</button> <button id="ct-pg-zerado" title="Transmite o PGDAS-D zerado dos clientes marcados como sem movimento">Transmitir PGDAS-D zerados (lote)</button> ' : ''}${f.area !== 'CONTABIL' ? '<button id="ct-env-lote" title="Envia por e-mail a guia da aba (DAS no Fiscal, DARF no DP) aos clientes que ainda não receberam">' + (f.area === 'FISCAL' ? 'Enviar DAS por e-mail' : 'Enviar DARFs por e-mail') + '</button> ' : ''}<button id="ct-imp">Importar planilha</button></div></div>
-    <div class="filtros">
-      <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
-      <label style="flex:1 1 220px">Buscar <input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Cliente"></label>
-      <label class="check" style="align-self:end"><input type="checkbox" id="ct-pend" ${f.pendentes ? 'checked' : ''}> Só não enviados</label>
-      ${f.area === 'DP' ? `<label class="check" style="align-self:end"><input type="checkbox" id="ct-todos" ${f.todosDp ? 'checked' : ''}> Incluir clientes sem funcionários</label>` : ''}
+    <div class="ct-topo">
+      <div class="ct-titulo"><span class="ct-ico-grande">${icone('controle')}</span><div><h1>Controle mensal</h1><p class="sutil">Acompanhe o envio das obrigações por competência. Tudo é salvo ao sair de cada campo.</p></div></div>
+      <button type="button" class="ct-comp-ativa" id="ct-comp-ativa" title="Trocar a competência">${icone('calendario')}<span><span class="dica">Competência ativa:</span><strong>${compAtiva}</strong></span>${icone('chevron', 'ico ico-p')}</button>
     </div>
-    <nav class="abas" id="ct-abas">${Object.entries(AREA).map(([k, v]) => `<a href="#" data-a="${k}" class="${f.area === k ? 'ativo' : ''}">${v}</a>`).join('')}</nav>
-    <p class="dica" id="ct-cont"></p>
-    <div class="rolagem"><table class="tabela tabela-controle"><thead id="ct-cab"></thead><tbody id="ct-lista"></tbody><tfoot id="ct-tot"></tfoot></table></div>`;
+    <div class="ct-kpis">
+      <div class="ct-kpi"><span class="ct-kpi-ico azul">${icone('carteira')}</span><div><div class="ct-kpi-rot">Total de clientes</div><div class="ct-kpi-num" id="kpi-total">0</div><div class="dica">Clientes na competência</div></div></div>
+      <div class="ct-kpi ok"><span class="ct-kpi-ico verde">${icone('ok')}</span><div><div class="ct-kpi-rot">Enviados</div><div class="ct-kpi-num" id="kpi-env">0</div><div class="dica" id="kpi-env-pct">0% concluído</div></div></div>
+      <div class="ct-kpi pend"><span class="ct-kpi-ico ambar">${icone('relogio')}</span><div><div class="ct-kpi-rot">Pendentes</div><div class="ct-kpi-num" id="kpi-pend">0</div><div class="dica">Aguardando envio</div></div></div>
+      <div class="ct-kpi"><span class="ct-kpi-ico laranja">${icone('monitor')}</span><div style="flex:1"><div class="ct-kpi-rot">Progresso geral</div><div class="ct-kpi-num" id="kpi-prog">0%</div><div class="ct-barra"><span id="kpi-barra"></span></div></div></div>
+    </div>
+    <div class="ct-acoes">
+      ${botao('ct-imp', 'nuvem', 'Importar planilha', 'Importa a planilha de controle (.xlsx)', 'primario')}
+      ${acoes.join('')}
+      <details class="cob-mais ct-mais"><summary class="ct-acao">${icone('config')}<span>Mais ações</span>${icone('chevron', 'ico ico-p')}</summary><div class="cob-menu">
+        <button type="button" data-mais="hoje">Marcar marcados como enviados hoje</button>
+        ${f.area === 'DP' ? '<button type="button" data-mais="envio-dp">Envio automático do DP</button>' : ''}
+        <button type="button" data-mais="desmarcar">Desmarcar todos</button>
+      </div></details>
+      <span class="dica" id="ct-sel-info"></span>
+    </div>
+    <div class="ct-filtros">
+      <label>Competência <input type="month" id="ct-mes" value="${f.mes}"></label>
+      <label class="ct-busca">Buscar cliente <span class="ct-campo-ico">${icone('busca', 'ico ico-p')}<input type="search" id="ct-q" value="${esc(f.q)}" placeholder="Nome ou CNPJ…"></span></label>
+      <div class="ct-dep"><span>Departamento</span><div class="segmentado" id="ct-abas">${Object.entries(AREA).map(([k, v]) => `<button type="button" data-a="${k}" class="${f.area === k ? 'ativo' : ''}">${v}</button>`).join('')}</div></div>
+      <label class="check"><input type="checkbox" id="ct-pend" ${f.pendentes ? 'checked' : ''}> Só não enviados</label>
+      ${f.area === 'DP' ? `<label class="check"><input type="checkbox" id="ct-todos" ${f.todosDp ? 'checked' : ''}> Incluir clientes sem funcionários</label>` : ''}
+      <button type="button" id="ct-limpar" class="ct-limpar">${icone('refazer', 'ico ico-p')} Limpar filtros</button>
+    </div>
+    <div class="ct-tabela">
+      <div class="rolagem"><table class="tabela tabela-controle"><thead id="ct-cab"></thead><tbody id="ct-lista"></tbody><tfoot id="ct-tot"></tfoot></table></div>
+      <div class="ct-rodape"><span class="dica" id="ct-cont"></span><div class="ct-pag" id="ct-pag"></div>
+        <label class="ct-exibir">Exibir <select id="ct-por">${[10, 25, 50, 100, 0].map((n) => `<option value="${n}" ${f.porPagina === n ? 'selected' : ''}>${n || 'Todos'}</option>`).join('')}</select></label></div>
+    </div>`;
   const num = (k, v) => `<input class="ct-num" data-k="${k}" inputmode="decimal" value="${fmtValor(v)}">`;
   const dt = (k, v) => `<input type="date" data-k="${k}" value="${esc(v ?? '')}">`;
   const chk = (k, v, t) => `<input type="checkbox" data-k="${k}" ${v ? 'checked' : ''} title="${t}">`;
@@ -5329,13 +5419,28 @@ async function telaControle() {
     DP: ['Cliente', 'DCTFWeb', 'Sem folha', 'DARF Prev.', 'FGTS', 'Sindicato', 'Enviado em', 'Observações'],
     CONTABIL: ['Cliente', 'Enviado em', 'Observações'],
   };
-  $('#ct-cab').innerHTML = `<tr>${COLS[f.area].map((c) => `<th class="${/Faturamento|Imposto|Alíquota|DARF|FGTS|Sindicato|Total/.test(c) ? 'num' : ''}">${c}</th>`).join('')}</tr>`;
+  $('#ct-cab').innerHTML = `<tr><th class="ct-sel"><input type="checkbox" id="ct-sel-todos" aria-label="Marcar todos da lista"></th>${COLS[f.area].map((c) => `<th class="${/Faturamento|Imposto|Alíquota|DARF|FGTS|Sindicato|Total/.test(c) ? 'num' : ''}">${c}</th>`).join('')}<th>Situação</th><th class="ct-acoes-col">Ações</th></tr>`;
+  const tipoGuia = f.area === 'DP' ? 'DCTFWEB' : 'PGDASD';
+  const situacao = (c) => {
+    if (c.dados.enviado) return `<span class="selo-sit ok">${icone('ok', 'ico ico-p')} Enviado</span>`;
+    const x = fech.resumo[c.empresa_id]?.[tipoGuia];
+    if (x?.situacao === 'TRANSMITIDA') return `<span class="selo-sit proc">${icone('ok', 'ico ico-p')} Transmitida</span>`;
+    if (x?.situacao === 'ERRO') return `<span class="selo-sit erro">${icone('alerta', 'ico ico-p')} Erro</span>`;
+    return `<span class="selo-sit pend">${icone('relogio', 'ico ico-p')} Pendente</span>`;
+  };
+  const temFech = (c) => f.area === 'DP' || c.regime === 'SIMPLES';
+  const menuLinha = (c) => `<details class="cob-mais"><summary title="Mais ações">⋯</summary><div class="cob-menu">
+    ${temFech(c) ? `<button type="button" data-m-fech>Abrir fechamento</button>` : ''}
+    ${c.dados.enviado ? '<button type="button" data-m-desenv>Desfazer envio</button>' : '<button type="button" data-m-hoje>Marcar enviado hoje</button>'}
+  </div></details>`;
   const cliente = (c) => `<td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span>${c.usuario ? `<br><span class="dica" title="${esc(dhBr(c.atualizado_em))}">por ${esc(c.usuario)}</span>` : ''}</td>`;
   const SIT_FECH = { TRANSMITIDA: ['Transmitida', 'cor-verde'], CALCULADO: ['Calculada', 'cor-ambar'], ERRO: ['Erro', 'cor-vermelho'] };
   const celFech = (c, tipo) => { const x = fech.resumo[c.empresa_id]?.[tipo]; const [r, cor] = !x ? ['Abrir', 'dica'] : x.situacao === 'TRANSMITIDA' && !x.tem_guia && x.erro ? ['Transmitida, sem guia', 'cor-ambar'] : SIT_FECH[x.situacao];
     return `<td><button type="button" class="link-fech ${cor}" data-fech="${c.empresa_id}" title="${esc(x?.erro ?? 'Abrir o fechamento deste cliente')}">${r}${x?.valor != null && x.situacao !== 'ERRO' ? `<br><span class="dica">${brl(x.valor)}</span>` : ''}</button></td>`; };
   const aliq = (d) => (d.faturamento > 0 && d.imposto != null ? `${(d.imposto / d.faturamento * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%` : '—');
-  const linha = (c) => {
+  const linha = (c) => linhaBase(c).replace(/^(<tr[^>]*>)/, `$1<td class="ct-sel"><input type="checkbox" data-sel ${sel.has(c.empresa_id) ? 'checked' : ''} aria-label="Marcar ${esc(c.cliente)}"></td>`)
+    .replace(/<\/tr>$/, `<td data-sit>${situacao(c)}</td><td class="ct-acoes-col">${menuLinha(c)}</td></tr>`);
+  const linhaBase = (c) => {
     const d = c.dados;
     if (f.area === 'FISCAL') return `<tr data-id="${c.empresa_id}" class="${d.sem_movimento ? 'inativo' : ''}">${cliente(c)}${c.regime === 'SIMPLES' ? celFech(c, 'PGDASD') : '<td><span class="dica">—</span></td>'}<td>${chk('sem_movimento', d.sem_movimento, 'Sem movimento fiscal')}</td><td>${chk('entradas', d.entradas, 'Notas de entrada conferidas')}</td><td>${chk('saidas', d.saidas, 'Notas de saída/serviço conferidas')}</td>
       <td class="num">${num('faturamento', d.faturamento)}</td><td class="num">${num('imposto', d.imposto)}</td><td class="num" data-aliq>${aliq(d)}</td><td>${dt('emissao', d.emissao)}</td>
@@ -5344,21 +5449,42 @@ async function telaControle() {
       <td class="num">${num('darf_prev', d.darf_prev ?? 0)}</td><td class="num">${num('fgts', d.fgts ?? 0)}</td><td class="num">${num('sindicato', d.sindicato ?? 0)}</td><td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
     return `<tr data-id="${c.empresa_id}">${cliente(c)}<td>${enviado(d.enviado)}</td><td>${obs(d.observacoes)}</td></tr>`;
   };
+  // indicadores: todos os clientes do departamento na competência (a busca e "Só não enviados" não mudam os números)
+  const daArea = () => lista.filter((c) => f.area !== 'DP' || f.todosDp || c.tem_funcionarios || Object.keys(c.dados).length);
   const totais = () => {
-    const vis = visiveis();
-    const env = vis.filter((c) => c.dados.enviado).length;
-    $('#ct-cont').textContent = `${vis.length} cliente(s) · ${env} enviado(s) · ${vis.length - env} pendente(s).`;
+    const base = daArea(), env = base.filter((c) => c.dados.enviado).length, pct = base.length ? Math.round(env / base.length * 100) : 0;
+    $('#kpi-total').textContent = base.length; $('#kpi-env').textContent = env; $('#kpi-pend').textContent = base.length - env;
+    $('#kpi-env-pct').textContent = `${pct}% concluído`; $('#kpi-prog').textContent = `${pct}%`; $('#kpi-barra').style.width = `${pct}%`;
+    const n = visiveis().length;
+    $('#ct-cont').textContent = `${n} cliente(s) encontrado(s)`;
+    $('#ct-sel-info').textContent = sel.size ? `${sel.size} marcado(s): as ações valem só para eles.` : '';
     $('#ct-tot').innerHTML = ''; // sem linha de totais (pedido do escritório)
   };
+  const paginas = () => (f.porPagina ? Math.max(1, Math.ceil(visiveis().length / f.porPagina)) : 1);
+  const pintarPaginacao = () => {
+    const tot = paginas(); f.pagina = Math.min(Math.max(1, f.pagina), tot);
+    const nums = [...new Set([1, f.pagina - 1, f.pagina, f.pagina + 1, tot])].filter((n) => n >= 1 && n <= tot).sort((a, b) => a - b);
+    let ant = 0; const itens = [];
+    for (const n of nums) { if (n - ant > 1) itens.push('<span class="dica">…</span>'); itens.push(`<button type="button" data-pg="${n}" class="${n === f.pagina ? 'ativo' : ''}">${n}</button>`); ant = n; }
+    $('#ct-pag').innerHTML = tot > 1 ? `<button type="button" data-pg="${f.pagina - 1}" ${f.pagina === 1 ? 'disabled' : ''} aria-label="Anterior">‹</button>${itens.join('')}<button type="button" data-pg="${f.pagina + 1}" ${f.pagina === tot ? 'disabled' : ''} aria-label="Próxima">›</button>` : '';
+    $('#ct-pag').querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { f.pagina = Number(b.dataset.pg); pintar(); }));
+  };
+  // ações em lote: os marcados, ou todos da lista filtrada quando nada está marcado
+  const alvoLote = () => (sel.size ? lista.filter((c) => sel.has(c.empresa_id)) : visiveis());
   const visiveis = () => { const q = norm(f.q); return lista.filter((c) => (!q || norm(c.cliente).includes(q) || c.documento.includes(f.q.replace(/\D/g, '') || '#')) && (!f.pendentes || !c.dados.enviado) && (f.area !== 'DP' || f.todosDp || c.tem_funcionarios || Object.keys(c.dados).length)); };
   const salvar = async (c, extra = {}) => {
     try { const r = await api('PUT', '/api/escritorio/controle/linha', { empresa_id: c.empresa_id, competencia: f.mes, area: f.area, dados: c.dados, ...extra }); c.dados = r.dados; c.usuario = estado.usuario.nome; }
     catch (e) { aviso(mensagemErro(e)); }
   };
   const pintar = () => {
-    const vis = visiveis();
-    $('#ct-lista').innerHTML = vis.length ? vis.map(linha).join('') : `<tr><td colspan="${COLS[f.area].length}"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>`;
+    const todos = visiveis();
+    pintarPaginacao();
+    const vis = f.porPagina ? todos.slice((f.pagina - 1) * f.porPagina, f.pagina * f.porPagina) : todos;
+    $('#ct-lista').innerHTML = vis.length ? vis.map(linha).join('') : `<tr><td colspan="${COLS[f.area].length + 3}"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>`;
     totais();
+    const st = $('#ct-sel-todos'); st.checked = vis.length > 0 && vis.every((c) => sel.has(c.empresa_id));
+    st.onchange = () => { vis.forEach((c) => (st.checked ? sel.add(c.empresa_id) : sel.delete(c.empresa_id))); pintar(); };
+    ligarMenusLinha();
     $('#ct-lista').querySelectorAll('tr[data-id]').forEach((tr) => {
       const c = lista.find((x) => x.empresa_id === Number(tr.dataset.id));
       tr.querySelectorAll('[data-k]').forEach((el) => (el.onchange = async () => {
@@ -5367,51 +5493,87 @@ async function telaControle() {
         if (el.classList.contains('ct-num')) el.value = fmtValor(c.dados[k]);
         await salvar(c);
         if (k === 'sem_movimento' || k === 'sem_folha') tr.classList.toggle('inativo', el.checked);
-        if (k === 'enviado') { const b = tr.querySelector('[data-hoje]'); if (b) b.hidden = !!el.value; }
+        if (k === 'enviado') { const b = tr.querySelector('[data-hoje]'); if (b) b.hidden = !!el.value; tr.querySelector('[data-sit]').innerHTML = situacao(c); if (f.pendentes && el.value) return pintar(); }
         const a = tr.querySelector('[data-aliq]'); if (a) a.textContent = aliq(c.dados);
         const tt = tr.querySelector('[data-total]'); if (tt) tt.textContent = fmtValor((c.dados.darf_prev ?? 0) + (c.dados.fgts ?? 0) + (c.dados.sindicato ?? 0)) || '—';
         totais();
       }));
       tr.querySelectorAll('[data-fech]').forEach((b) => (b.onclick = () => abrirFechamento(c.empresa_id, f.mes, () => telaControle(), f.area === 'DP' ? 'DCTFWEB' : 'PGDASD')));
       const h = tr.querySelector('[data-hoje]'); if (h) h.onclick = () => { const i = tr.querySelector('[data-k="enviado"]'); i.value = hoje(); i.onchange(); };
+      tr.querySelector('[data-sel]').onchange = (ev) => { if (ev.target.checked) sel.add(c.empresa_id); else sel.delete(c.empresa_id); tr.classList.toggle('marcada', ev.target.checked); totais(); };
+      tr.classList.toggle('marcada', sel.has(c.empresa_id));
+      const mf = tr.querySelector('[data-m-fech]'); if (mf) mf.onclick = () => abrirFechamento(c.empresa_id, f.mes, () => telaControle(), tipoGuia);
+      const mh = tr.querySelector('[data-m-hoje]'); if (mh) mh.onclick = () => { const i = tr.querySelector('[data-k="enviado"]'); i.value = hoje(); i.onchange(); };
+      const md = tr.querySelector('[data-m-desenv]'); if (md) md.onclick = () => { const i = tr.querySelector('[data-k="enviado"]'); i.value = ''; i.onchange(); };
       const cn = tr.querySelector('[data-canal]'); if (cn) cn.onchange = () => { c.canal_envio = cn.value || null; salvar(c, { canal_envio: c.canal_envio }); };
       const rg = tr.querySelector('[data-registro]'); if (rg) rg.onchange = () => { c.registro_dp = rg.value.trim() || null; salvar(c, { registro_dp: c.registro_dp ?? '' }); };
     });
   };
   $('#ct-mes').onchange = (ev) => { if (ev.target.value) { f.mes = ev.target.value; telaControle(); } };
-  $('#ct-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
-  $('#ct-pend').onchange = (ev) => { f.pendentes = ev.target.checked; pintar(); };
-  $('#ct-todos') && ($('#ct-todos').onchange = (ev) => { f.todosDp = ev.target.checked; pintar(); });
-  conteudo.querySelectorAll('#ct-abas a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); f.area = a.dataset.a; telaControle(); }));
+  $('#ct-q').oninput = (ev) => { f.q = ev.target.value; f.pagina = 1; pintar(); };
+  $('#ct-pend').onchange = (ev) => { f.pendentes = ev.target.checked; f.pagina = 1; pintar(); };
+  $('#ct-todos') && ($('#ct-todos').onchange = (ev) => { f.todosDp = ev.target.checked; f.pagina = 1; pintar(); });
+  conteudo.querySelectorAll('#ct-abas [data-a]').forEach((a) => (a.onclick = () => { f.area = a.dataset.a; f.pagina = 1; sel.clear(); telaControle(); }));
+  $('#ct-comp-ativa').onclick = () => { const m = $('#ct-mes'); m.focus(); m.showPicker?.(); };
+  $('#ct-limpar').onclick = () => { Object.assign(f, { q: '', pendentes: false, todosDp: false, pagina: 1 }); sel.clear(); telaControle(); };
+  $('#ct-por').onchange = (ev) => { f.porPagina = Number(ev.target.value); f.pagina = 1; try { localStorage.setItem('ct-por-pagina', String(f.porPagina || 0)); } catch {} pintar(); };
+  conteudo.querySelectorAll('[data-mais]').forEach((b) => (b.onclick = async () => {
+    b.closest('details').open = false;
+    if (b.dataset.mais === 'envio-dp') return envioDp(telaControle);
+    if (b.dataset.mais === 'desmarcar') { sel.clear(); return pintar(); }
+    const alvo = lista.filter((c) => sel.has(c.empresa_id) && !c.dados.enviado);
+    if (!alvo.length) return aviso('Marque na lista os clientes que foram enviados.');
+    for (const c of alvo) { c.dados.enviado = hoje(); await salvar(c); }
+    sel.clear(); aviso(`${alvo.length} cliente(s) marcado(s) como enviados hoje.`); pintar();
+  }));
   $('#ct-imp').onclick = () => importarPlanilhaControle(telaControle);
   $('#ct-dctf-lote') && ($('#ct-dctf-lote').onclick = () => {
-    const alvo = visiveis().filter((c) => c.dados.sem_folha && fech.resumo[c.empresa_id]?.DCTFWEB?.situacao !== 'TRANSMITIDA');
+    const alvo = alvoLote().filter((c) => c.dados.sem_folha && fech.resumo[c.empresa_id]?.DCTFWEB?.situacao !== 'TRANSMITIDA');
     loteFechamento(`Transmitir a DCTFWeb sem movimento de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes marcados como "Sem folha" no mês e ainda não transmitidos: o Kontor busca a DCTFWeb sem movimento em andamento, assina com o certificado do escritório e transmite. Declarações com movimento são transmitidas no seu sistema da folha; aqui você só busca o recibo e o DARF. Algumas chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb`, { mes: f.mes }).then((r) => (r.jaTransmitida ? 'já estava transmitida' : `transmitida${r.recibo ? `, recibo ${r.recibo}` : ''}`) + (r.valor != null ? ` — DARF ${brl(r.valor)}` : r.aviso ? ` — ${r.aviso}` : '')), telaControle);
   });
   $('#ct-dctf-busca') && ($('#ct-dctf-busca').onclick = () => {
-    const alvo = visiveis().filter((c) => c.tem_funcionarios && !c.dados.sem_folha && !fech.resumo[c.empresa_id]?.DCTFWEB?.tem_guia);
+    const alvo = alvoLote().filter((c) => c.tem_funcionarios && !c.dados.sem_folha && !fech.resumo[c.empresa_id]?.DCTFWEB?.tem_guia);
     loteFechamento(`Buscar DARFs da DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite a DCTFWeb em outro sistema (SCI, e-CAC): o Kontor não transmite nada, só busca o recibo da declaração já transmitida e gera o DARF. Ficam de fora os clientes marcados sem folha e os que já têm DARF. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DARF ${brl(r.valor)}` : r.aviso || 'recibo encontrado, sem DARF')), telaControle);
   });
-  $('#ct-envio-dp') && ($('#ct-envio-dp').onclick = () => envioDp(telaControle));
   $('#ct-pg-zerado') && ($('#ct-pg-zerado').onclick = () => {
-    const alvo = visiveis().filter((c) => c.regime === 'SIMPLES' && c.dados.sem_movimento && fech.resumo[c.empresa_id]?.PGDASD?.situacao !== 'TRANSMITIDA');
+    const alvo = alvoLote().filter((c) => c.regime === 'SIMPLES' && c.dados.sem_movimento && fech.resumo[c.empresa_id]?.PGDASD?.situacao !== 'TRANSMITIDA');
     loteFechamento(`Transmitir PGDAS-D zerados de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes do Simples marcados como "Sem mov." no mês e ainda não transmitidos: o Kontor transmite o PGDAS-D com receita zero (sem DAS). Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO. Se já houver declaração no mês, o cliente aparece com erro e fica como está.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/zerado`, { mes: f.mes }).then((r) => `transmitido${r.recibo ? ` (${r.recibo})` : ''}`), telaControle);
   });
   $('#ct-pg-busca') && ($('#ct-pg-busca').onclick = () => {
-    const alvo = visiveis().filter((c) => c.regime === 'SIMPLES' && !c.dados.sem_movimento && !fech.resumo[c.empresa_id]?.PGDASD?.tem_guia);
+    const alvo = alvoLote().filter((c) => c.regime === 'SIMPLES' && !c.dados.sem_movimento && !fech.resumo[c.empresa_id]?.PGDASD?.tem_guia);
     loteFechamento(`Buscar DAS do Simples de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite o PGDAS-D em outro sistema (SCI, portal do Simples): o Kontor não transmite nada, só busca a declaração e o recibo já transmitidos e gera o DAS. Ficam de fora os clientes sem movimento e os que já têm DAS. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/buscar`, { mes: f.mes }).then((r) => `${r.faturamento != null ? `faturamento ${brl(r.faturamento)} · ` : ''}${r.valor != null ? `DAS ${brl(r.valor)}` : r.aviso || 'declaração encontrada, sem DAS'}`), telaControle);
   });
   $('#ct-env-lote') && ($('#ct-env-lote').onclick = () => {
     const tipo = f.area === 'FISCAL' ? 'PGDASD' : 'DCTFWEB';
-    const alvo = visiveis().filter((c) => fech.resumo[c.empresa_id]?.[tipo]?.tem_guia && !fech.resumo[c.empresa_id]?.[`enviado_${tipo}`] && c.canal_envio !== 'WHATSAPP' && c.email);
+    const alvo = alvoLote().filter((c) => fech.resumo[c.empresa_id]?.[tipo]?.tem_guia && !fech.resumo[c.empresa_id]?.[`enviado_${tipo}`] && c.canal_envio !== 'WHATSAPP' && c.email);
     loteFechamento(`Enviar ${tipo === 'PGDASD' ? 'os DAS do Simples' : 'os DARFs da DCTFWeb'} de ${rotuloMes(f.mes)} por e-mail`, alvo, `Vai um e-mail para cada cliente só com ${tipo === 'PGDASD' ? 'o DAS do Simples Nacional' : 'o DARF previdenciário (DCTFWeb)'} do mês, com o valor e o vencimento. Ficam de fora quem já recebeu essa guia, quem não tem e-mail e quem é atendido pelo WhatsApp (esses se enviam pelo botão do cliente).`,
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/enviar`, { mes: f.mes, canal: 'EMAIL', tipo }).then((r) => `enviado para ${r.enviadoPara}`), telaControle);
   });
   pintar();
+}
+
+/** Menus "⋯" da tela: abrem com posição fixa (não ficam cortados pela rolagem da tabela) e fecham ao clicar fora. */
+function ligarMenusLinha() {
+  conteudo.querySelectorAll('details.cob-mais').forEach((dt) => {
+    if (dt.dataset.ligado) return; dt.dataset.ligado = '1';
+    dt.addEventListener('toggle', () => {
+      if (!dt.open) return;
+      conteudo.querySelectorAll('details.cob-mais[open]').forEach((o) => { if (o !== dt) o.open = false; });
+      const m = dt.querySelector('.cob-menu'), r = dt.querySelector('summary').getBoundingClientRect();
+      m.style.position = 'fixed'; m.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+      const alto = m.offsetHeight;
+      m.style.top = `${r.bottom + 4 + alto > window.innerHeight ? Math.max(8, r.top - 4 - alto) : r.bottom + 4}px`;
+    });
+  });
+  if (!ligarMenusLinha.global) {
+    ligarMenusLinha.global = true;
+    document.addEventListener('click', (ev) => document.querySelectorAll('details.cob-mais[open]').forEach((o) => { if (!o.contains(ev.target)) o.open = false; }));
+    window.addEventListener('scroll', () => document.querySelectorAll('details.cob-mais[open]').forEach((o) => (o.open = false)), true);
+  }
 }
 
 /** Executa uma ação cliente a cliente, com andamento e resultado (lote). */
@@ -5556,66 +5718,9 @@ function importarPlanilhaControle(aoFim) {
 // Senhas e acessos dos clientes (Simples Nacional, previdenciária)
 // ---------------------------------------------------------------------------
 async function telaSenhas() {
-  const lista = await api('GET', '/api/escritorio/acessos');
-  const f = telaSenhas.filtro ??= { q: '' };
-  conteudo.innerHTML = `
-    <div class="topo"><div><h1>Senhas e acessos</h1><p class="sutil">Código de acesso do Simples Nacional e senha previdenciária de cada cliente. Ficam criptografados e só aparecem ao clicar em “Mostrar”.</p></div>
-      <div><button id="sn-imp">Importar planilha</button></div></div>
-    <div class="filtros"><label style="flex:1 1 260px">Buscar <input type="search" id="sn-q" value="${esc(f.q)}" placeholder="Cliente ou CNPJ"></label></div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>CPF do responsável</th><th>Código do Simples</th><th>Atividade</th><th>Senha previdenciária</th><th></th></tr></thead><tbody id="sn-lista"></tbody></table></div>`;
-  const segredo = (c, campo, tem) => (tem ? `<span data-seg="${campo}">••••••</span> <button type="button" data-ver="${c.empresa_id}">Mostrar</button>` : '<span class="dica">—</span>');
-  const pintar = () => {
-    const q = norm(f.q), qd = f.q.replace(/\D/g, '');
-    const vis = lista.filter((c) => !q || norm(c.cliente).includes(q) || norm(c.razao_social).includes(q) || (qd && c.documento.includes(qd)));
-    $('#sn-lista').innerHTML = vis.map((c) => `<tr data-id="${c.empresa_id}" class="${c.situacao !== 'ATIVO' ? 'inativo' : ''}"><td><strong>${esc(c.cliente)}</strong><br><span class="dica">${fmtDoc(c.documento)}</span></td>
-      <td>${c.sn_cpf_responsavel ? fmtDoc(c.sn_cpf_responsavel) : '<span class="dica">—</span>'}</td><td>${segredo(c, 'sn_codigo', c.tem_codigo)}</td><td>${esc(c.sn_atividade ?? '')}</td><td>${segredo(c, 'prev_senha', c.tem_prev)}</td>
-      <td class="acoes-linha"><button data-ed="${c.empresa_id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="6"><div class="vazio" style="border:0">Nenhum cliente.</div></td></tr>';
-    conteudo.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = async () => {
-      const tr = b.closest('tr');
-      try {
-        const s = await api('POST', `/api/escritorio/acessos/${b.dataset.ver}/revelar`);
-        tr.querySelectorAll('[data-seg]').forEach((el) => {
-          const v = s[el.dataset.seg]; if (!v) return;
-          el.innerHTML = `<code>${esc(v)}</code> <button type="button" data-copiar="${esc(v)}" title="Copiar">Copiar</button>`;
-          el.nextElementSibling?.remove();
-          el.querySelector('[data-copiar]').onclick = (e2) => { navigator.clipboard?.writeText(e2.target.dataset.copiar).then(() => aviso('Copiado.')); };
-        });
-        setTimeout(() => { if (document.body.contains(tr)) pintar(); }, 60e3); // volta a esconder depois de 1 minuto
-      } catch (e) { aviso(mensagemErro(e)); }
-    }));
-    conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formAcesso(lista.find((c) => c.empresa_id === Number(b.dataset.ed)))));
-  };
-  $('#sn-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
-  $('#sn-imp').onclick = () => importarPlanilhaControle(telaSenhas);
-  pintar();
+  // as senhas passaram para o cadastro do cliente (Carteira › Editar › Senhas e acessos)
+  location.hash = '#/carteira';
 }
-
-function formAcesso(c) {
-  abrirDialogo(`<form id="form-acesso"><h2>Acessos — ${esc(c.cliente)}</h2>
-    <fieldset class="sub"><legend>Simples Nacional</legend><div class="grade">
-      <label>CPF do responsável <input name="sn_cpf_responsavel" value="${esc(c.sn_cpf_responsavel ? fmtDoc(c.sn_cpf_responsavel) : '')}"></label>
-      <label>Código de acesso <input name="sn_codigo" autocomplete="off" placeholder="${c.tem_codigo ? 'Guardado — digite só para trocar' : ''}"></label>
-      <label class="largo">Atividade <input name="sn_atividade" value="${esc(c.sn_atividade ?? '')}" placeholder="Ex.: Revenda, Serviços Anexo III, Fator R"></label>
-    </div></fieldset>
-    <fieldset class="sub"><legend>Previdência</legend><div class="grade">
-      <label>Senha previdenciária <input name="prev_senha" autocomplete="off" placeholder="${c.tem_prev ? 'Guardada — digite só para trocar' : ''}"></label>
-    </div></fieldset>
-    <label>Observações <textarea name="observacoes">${esc(c.observacoes ?? '')}</textarea></label>
-    ${c.tem_codigo || c.tem_prev ? '<p class="dica">Para apagar uma senha guardada, marque abaixo.</p><label class="check"><input type="checkbox" name="apagar_codigo"> Apagar o código do Simples</label> <label class="check"><input type="checkbox" name="apagar_prev"> Apagar a senha previdenciária</label>' : ''}
-    <p class="erro" id="erro-acesso"></p>
-    <div class="acoes"><button class="primario" type="submit">Salvar</button><button type="button" data-fechar>Fechar</button></div></form>`, (dlg) => {
-    const f = dlg.querySelector('#form-acesso');
-    f.onsubmit = async (ev) => {
-      ev.preventDefault();
-      const corpo = { sn_cpf_responsavel: f.sn_cpf_responsavel.value || null, sn_atividade: f.sn_atividade.value, observacoes: f.observacoes.value };
-      if (f.sn_codigo.value.trim()) corpo.sn_codigo = f.sn_codigo.value.trim(); else if (f.apagar_codigo?.checked) corpo.sn_codigo = '';
-      if (f.prev_senha.value.trim()) corpo.prev_senha = f.prev_senha.value.trim(); else if (f.apagar_prev?.checked) corpo.prev_senha = '';
-      try { await api('PUT', `/api/escritorio/acessos/${c.empresa_id}`, corpo); dlg.close(); aviso('Acessos salvos.'); telaSenhas(); }
-      catch (e) { $('#erro-acesso').textContent = mensagemErro(e); }
-    };
-  });
-}
-
 /** A Situação fiscal agora fica dentro do Monitor fiscal (endereço antigo continua funcionando). */
 async function telaSituacao() { location.hash = '#/monitor'; }
 
@@ -6258,7 +6363,7 @@ const DICAS_KONTOR = [
   'Clique no nome do cliente na lista do Monitor fiscal para ver os parcelamentos e a caixa postal dele.',
   'PGDAS-D sem faturamento? O Kontor transmite o zerado em lote para os clientes marcados como sem movimento.',
   'O aviso de versão nova tem "Baixar e instalar ao fechar": a atualização fica pronta para quando você encerrar o dia.',
-  'Em Senhas e acessos, as senhas ficam criptografadas e só aparecem quando alguém clica em Mostrar.',
+  'As senhas do Simples e a previdenciária ficam no cadastro do cliente (Carteira › Editar), criptografadas, e só aparecem quando alguém clica em Mostrar.',
 ];
 const MENSAGENS_DIA = [
   'Um passo de cada vez: o dia rende mais quando a primeira tarefa é a mais importante.',
@@ -6332,6 +6437,11 @@ const ICONES = {
   lampada: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
   sol: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   calendario: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  relogio: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  aviao: 'M21 3 3 10.5l7 2.5 2.5 7zM21 3 10 13',
+  envelope: 'M3 6h18v12H3zM3 7l9 6 9-6',
+  nuvem: 'M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.6 8 4 4 0 0 1 17 18M12 12v8M9 15l3-3 3 3',
+  refazer: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   seta: 'M5 12h14M13 6l6 6-6 6',
   ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.7 2.7L16 10',
   alerta: 'M12 3 2 20h20zM12 9v5M12 17h.01',
