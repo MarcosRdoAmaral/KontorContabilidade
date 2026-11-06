@@ -220,11 +220,14 @@ export function exigirLicenca(): void {
 
 const SQL_CLIENTES = `SELECT documento FROM empresas WHERE na_carteira = 1 UNION SELECT documento FROM tomadores WHERE documento IS NOT NULL`;
 
+/** Clientes que contam para o limite: só os ativos (encerrado ou suspenso fica de fora). */
+const SQL_CLIENTES_ATIVOS = `SELECT documento FROM empresas WHERE na_carteira = 1 AND situacao = 'ATIVO' AND ativo = 1 UNION SELECT documento FROM tomadores WHERE documento IS NOT NULL`;
+
 /** Quantidade já cadastrada de cada coisa que o plano limita: empresas do sistema e clientes (carteira e cadastro de clientes, sem repetir). */
 export function usoAtual() {
   return {
     empresas: (db.prepare('SELECT COUNT(*) n FROM empresas WHERE gerencia = 1').get() as any).n as number,
-    clientes: (db.prepare(`SELECT COUNT(*) n FROM (${SQL_CLIENTES})`).get() as any).n as number,
+    clientes: (db.prepare(`SELECT COUNT(*) n FROM (${SQL_CLIENTES_ATIVOS})`).get() as any).n as number,
   };
 }
 
