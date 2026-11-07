@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.51.0';
+export const MANUAL_VERSAO = '1.52.0';
 
 export const MANUAL = [
   {
@@ -230,6 +230,9 @@ export const MANUAL = [
         <li>Clique em <em>Gerar código de conexão</em> e passe o código ao cliente (vale 7 dias e só pode ser usado uma vez).</li>
         <li>No Kontor Empresas, o cliente abre <em>Configurações › Contabilidade</em>, seleciona a empresa do mesmo CNPJ e digita o código.</li></ol>
       <p>Cliente conectado aparece com um ícone de nuvem na Carteira. O mesmo menu mostra a conexão, o <strong>código de segurança</strong> (igual nos dois sistemas) e o botão <em>Desconectar</em>.</p>
+      <h3>Aplicativo Kontor no celular</h3>
+      <p>Qualquer cliente (use ou não o Kontor Empresas) pode receber as guias no celular. Gere o código no menu ⋮ do cliente na Carteira e peça para ele abrir <strong>kontorgestao.com.br/app</strong>, informar o CNPJ e o código e tocar em <em>Adicionar à tela inicial</em>. Cada celular usa um código; a mesma janela mostra os aparelhos conectados, com o botão <em>Desconectar</em> de cada um.</p>
+      <p>No <strong>Controle mensal</strong>, ao enviar o DAS ou o DARF por e-mail ou WhatsApp, a guia também vai para o aplicativo dos clientes conectados (uma vez por mês); o botão <em>Enviar pelo aplicativo</em> manda de novo só por lá. A guia chega com o valor, a data, o PDF e, quando o PDF traz, o código de barras e o Pix copia e cola, conferidos pelos dígitos. O cliente recebe uma notificação, paga pelo aplicativo do banco e, se precisar, pede a guia atualizada, que cai aqui em Solicitações.</p>
       <h3>Pedidos de guia</h3>
       <p>Em <em>Escritório › Solicitações dos clientes</em> chegam os pedidos de DAS, guia da DCTFWeb ou DARF, com o período, a data em que o cliente quer pagar e a observação dele. Para cada pedido:</p>
       <ul><li><strong>Gerar guia</strong>: calcula pelo Integra Contador, como o recálculo da Situação fiscal (DAS: valor em cobrança; DCTFWeb: com multa e juros até a data de pagamento pedida; DARF: informe código da receita, vencimento e valor do principal). Cada guia é uma chamada cobrada pelo SERPRO.</li>
