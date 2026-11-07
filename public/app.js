@@ -3659,7 +3659,7 @@ async function telaConfig(aba) {
   ].filter((x) => x[2]);
   if (!abas.some((x) => x[0] === aba)) aba = abas[0][0];
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Configurações</h1><p class="sutil">Ajustes gerais do sistema${adm ? '' : ' e da sua conta'}.</p></div></div>
+    ${cabecaTela('config', 'Configurações', `Ajustes gerais do sistema${adm ? '' : ' e da sua conta'} e preferências da sua operação.`)}
     <nav class="abas" aria-label="Configurações">${abas.map(([k, nome]) => `<a href="#/config/${k}" class="${k === aba ? 'ativo' : ''}">${nome}</a>`).join('')}</nav>
     <div id="cfg-corpo"></div>`;
   const tela = { integra: telaIntegra, avisos: telaAvisos, conta: telaMinhaConta, usuarios: telaUsuarios, email: telaEmail, modelos: telaModelosEmail, aparencia: telaAparencia, backup: telaBackup, contabilidade: telaContabilidade, licenca: telaLicenca, atualizacoes: telaAtualizacoes }[aba];
@@ -3669,14 +3669,19 @@ async function telaConfig(aba) {
 function telaMinhaConta() {
   const u = estado.usuario;
   corpoConfig().innerHTML = `
-    <h2>Minha conta</h2>
-    <div class="cartao">
-      <div class="conta-avatar">${avatarSvg(u.avatar, 56) || `<span class="avatar-iniciais">${esc(iniciaisDoUsuario())}</span>`}<div>
-      <p><strong>${esc(u.nome)}</strong> · usuário <strong>${esc(u.login)}</strong></p>
-      <p class="sutil">Perfil: ${u.tipo === 'adm' ? 'Administrador (acesso total)' : 'Normal'}${u.email ? ' · ' + esc(u.email) : ' · sem e-mail cadastrado (a recuperação de senha por e-mail não fica disponível)'}</p></div></div>
+    <div class="cartao conta-novo">
+      <h2 style="margin-top:0">Minha conta</h2>
+      <div class="conta-avatar">${avatarSvg(u.avatar, 84) || `<span class="avatar-iniciais">${esc(iniciaisDoUsuario())}</span>`}<div>
+        <h3 style="margin:0">${esc(u.nome)} <span class="sutil">· usuário</span> <strong>${esc(u.login)}</strong></h3>
+        <p class="sutil">Perfil: ${u.tipo === 'adm' ? 'Administrador (acesso total)' : 'Normal'}${u.email ? '' : ' — sem e-mail cadastrado, a recuperação de senha por e-mail não fica disponível.'}</p></div></div>
+      <div class="kp-grade">
+        <div class="kp kp-neutro"><span class="kp-ico">${icone('o-email')}</span><span class="kp-txt"><strong style="font-size:1rem">${u.email ? esc(u.email) : 'Não cadastrado'}</strong><small>E-mail${!u.email && u.tipo === 'adm' ? ' · <a href="#/config/usuarios">Adicionar e-mail →</a>' : ''}</small></span></div>
+        <div class="kp kp-verde"><span class="kp-ico">${icone('tl-check')}</span><span class="kp-txt"><strong style="font-size:1rem">Ativa</strong><small>Status da conta</small></span></div>
+      </div>
       ${u.tipo === 'adm' ? '' : `<p class="sutil">Funcionalidades liberadas: ${u.modulos.length ? u.modulos.map((m) => esc(u.todosModulos[m])).join(', ') : 'nenhuma'}.</p>`}
-      <div class="acoes"><button class="primario" id="alterar-senha">Alterar minha senha</button><button type="button" id="trocar-avatar">Escolher avatar</button></div>
-    </div>`;
+      <div class="acoes"><button class="tl-btn-ouro" id="alterar-senha">${icone('o-ok')} Alterar minha senha</button><button type="button" class="tl-btn-borda" id="trocar-avatar">Escolher avatar</button></div>
+    </div>
+    ${dicaTela('Sua conta está segura', 'Mantenha seus dados sempre atualizados e troque a senha de tempos em tempos.')}`;
   $('#alterar-senha').onclick = () => trocarSenha();
   $('#trocar-avatar').onclick = () => escolherAvatar(() => telaMinhaConta());
 }
