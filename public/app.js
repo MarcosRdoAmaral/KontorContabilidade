@@ -1201,6 +1201,7 @@ async function telaCobrancas() {
   const coraAtiva = !!cora?.ativa;
   const podeEditar = estado.usuario.papel !== 'cliente';
   const st = telaCobrancas.estado ??= { carteira: 'BOLETO' };
+  st.sit ??= ''; st.q ??= ''; st.cli ??= ''; st.mes ??= ''; st.pagina ??= 1;
   const daCarteira = (k) => lista.filter((c) => (c.forma ?? 'BOLETO') === k);
   const abertoDe = (l) => l.filter((c) => !['CANCELADO', 'PAGO', 'REJEITADO'].includes(c.status)).reduce((a, c) => a + c.valor, 0);
   const vis = daCarteira(st.carteira);
@@ -1210,6 +1211,15 @@ async function telaCobrancas() {
   const aRemeter = lista.filter((c) => c.status === 'A_REMETER' || c.baixa_pendente === 1).length;
   const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
   const ativo = (c) => !['PAGO', 'CANCELADO'].includes(c.status);
+  const vencida = (c) => ativo(c) && c.vencimento < hoje;
+  const situ = { total: lista.length, pagas: lista.filter((c) => c.status === 'PAGO').length, vencidas: lista.filter(vencida).length, abertas: lista.filter((c) => ativo(c) && !vencida(c)).length };
+  const clientes = [...new Set(lista.map((c) => c.tomador_nome).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  const termo = st.q.trim().toLowerCase();
+  const visF = vis.filter((c) => (!st.sit || (st.sit === 'PAGO' ? c.status === 'PAGO' : st.sit === 'VENCIDO' ? vencida(c) : ativo(c) && !vencida(c)))
+    && (!st.cli || c.tomador_nome === st.cli) && (!st.mes || String(c.vencimento).startsWith(st.mes))
+    && (!termo || [c.tomador_nome, c.descricao, c.n_nfse, brl(c.valor)].some((x) => String(x ?? '').toLowerCase().includes(termo))));
+  const filtrando = !!(st.sit || st.q || st.cli || st.mes);
+  const pagC = paginar(visF, st.pagina); st.pagina = pagC.pagina;
   const acoes = (c) => {
     const pronto = c.forma === 'PIX' ? c.pix_copia_cola : c.nosso_numero;
     const principais = [
@@ -1229,30 +1239,49 @@ async function telaCobrancas() {
     return `<div class="cob-acoes">${principais}${mais ? `<details class="cob-mais"><summary title="Mais ações">⋯</summary><div class="cob-menu">${mais}</div></details>` : ''}</div>`;
   };
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Cobranças</h1><p class="sutil">${lista.length} registros · ${brl(abertoDe(lista))} em aberto</p></div>
+    <div class="orc-topo tl-topo"><span class="orc-ico grande">${icone('cobrancas')}</span><div class="tl-tit"><h1>Cobranças</h1><p class="sutil">Acompanhe e gerencie suas cobranças de forma simples e eficiente. ${brl(abertoDe(lista))} em aberto.</p></div>
       ${podeEditar ? `<div class="acoes">${coraAtiva ? '<button id="cora-atualizar" class="primario" title="Registra boletos pendentes, dá baixa nos pagos e traz o extrato da Cora">Atualizar da Cora</button>' : ''}${pix || (coraAtiva && !aRemeter) ? '' : `<button id="gerar-remessa" class="primario" ${conta && aRemeter ? '' : 'disabled'}>Gerar remessa${aRemeter ? ` (${aRemeter})` : ''}</button>`}
         <button id="novo-boleto" class="primario">Nova cobrança</button>
         <button id="modelo-wa">Mensagem do WhatsApp</button>
         <button id="cfg-demo" title="Texto do rodapé do demonstrativo de cobrança">Demonstrativo</button>
         ${pix ? '' : `<button id="ler-retorno" ${conta ? '' : 'disabled'}>Importar retorno</button><input type="file" id="arq-retorno" accept=".ret,.RET,.txt,.TXT,.rem,.REM,*/*" hidden>`}</div>` : ''}</div>
+    ${cartoesKpi([
+      { ic: 'tl-doc', tom: 'laranja', valor: situ.total, rotulo: 'Total de cobranças', filtro: '' },
+      { ic: 'tl-check', tom: 'verde', valor: situ.pagas, rotulo: 'Pagas', filtro: 'PAGO' },
+      { ic: 'tl-relogio', tom: 'laranja', valor: situ.abertas, rotulo: 'Em aberto', filtro: 'ABERTO' },
+      { ic: 'tl-alerta', tom: 'vermelho', valor: situ.vencidas, rotulo: 'Vencidas', filtro: 'VENCIDO' },
+    ])}
     <nav class="abas carteiras" aria-label="Carteiras de cobrança">
       <a href="#" data-carteira="BOLETO" class="${pix ? '' : 'ativo'}">Carteira boleto <span class="contagem">${daCarteira('BOLETO').length}</span></a>
       <a href="#" data-carteira="PIX" class="${pix ? 'ativo' : ''}">Carteira Pix <span class="contagem">${daCarteira('PIX').length}</span>${faltaPix ? ` <span class="selo-estado" style="--c:var(--g-pend)">${faltaPix} sem Pix</span>` : ''}</a>
     </nav>
+    <form class="tl-filtros" id="filtros-cob">
+      <label>Vencimento (mês) <input type="month" name="mes" value="${esc(st.mes)}"></label>
+      <label>Cliente <select name="cli"><option value="">Todos</option>${clientes.map((x) => `<option ${st.cli === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+      <label>Situação <select name="sit"><option value="">Todas</option><option value="ABERTO" ${st.sit === 'ABERTO' ? 'selected' : ''}>Em aberto</option><option value="VENCIDO" ${st.sit === 'VENCIDO' ? 'selected' : ''}>Vencidas</option><option value="PAGO" ${st.sit === 'PAGO' ? 'selected' : ''}>Pagas</option></select></label>
+      <label class="busca">Buscar <input name="q" placeholder="Buscar por cliente, número ou valor…" value="${esc(st.q)}"></label>
+      <span class="tl-acoes"><button type="button" id="cob-limpar">${icone('tl-limpar')} Limpar</button><button type="submit" class="tl-btn-ouro">${icone('tl-filtro')} Filtrar</button></span>
+    </form>
     <p class="sutil">${pix ? `Cobranças dos clientes da carteira Pix: com a chave Pix da empresa cadastrada (Empresas › Dados bancários), o Kontor gera o Pix de cada cobrança sozinho; sem ela, gere a cobrança no aplicativo do banco, clique em <strong>Informar Pix</strong> e cole o código copia e cola. O Kontor confere o código e o valor e monta o demonstrativo com o QR Code. ${brl(aberto)} em aberto.`
       : `Boletos do convênio bancário, com remessa e retorno. O demonstrativo de cobrança vai junto no e-mail. ${brl(aberto)} em aberto.`} A carteira de cada cliente fica no cadastro dele (Faturamento e cobrança).</p>
     ${coraAtiva ? `<div class="banner">Cobrança pela <strong>Cora</strong>${cora.ambiente === 'teste' ? ' (ambiente de teste)' : ''}: os boletos são registrados na Cora na hora, com Pix, e a baixa é automática (a cada 10 minutos).${cora.saldo != null ? ` Saldo na Cora: <strong>${brl(cora.saldo)}</strong>.` : ''}</div>` : ''}
     ${!pix && !conta && !coraAtiva ? `<div class="banner teste">Os dados bancários desta empresa ainda não foram informados. <a href="#/banco">Informar agora (em Empresas › Dados bancários)</a> — os boletos pendentes são gerados automaticamente depois disso.</div>` : ''}
-    ${vis.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Vencimento</th><th>Cliente</th><th>Nota</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
-      ${vis.map((c) => `<tr><td>${dataBr(c.vencimento)}${ativo(c) && c.vencimento < hoje ? ' <span class="dica erro">vencido</span>' : ''}</td>
+    ${visF.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Vencimento</th><th>Cliente</th><th>Nota</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${pagC.itens.map((c) => `<tr><td>${dataBr(c.vencimento)}${ativo(c) && c.vencimento < hoje ? ' <span class="dica erro">vencido</span>' : ''}</td>
         <td>${esc(c.tomador_nome)}<br><span class="dica">${esc((c.descricao ?? '').slice(0, 60))}</span>${c.desconto > 0 ? `<br><span class="dica">desconto de ${brl(c.desconto)}: ${esc(c.desconto_motivo ?? '')}</span>` : ''}</td>
         <td>${c.nota_id ? `<a href="#/nota/${c.nota_id}">${c.n_nfse ?? '—'}</a>` : '—'}</td><td class="num">${brl(c.valor)}</td>
         <td>${c.forma === 'PIX' && c.status === 'AGUARDANDO_BANCO' ? `<span class="cor-ambar">${situacaoCobranca(c)}</span>` : situacaoCobranca(c)}${c.baixa_pendente ? ' <span class="dica">(baixa solicitada)</span>' : ''}${c.pago_em ? `<br><span class="dica">em ${dataBr(c.pago_em)}</span>` : ''}${c.observacao_banco ? `<br><span class="dica erro">${esc(c.observacao_banco)}</span>` : ''}${c.email_status ? `<br><span class="dica ${c.email_status === 'ERRO' ? 'erro' : ''}">e-mail ${c.email_status === 'ERRO' ? 'com erro' : 'enviado'}</span>` : ''}</td>
         <td class="acoes-linha">${acoes(c)}</td></tr>`).join('')}
-    </tbody></table></div>` : `<div class="vazio">${pix ? 'Nenhuma cobrança na carteira Pix. Marque “Pix copia e cola” como carteira no cadastro do cliente (Faturamento e cobrança).' : 'Nenhum boleto registrado. Escolha “Nota + cobrança” ou “Somente a cobrança” ao emitir.'}</div>`}
+    </tbody></table></div>${pagC.html}</div>` : vis.length ? vazioTela('cobrancas', 'Nenhuma cobrança encontrada', 'Não foram encontradas cobranças para os filtros selecionados. Tente ajustar o período ou os filtros de busca.', `<button type="button" class="tl-btn-borda" id="cob-limpar2">${icone('o-busca')} Limpar filtros</button>`) : `<div class="vazio">${pix ? 'Nenhuma cobrança na carteira Pix. Marque “Pix copia e cola” como carteira no cadastro do cliente (Faturamento e cobrança).' : 'Nenhum boleto registrado. Escolha “Nota + cobrança” ou “Somente a cobrança” ao emitir.'}</div>`}
     ${!pix && remessas.length ? `<h2>Remessas geradas</h2><div class="rolagem"><table class="tabela"><thead><tr><th>Nº</th><th>Data</th><th>Títulos</th><th class="num">Valor</th><th></th></tr></thead><tbody>
       ${remessas.map((r) => `<tr><td>${r.numero}</td><td>${esc(r.criado_em)}</td><td>${r.qtd_titulos}</td><td class="num">${brl(r.valor_total)}</td><td><button data-remessa="${r.id}" data-nome="${esc(r.nome_arquivo)}">Baixar arquivo</button></td></tr>`).join('')}</tbody></table></div>
       <p class="dica">Envie o arquivo de remessa no internet banking do banco, na área de cobrança. Baixe lá o arquivo de retorno e importe-o aqui para dar baixa nos pagamentos.</p>` : ''}`;
+  const refazer = () => telaCobrancas();
+  $('#filtros-cob').onsubmit = (ev) => { ev.preventDefault(); const x = lerForm(ev.target); st.mes = x.mes ?? ''; st.cli = x.cli ?? ''; st.sit = x.sit ?? ''; st.q = x.q ?? ''; st.pagina = 1; refazer(); };
+  const limpar = () => { st.mes = st.cli = st.sit = st.q = ''; st.pagina = 1; refazer(); };
+  $('#cob-limpar').onclick = limpar; if ($('#cob-limpar2')) $('#cob-limpar2').onclick = limpar;
+  conteudo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { st.sit = k.dataset.kp; st.pagina = 1; refazer(); }));
+  conteudo.querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { st.pagina = Number(b.dataset.pg); refazer(); }));
   conteudo.querySelectorAll('[data-carteira]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); st.carteira = a.dataset.carteira; telaCobrancas(); }));
   conteudo.querySelectorAll('[data-carta]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.carta}/carta`, `Carta_Cobranca_${b.dataset.carta}.pdf`, true)));
   conteudo.querySelectorAll('[data-demo]').forEach((b) => (b.onclick = () => baixar(`/api/cobrancas/${b.dataset.demo}/demonstrativo`, `Demonstrativo_${b.dataset.demo}.pdf`, true)));

@@ -1013,3 +1013,4 @@ a.kp:hover { border-color: var(--laranja); }
 .tl-btn-ouro:hover { background: var(--laranja-hover); }
 .tl-btn-borda { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 12px; border: 1.5px solid var(--laranja); background: transparent; color: var(--laranja); font-weight: 600; cursor: pointer; text-decoration: none; }
 .kp-seta .ico, .tl-pags button[aria-label="Próxima"] .ico { transform: rotate(-90deg); }
+.tl-topo > .acoes { flex-basis: 100%; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
