@@ -2430,33 +2430,33 @@ async function telaExtrato() {
   const tabCat = (titulo, l, cor) => `<div class="cartao"><h2 style="margin-top:0">${titulo} <span class="sutil">· ${brl(soma(l))}</span></h2>
     ${l.length ? `<table class="tabela"><tbody>${agrupar(l).map(([c, v]) => `<tr><td>${esc(c)}</td><td class="num" style="color:${cor}">${brl(v)}</td><td class="num sutil">${Math.round(v / soma(l) * 100)}%</td></tr>`).join('')}</tbody></table>` : '<p class="sutil">Nada neste mês.</p>'}</div>`;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Extrato e conciliação</h1><p class="sutil">Importe o extrato bancário em PDF, classifique entradas e saídas e ligue os recebimentos aos boletos. As <strong>saídas classificadas</strong> são lançadas automaticamente em <a href="#/despesas">Despesas e balanço</a> (exceto “Cartão de crédito” e “Transferências”); entradas como “Outras receitas” entram nas receitas.</p></div>
-      <div><label>Mês ${d.meses.length ? `<select id="mes-ext">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-ext" value="${mes}">`}</label>
-        ${coraExt?.ativa ? '<button class="primario" id="cora-ext">Sincronizar com a Cora</button>' : ''}
-        <button ${coraExt?.ativa ? '' : 'class="primario"'} id="imp-ext">Importar extrato (PDF)</button><input type="file" id="arq-ext" accept="application/pdf,.pdf" hidden></div></div>
+    ${cabecaTela('extrato', 'Extrato e conciliação', 'Importe o extrato bancário em PDF, classifique entradas e saídas e ligue os recebimentos aos boletos. As <strong>saídas classificadas</strong> são lançadas automaticamente em <a href="#/despesas">Despesas e balanço</a> (exceto “Cartão de crédito” e “Transferências”); entradas como “Outras receitas” entram nas receitas.',
+      `<div class="tl-mes"><span class="orc-ico">${icone('calendario')}</span><label>Mês ${d.meses.length ? `<select id="mes-ext">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-ext" value="${mes}">`}</label></div>
+       ${coraExt?.ativa ? `<button class="tl-btn-borda" id="cora-ext">${icone('tl-limpar')} Sincronizar com a Cora</button>` : ''}
+       <button class="tl-btn-ouro" id="imp-ext">${icone('tl-baixar')} Importar extrato (PDF)</button><input type="file" id="arq-ext" accept="application/pdf,.pdf" hidden>`)}
     ${coraExt?.ativa && coraExt.saldo != null ? `<p class="sutil">Saldo na Cora: <strong>${brl(coraExt.saldo)}</strong>${coraExt.saldo_em ? ` (atualizado em ${coraExt.saldo_em.slice(8, 10)}/${coraExt.saldo_em.slice(5, 7)} às ${coraExt.saldo_em.slice(11, 16)} UTC)` : ''}.</p>` : ''}
     <div id="res-import"></div>
-    ${d.lancamentos.length ? `<div class="resumo">
-      <div class="cartao"><div class="sutil">Entradas</div><div class="valor" style="color:${COR.verde}">${compacto(d.entradas)}</div><div class="dica">${ent.length} lançamento(s)</div></div>
-      <div class="cartao"><div class="sutil">Saídas</div><div class="valor" style="color:${COR.vermelho}">${compacto(d.saidas)}</div><div class="dica">${sai.length} lançamento(s)</div></div>
-      <div class="cartao"><div class="sutil">Resultado do mês</div><div class="valor" style="color:${d.resultado < 0 ? COR.vermelho : COR.verde}">${compacto(d.resultado)}</div></div>
-      <div class="cartao"><div class="sutil">Sem classificação</div><div class="valor" style="color:${d.semClassificacao ? COR.laranja : COR.verde}">${d.semClassificacao}</div><div class="dica">${d.semClassificacao ? 'classifique para fechar o balanço' : 'tudo classificado'}</div></div>
-    </div>
+    ${d.lancamentos.length ? `${cartoesKpi([
+      { ic: 'tl-moedas', tom: 'verde', valor: compacto(d.entradas), rotulo: `Entradas · ${ent.length} lançamento(s)` },
+      { ic: 'tl-doc', tom: 'vermelho', valor: compacto(d.saidas), rotulo: `Saídas · ${sai.length} lançamento(s)` },
+      { ic: 'tl-check', tom: d.resultado < 0 ? 'vermelho' : 'verde', valor: compacto(d.resultado), rotulo: 'Resultado do mês' },
+      { ic: 'tl-alerta', tom: d.semClassificacao ? 'laranja' : 'verde', valor: d.semClassificacao, rotulo: d.semClassificacao ? 'Sem classificação · classifique para fechar o balanço' : 'Sem classificação · tudo classificado' },
+    ])}
     <div class="duas-colunas">${tabCat('Entradas por categoria', ent, COR.verde)}${tabCat('Saídas por categoria', sai, COR.vermelho)}</div>
     <div class="topo"><h2>Lançamentos de ${nomeMes(mes)}</h2>
       <div><nav class="abas" id="filtros-ext">${[['todos', 'Todos'], ['sem', `Sem classificação (${d.semClassificacao})`], ['entradas', 'Entradas'], ['saidas', 'Saídas']].map(([k, n]) => `<a href="#" data-f="${k}" class="${k === filtro ? 'ativo' : ''}">${n}</a>`).join('')}</nav></div></div>
     <label class="sutil" style="flex-direction:row;display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" id="semelhantes" style="width:auto" ${semelhantes ? 'checked' : ''}> Ao classificar, aplicar também aos lançamentos parecidos (mesma descrição) e lembrar nas próximas importações</label>
     <datalist id="cat-ent">${d.categorias.entradas.map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
     <datalist id="cat-sai">${d.categorias.saidas.map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
-    <div class="rolagem"><table class="tabela"><thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th>Categoria</th><th>Boleto</th></tr></thead><tbody>
+    <div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th>Categoria</th><th>Boleto</th></tr></thead><tbody>
       ${vis.map((l) => `<tr><td>${dataBr(l.data)}</td><td>${esc(l.descricao)}${l.documento ? ` <span class="sutil">${esc(l.documento)}</span>` : ''}</td>
         <td class="num" style="color:${l.valor < 0 ? COR.vermelho : COR.verde}">${brl(l.valor)}</td>
         <td><input data-cat="${l.id}" list="${l.valor > 0 ? 'cat-ent' : 'cat-sai'}" value="${esc(l.categoria ?? '')}" placeholder="Classificar…" ${l.categoria ? '' : 'style="border-color:' + (COR.laranja) + '"'}></td>
         <td>${l.cobranca_id ? `<span title="Boleto com vencimento em ${dataBr(l.boleto_venc)}">✔ ${esc(l.tomador ?? 'boleto')}</span> <a href="#" data-des="${l.id}">desfazer</a>` : l.valor > 0 ? `<button data-bol="${l.id}">Ligar a boleto</button>` : l.despesa_ligada_id ? `<span title="Despesa lançada em Compras ou Despesas">✔ ${esc(l.despesa_ligada ?? 'despesa')}</span> <a href="#" data-desd="${l.id}">desfazer</a>` : `<button data-desp="${l.id}">Ligar a despesa</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="sutil">Nenhum lançamento neste filtro.</td></tr>'}
-    </tbody></table></div>
+    </tbody></table></div></div>
     <h3>Importações</h3>
     <table class="tabela"><tbody>${d.importacoes.map((i) => `<tr><td>${esc(i.arquivo)}</td><td>${i.periodo_ini ? dataBr(i.periodo_ini) + ' a ' + dataBr(i.periodo_fim) : ''}</td><td class="num">${i.qtd} lançamentos</td><td class="num">${podeExcluirRegistros() ? `<a href="#" data-exi="${i.id}">excluir</a>` : ''}</td></tr>`).join('')}</tbody></table>`
-    : '<div class="vazio">Nenhum lançamento neste mês. Importe o extrato da conta corrente em PDF, exportado do internet banking.</div>'}`;
+    : vazioTela('extrato', 'Nenhum lançamento neste mês', 'Importe o extrato da conta corrente em PDF, exportado do internet banking.', `<button class="tl-btn-ouro" id="vz-ext">${icone('tl-baixar')} Importar extrato (PDF)</button>`)}`;
 
   $('#mes-ext').onchange = (ev) => { telaExtrato.mes = ev.target.value || mesAtual(); telaExtrato(); };
   const arq = $('#arq-ext');
@@ -2467,6 +2467,7 @@ async function telaExtrato() {
     catch (e) { aviso(mensagemErro(e)); ce.disabled = false; ce.textContent = 'Sincronizar com a Cora'; }
   };
   $('#imp-ext').onclick = () => arq.click();
+  $('#vz-ext')?.addEventListener('click', () => arq.click());
   arq.onchange = async () => {
     const f = arq.files[0]; if (!f) return;
     const box = $('#res-import'); box.innerHTML = '<p class="sutil">Lendo o extrato…</p>';
