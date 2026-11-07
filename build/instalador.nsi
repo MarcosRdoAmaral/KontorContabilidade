@@ -36,11 +36,38 @@ VIAddVersionKey /LANG=1046 "FileVersion" "${VERSAO}"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "PortugueseBR"
 
+; Fecha o programa antes de gravar os arquivos. Espera até o .exe ficar livre (o Windows pode demorar a soltar o
+; arquivo); se não conseguir (aberto em outro usuário do Windows ou como administrador), pede para fechar e repetir.
+!macro DEF_FECHAR un
+Function ${un}FecharKontor
+  StrCpy $R1 0
+  tentar:
+    nsExec::Exec 'taskkill /F /T /IM "${EXE}"'
+    Pop $0
+    Sleep 500
+    IfFileExists "$INSTDIR\${EXE}" 0 livre
+    ClearErrors
+    FileOpen $R0 "$INSTDIR\${EXE}" a
+    IfErrors ocupado
+    FileClose $R0
+    Goto livre
+  ocupado:
+    IntOp $R1 $R1 + 1
+    IntCmp $R1 30 0 tentar 0
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "O ${NOME} ainda está aberto e não pôde ser fechado automaticamente (pode estar aberto em outro usuário do Windows ou como administrador).$\r$\n$\r$\nFeche o programa (se preciso, pelo Gerenciador de Tarefas) e clique em Repetir." IDRETRY recomecar
+    Abort "Instalação cancelada: feche o ${NOME} e rode o instalador de novo."
+  recomecar:
+    StrCpy $R1 0
+    Goto tentar
+  livre:
+FunctionEnd
+!macroend
+!insertmacro DEF_FECHAR ""
+!insertmacro DEF_FECHAR "un."
+
 Section "Instalar"
   ; fecha o programa se estiver aberto (atualização)
-  nsExec::Exec 'taskkill /F /IM "${EXE}"'
-  Pop $0
-  Sleep 600
+  Call FecharKontor
 
   ; atualização: limpa só os arquivos do programa da versão anterior (os dados ficam em %APPDATA%)
   RMDir /r "$INSTDIR\resources"
@@ -76,9 +103,7 @@ Section "Instalar"
 SectionEnd
 
 Section "Uninstall"
-  nsExec::Exec 'taskkill /F /IM "${EXE}"'
-  Pop $0
-  Sleep 600
+  Call un.FecharKontor
   Delete "$DESKTOP\${NOME}.lnk"
   RMDir /r "$SMPROGRAMS\${NOME}"
   RMDir /r "$INSTDIR"
