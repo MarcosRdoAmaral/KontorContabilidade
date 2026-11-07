@@ -6861,6 +6861,16 @@ function iniciarAbas() {
   if (ativa && ativa.hash !== location.hash) { abas.pendente = ativa.id; location.hash = ativa.hash; } else abasNavegou();
 }
 
+/** E-mail do suporte: abre o programa de e-mail do computador com o sistema, a versão e o usuário já preenchidos. */
+const SUPORTE_EMAIL = 'contato@kontorgestao.com.br';
+async function emailSuporte(assunto = 'Suporte') {
+  let versao = '';
+  try { versao = (await import('/manual.js')).MANUAL_VERSAO ?? ''; } catch {}
+  const sistema = document.title || 'Kontor';
+  const corpo = `Olá, equipe Kontor!\n\nDescreva aqui a sua dúvida ou o problema (se puder, anexe um print da tela):\n\n\n---\nSistema: ${sistema}${versao ? ` ${versao}` : ''}\nUsuário: ${estado.usuario?.nome ?? ''} (${estado.usuario?.login ?? ''})\nTela: ${location.hash || '#/'}`;
+  location.href = `mailto:${SUPORTE_EMAIL}?subject=${encodeURIComponent(`${assunto} — ${sistema}`)}&body=${encodeURIComponent(corpo)}`;
+}
+
 /** Barra do topo: sininho com os lembretes do usuário e o menu do usuário. */
 function iniciarTopo() {
   if ($('#barra-topo')) return;
@@ -6875,6 +6885,7 @@ function iniciarTopo() {
         <p class="topo-menu-nome">${esc(nome)}<br><span class="dica">${esc(estado.usuario?.login ?? '')}</span></p>
         <button type="button" id="topo-trocar-avatar">${icone('usuario')}Trocar avatar</button>
         <a href="#/config/conta">${icone('usuario')}Minha conta</a><a href="#/config/aparencia">${icone('sol')}Aparência</a>
+        <a href="mailto:${SUPORTE_EMAIL}" id="topo-suporte">${icone('envelope')}E-mail ao suporte</a>
         <button type="button" id="topo-sair">${icone('sair')}Sair</button>
       </div></div>
   </header>`);
@@ -6888,6 +6899,7 @@ function iniciarTopo() {
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu'), false); } });
   $('#topo-menu').querySelectorAll('a').forEach((a) => (a.onclick = () => alternar($('#topo-usuario'), $('#topo-menu'), false)));
   $('#topo-sair').onclick = () => $('#sair').click();
+  $('#topo-suporte').onclick = (ev) => { ev.preventDefault(); alternar($('#topo-usuario'), $('#topo-menu'), false); emailSuporte(); };
   $('#topo-trocar-avatar').onclick = () => { alternar($('#topo-usuario'), $('#topo-menu'), false); escolherAvatar(); };
   pintarAvatarTopo();
   window.addEventListener('hashchange', () => { alternar($('#topo-sino'), $('#topo-painel'), false); alternar($('#topo-usuario'), $('#topo-menu'), false); atualizarSino(); });
