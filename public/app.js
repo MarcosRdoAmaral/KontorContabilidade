@@ -2538,31 +2538,32 @@ async function telaCartao() {
   const porCat = Object.entries(gastos.reduce((a, x) => ({ ...a, [x.categoria ?? 'Sem classificação']: (a[x.categoria ?? 'Sem classificação'] ?? 0) + x.valor }), {})).sort((a, b) => b[1] - a[1]);
   const vis = d.lancamentos.filter((l) => ({ todos: true, sem: l.valor > 0 && !l.categoria, parcel: !!l.parcela_total }[filtro]));
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Fatura do cartão</h1><p class="sutil">Importe a fatura do cartão de crédito em PDF, classifique os gastos e eles entram em <a href="#/despesas">Despesas e balanço</a> como “Crédito”, no mês do vencimento da fatura. O pagamento da fatura no extrato (“Cartão de crédito”) não é contado de novo.</p></div>
-      <div><label>Mês do vencimento ${d.meses.length ? `<select id="mes-car">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-car" value="${mes}">`}</label>
-        <button class="primario" id="imp-car">Importar fatura (PDF)</button><input type="file" id="arq-car" accept="application/pdf,.pdf" hidden></div></div>
+    ${cabecaTela('cartao', 'Fatura do cartão', 'Importe a fatura do cartão de crédito em PDF, classifique os gastos e eles entram em <a href="#/despesas">Despesas e balanço</a> como “Crédito”, no mês do vencimento da fatura. O pagamento da fatura no extrato (“Cartão de crédito”) não é contado de novo.',
+      `<div class="tl-mes"><span class="orc-ico">${icone('calendario')}</span><label>Mês do vencimento ${d.meses.length ? `<select id="mes-car">${[...new Set([mes, ...d.meses])].sort().reverse().map((m) => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>` : `<input type="month" id="mes-car" value="${mes}">`}</label></div>
+       <button class="tl-btn-ouro" id="imp-car">${icone('tl-baixar')} Importar fatura (PDF)</button><input type="file" id="arq-car" accept="application/pdf,.pdf" hidden>`)}
     <div id="res-car"></div>
-    ${d.lancamentos.length ? `<div class="resumo">
-      <div class="cartao"><div class="sutil">Gastos na fatura</div><div class="valor" style="color:${COR.vermelho}">${compacto(d.totalGastos)}</div><div class="dica">${gastos.length} lançamento(s)</div></div>
-      <div class="cartao"><div class="sutil">Total das faturas</div><div class="valor">${compacto(d.faturas.reduce((t, f) => t + (f.total_fatura ?? 0), 0))}</div><div class="dica">${d.faturas.map((f) => 'vence ' + dataBr(f.vencimento)).join(' · ')}</div></div>
-      <div class="cartao"><div class="sutil">Sem classificação</div><div class="valor" style="color:${d.semClassificacao ? COR.laranja : COR.verde}">${d.semClassificacao}</div><div class="dica">${d.semClassificacao ? 'só entram nas despesas depois de classificados' : 'tudo classificado'}</div></div>
-    </div>
+    ${d.lancamentos.length ? `${cartoesKpi([
+      { ic: 'tl-doc', tom: 'vermelho', valor: compacto(d.totalGastos), rotulo: `Gastos na fatura · ${gastos.length} lançamento(s)` },
+      { ic: 'tl-moedas', tom: 'laranja', valor: compacto(d.faturas.reduce((t, x) => t + (x.total_fatura ?? 0), 0)), rotulo: `Total das faturas · ${d.faturas.map((x) => 'vence ' + dataBr(x.vencimento)).join(' · ')}` },
+      { ic: 'tl-alerta', tom: d.semClassificacao ? 'laranja' : 'verde', valor: d.semClassificacao, rotulo: d.semClassificacao ? 'Sem classificação · só entram nas despesas depois de classificados' : 'Sem classificação · tudo classificado' },
+    ])}
     <div class="cartao"><h2 style="margin-top:0">Gastos por categoria</h2><table class="tabela"><tbody>${porCat.map(([c, v]) => `<tr><td>${esc(c)}</td><td class="num" style="color:${COR.vermelho}">${brl(v)}</td><td class="num sutil">${Math.round(v / d.totalGastos * 100)}%</td></tr>`).join('')}</tbody></table></div>
     <div class="topo"><h2>Lançamentos</h2><nav class="abas" id="filtros-car">${[['todos', 'Todos'], ['sem', `Sem classificação (${d.semClassificacao})`], ['parcel', 'Parcelados']].map(([k, n]) => `<a href="#" data-f="${k}" class="${k === filtro ? 'ativo' : ''}">${n}</a>`).join('')}</nav></div>
     <label class="sutil" style="flex-direction:row;display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" id="semelhantes" style="width:auto" ${semelhantes ? 'checked' : ''}> Ao classificar, aplicar também aos lançamentos parecidos e lembrar nas próximas importações</label>
     <datalist id="cat-sai">${d.categorias.map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
-    <div class="rolagem"><table class="tabela"><thead><tr><th>Compra</th><th>Descrição</th><th>Cartão</th><th class="num">Valor</th><th>Categoria</th></tr></thead><tbody>
+    <div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Compra</th><th>Descrição</th><th>Cartão</th><th class="num">Valor</th><th>Categoria</th></tr></thead><tbody>
       ${vis.map((l) => `<tr><td>${dataBr(l.data)}</td><td>${esc(l.descricao)}${l.parcela_total ? ` <span class="sutil">${l.parcela_atual}/${l.parcela_total}</span>` : ''}${l.cidade ? ` <span class="dica">${esc(l.cidade)}</span>` : ''}</td>
         <td class="sutil">${l.cartao_final ? 'final ' + esc(l.cartao_final) : ''}</td>
         <td class="num" style="color:${l.valor < 0 ? COR.verde : COR.vermelho}">${brl(l.valor)}</td>
         <td>${l.valor > 0 ? `<input data-cat="${l.id}" list="cat-sai" value="${esc(l.categoria ?? '')}" placeholder="Classificar…" ${l.categoria ? '' : 'style="border-color:' + COR.laranja + '"'}>` : '<span class="dica">' + (l.tipo === 'PAGAMENTO' ? 'pagamento da fatura anterior' : 'crédito') + '</span>'}</td></tr>`).join('') || '<tr><td colspan="5" class="sutil">Nenhum lançamento neste filtro.</td></tr>'}
-    </tbody></table></div>
+    </tbody></table></div></div>
     <h3>Faturas importadas</h3>
     <table class="tabela"><tbody>${d.faturas.map((f) => `<tr><td>${esc(f.arquivo)}</td><td>vence ${dataBr(f.vencimento)}</td><td class="num">${f.total_fatura != null ? brl(f.total_fatura) : ''}</td><td class="num">${f.qtd} lançamentos</td><td class="num">${podeExcluirRegistros() ? `<a href="#" data-exf="${f.id}">excluir</a>` : ''}</td></tr>`).join('')}</tbody></table>`
-    : '<div class="vazio">Nenhuma fatura neste mês. Importe o PDF da fatura do cartão, baixado no app ou site do emissor.</div>'}`;
+    : vazioTela('cartao', 'Nenhuma fatura neste mês', 'Importe o PDF da fatura do cartão, baixado no app ou site do emissor.', `<button class="tl-btn-ouro" id="vz-car">${icone('tl-baixar')} Importar fatura (PDF)</button>`)}`;
   $('#mes-car').onchange = (ev) => { telaCartao.mes = ev.target.value || mesAtual(); telaCartao(); };
   const arq = $('#arq-car');
   $('#imp-car').onclick = () => arq.click();
+  $('#vz-car')?.addEventListener('click', () => arq.click());
   arq.onchange = async () => {
     const f = arq.files[0]; if (!f) return;
     const box = $('#res-car'); box.innerHTML = '<p class="sutil">Lendo a fatura…</p>';
