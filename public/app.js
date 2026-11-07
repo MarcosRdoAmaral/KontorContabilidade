@@ -2736,25 +2736,51 @@ async function telaNotas() {
   const qs = new URLSearchParams({ empresaId: estado.empresaId, ...(f.mes && { mes: f.mes }), ...(f.status && { status: f.status }), ...(f.q && { q: f.q }) });
   const notas = await api('GET', `/api/notas?${qs}`);
   const total = notas.filter((n) => n.status === 'AUTORIZADA').reduce((a, n) => a + n.valor_servico, 0);
+  const qtd = (st) => notas.filter((n) => n.status === st).length;
+  const pend = qtd('PENDENTE') + qtd('ERRO_COMUNICACAO');
+  const pag = paginar(notas, telaNotas.pagina ?? 1);
+  telaNotas.pagina = pag.pagina;
+  const portal = empresa()?.modo_emissao === 'PORTAL';
   conteudo.innerHTML = `
-    <div class="topo">
-      <div><h1>Notas emitidas</h1><p class="sutil">${notas.length} notas · ${brl(total)} autorizados</p></div>
-      <form class="filtros" id="filtros">
-        <label>Competência <input type="month" name="mes" value="${f.mes}"></label>
-        <label>Situação <select name="status"><option value="">Todas</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-        <label>Buscar <input name="q" placeholder="Tomador ou nº da nota" value="${esc(f.q)}"></label>
-        <button type="submit">Filtrar</button>
-        ${empresa()?.modo_emissao === 'PORTAL' ? '<button type="button" class="primario" id="imp-xml">Importar nota do portal</button><input type="file" id="arq-xml" accept=".xml,text/xml" multiple hidden>' : ''}
-        <button type="button" id="lote" ${notas.some((n) => n.chave_acesso) ? '' : 'disabled'}>Baixar em lote</button>
-      </form>
+    ${cabecaTela('tl-doc', 'Notas emitidas', 'Acompanhe todas as notas fiscais emitidas pela sua empresa.', `<a class="tl-btn-ouro" href="#/emitir">${icone('o-mais')} Emitir nota</a>`)}
+    ${cartoesKpi([
+      { ic: 'tl-doc', valor: notas.length, rotulo: 'Notas emitidas' },
+      { ic: 'tl-moedas', tom: 'laranja', valor: brl(total), rotulo: 'Valor autorizado' },
+      { ic: 'tl-relogio', tom: 'laranja', valor: pend, rotulo: 'Pendentes', filtro: 'PENDENTE' },
+      { ic: 'tl-alerta', tom: 'vermelho', valor: qtd('REJEITADA'), rotulo: 'Rejeitadas', filtro: 'REJEITADA' },
+    ])}
+    <form class="tl-filtros" id="filtros">
+      <label>Competência <input type="month" name="mes" value="${f.mes}"></label>
+      <label>Situação <select name="status"><option value="">Todas</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <label class="busca">Buscar <input name="q" placeholder="Buscar por número ou cliente…" value="${esc(f.q)}"></label>
+      <span class="tl-acoes"><button type="button" id="limpar">${icone('tl-limpar')} Limpar</button><button type="submit" class="tl-btn-ouro">${icone('tl-filtro')} Filtrar</button></span>
+    </form>
+    <div class="tl-barra">
+      ${portal ? `<button type="button" class="tl-btn-ouro" id="imp-xml">${icone('tl-baixar')} Importar nota do portal</button><input type="file" id="arq-xml" accept=".xml,text/xml" multiple hidden>` : ''}
+      <button type="button" id="lote-pdf" ${notas.some((n) => n.chave_acesso) ? '' : 'disabled'}>${icone('tl-doc')} Baixar PDF</button>
+      <button type="button" id="lote-xml" ${notas.some((n) => n.chave_acesso) ? '' : 'disabled'}>${icone('tl-xml')} Baixar XML</button>
+      <button type="button" id="lote" ${notas.some((n) => n.chave_acesso) ? '' : 'disabled'}>${icone('tl-exportar')} Exportar (ZIP)</button>
+      <span class="tl-pag-topo" style="margin-left:auto">${pag.html}</span>
     </div>
-    ${notas.length ? `<div class="rolagem"><table class="tabela"><thead><tr>
-      <th>Nº NFS-e</th><th>DPS</th><th>Competência</th><th>Tomador</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>
-      ${notas.map((n) => `<tr class="clicavel" data-id="${n.id}"><td>${n.n_nfse ?? '—'}</td><td>${n.serie}/${n.n_dps}</td><td>${dataBr(n.competencia)}</td>
-        <td>${esc(n.tomador_nome ?? 'Não identificado')}<br><span class="dica">${esc(n.descricao.slice(0, 70))}</span></td>
-        <td class="num">${brl(n.valor_servico)}</td><td>${carimbo(n.status)}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhuma nota com esses filtros. <a href="#/emitir">Emitir nota</a></div>'}`;
-  $('#filtros').onsubmit = (ev) => { ev.preventDefault(); telaNotas.filtros = lerForm(ev.target); for (const k in telaNotas.filtros) telaNotas.filtros[k] ??= ''; telaNotas(); };
+    ${notas.length ? `<div class="tl-tabela"><div class="rolagem"><table><thead><tr>
+      <th>Cliente</th><th>Nº da nota</th><th>Competência</th><th class="num">Valor (R$)</th><th>Situação</th><th class="c">Ações</th></tr></thead><tbody>
+      ${pag.itens.map((n) => `<tr class="clicavel" data-id="${n.id}"><td><div class="tl-cli">${icone('tl-predio')}<span>${esc(n.tomador_nome ?? 'Não identificado')}<small>${esc(n.descricao.slice(0, 70))}</small></span></div></td>
+        <td>${n.n_nfse ?? '—'}<small class="dica" style="display:block">DPS ${n.serie}/${n.n_dps}</small></td><td>${dataBr(n.competencia)}</td>
+        <td class="num">${brl(n.valor_servico)}</td><td>${carimbo(n.status)}</td>
+        <td class="c"><span class="tl-ac"><a href="#/nota/${n.id}" title="Abrir a nota" aria-label="Abrir a nota">${icone('tl-olho')}</a>${n.chave_acesso ? `<button type="button" data-pdf="${n.id}" data-n="${n.n_nfse ?? n.id}" title="Baixar PDF (DANFSe)" aria-label="Baixar PDF">${icone('tl-baixar')}</button>` : ''}</span></td></tr>`).join('')}
+    </tbody></table></div>${pag.html}</div>` : vazioTela('tl-doc', 'Nenhuma nota encontrada', 'Não há notas para os filtros escolhidos. Ajuste a competência ou a busca, ou emita uma nova nota.', `<a class="tl-btn-ouro" href="#/emitir">${icone('o-mais')} Emitir nota</a>`)}
+    ${dicaTela('Precisa de ajuda?', 'Consulte o status da sua nota no manual ou fale com o suporte técnico.', '<a href="#/relatorios/documentacao">Acessar ajuda</a>')}`;
+  conteudo.querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { telaNotas.pagina = Number(b.dataset.pg); telaNotas(); }));
+  conteudo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { telaNotas.filtros = { ...f, status: k.dataset.kp }; telaNotas.pagina = 1; telaNotas(); }));
+  conteudo.querySelectorAll('[data-pdf]').forEach((bt) => (bt.onclick = (ev) => { ev.stopPropagation(); baixar(`/api/notas/${bt.dataset.pdf}/danfse`, `DANFSe_${bt.dataset.n}.pdf`); }));
+  $('#limpar').onclick = () => { telaNotas.filtros = { mes: mesAtual(), status: '', q: '' }; telaNotas.pagina = 1; telaNotas(); };
+  const lotePronto = async (formato) => {
+    const p = new URLSearchParams({ empresaId: estado.empresaId, formato, ...(f.mes && { mes: f.mes }), ...(f.status && { status: f.status }) });
+    try { await baixar(`/api/notas-lote?${p}`, `notas-${f.mes || 'todas'}-${formato}.zip`); } catch (er) { aviso(mensagemErro(er)); }
+  };
+  $('#lote-pdf').onclick = () => lotePronto('pdf');
+  $('#lote-xml').onclick = () => lotePronto('xml');
+  $('#filtros').onsubmit = (ev) => { ev.preventDefault(); telaNotas.filtros = lerForm(ev.target); for (const k in telaNotas.filtros) telaNotas.filtros[k] ??= ''; telaNotas.pagina = 1; telaNotas(); };
   conteudo.querySelectorAll('tr[data-id]').forEach((tr) => (tr.onclick = () => (location.hash = `#/nota/${tr.dataset.id}`)));
   if ($('#imp-xml')) {
     $('#imp-xml').onclick = () => $('#arq-xml').click();
@@ -6478,6 +6504,20 @@ const MENSAGENS_DIA = [
 // Ícones (traço fino, herdam a cor do tema), menu com ícones, sininho e usuário no topo
 // ---------------------------------------------------------------------------
 const ICONES = {
+  'tl-doc': 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6M10 9h2',
+  'tl-moedas': 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
+  'tl-relogio': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  'tl-alerta': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.5h.01',
+  'tl-check': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.8 2.8L16.5 9.5',
+  'tl-limpar': 'M20 11a8 8 0 0 0-14.5-4.2L4 9M4 4v5h5M4 13a8 8 0 0 0 14.5 4.2L20 15M20 20v-5h-5',
+  'tl-filtro': 'M3 5h18l-7 8v6l-4-2v-4z',
+  'tl-olho': 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  'tl-baixar': 'M12 4v11M7.5 11 12 15.5 16.5 11M5 20h14',
+  'tl-mais': 'M5 12h.01M12 12h.01M19 12h.01',
+  'tl-predio': 'M5 21V4h10v17M15 9h4v12M3 21h18M8 8h4M8 12h4M8 16h4',
+  'tl-xml': 'M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 6l-3 12',
+  'tl-ajuda': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v6M12 7.5h.01',
+  'tl-exportar': 'M12 15V4M7.5 8 12 3.5 16.5 8M5 14v6h14v-6',
   'em-doc': 'M7 3h7l5 5v6M14 3v5h5M7 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M8.5 12h6M8.5 16h3M17 22a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM15 17.5l1.5 1.5 2.5-3',
   'em-users': 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.6 3-5.5 6.5-5.5s6 1.9 6.5 5.5M16 4.5a3.2 3.2 0 0 1 0 6.2M18 14.8c2 .6 3.2 2.2 3.5 5.2',
   'em-cfg': 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 13.5l1.6 1.2-2 3.4-1.9-.6a7 7 0 0 1-1.6.9L15 20h-4l-.5-1.6a7 7 0 0 1-1.6-.9l-1.9.6-2-3.4 1.6-1.2a7 7 0 0 1 0-1.8L3 10.5l2-3.4 1.9.6a7 7 0 0 1 1.6-.9L9 5h4l.5 1.6a7 7 0 0 1 1.6.9l1.9-.6 2 3.4-1.6 1.2a7 7 0 0 1 0 1.8z',
@@ -6538,6 +6578,33 @@ const ICONES = {
   raio: 'M13 2 4 14h7l-1 8 9-12h-7z',
   foguete: 'M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M9 13l2 2M14.5 4.5c2.5-1.5 5-1.5 5.5-1s.5 3-1 5.5l-6 6-4.5-4.5zM9 9H5l-2 3 4 1M15 15v4l-3 2-1-4M15 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
 };
+
+// ---- peças visuais comuns às telas (cabeçalho, indicadores, filtros, paginação, dica) ----
+/** Cabeçalho da tela: ícone grande, título, subtítulo e, à direita, o que for passado (botões, mês de referência). */
+function cabecaTela(ic, titulo, sub, direita = '') {
+  return `<div class="orc-topo tl-topo"><span class="orc-ico grande">${icone(ic)}</span><div class="tl-tit"><h1>${titulo}</h1><p class="sutil">${sub}</p></div>${direita ? `<div class="tl-dir">${direita}</div>` : ''}</div>`;
+}
+/** Cartões de indicadores: [{ ic, tom: 'laranja' | 'verde' | 'vermelho' | 'neutro', valor, rotulo, href?, filtro? }]. */
+function cartoesKpi(lista) {
+  return `<div class="kp-grade">${lista.map((k) => `<${k.href || k.filtro != null ? 'a' : 'div'} class="kp kp-${k.tom ?? 'neutro'}" ${k.href ? `href="${k.href}"` : ''} ${k.filtro != null ? `data-kp="${esc(k.filtro)}" href="javascript:void(0)"` : ''}><span class="kp-ico">${icone(k.ic)}</span><span class="kp-txt"><strong>${k.valor}</strong><small>${k.rotulo}</small></span>${k.href || k.filtro != null ? `<span class="kp-seta">${icone('chevron')}</span>` : ''}</${k.href || k.filtro != null ? 'a' : 'div'}>`).join('')}</div>`;
+}
+/** Estado vazio: ilustração simples, título, texto e uma ação. */
+function vazioTela(ic, titulo, texto, acao = '') {
+  return `<div class="tl-vazio"><span class="tl-vazio-ico">${icone(ic)}</span><div><h2>${titulo}</h2><p>${texto}</p>${acao}</div></div>`;
+}
+/** Faixa de dica no fim da tela. */
+function dicaTela(titulo, texto, link = '') {
+  return `<div class="tl-dica">${icone('tl-ajuda')}<div><strong>${titulo}</strong> <span>${texto}</span></div>${link}</div>`;
+}
+/** Paginação simples no navegador: devolve { itens, html, ligar(rotulos) } para a página atual. */
+function paginar(lista, pagina, porPagina = 10) {
+  const total = lista.length, paginas = Math.max(1, Math.ceil(total / porPagina)), pg = Math.min(Math.max(1, pagina), paginas);
+  const ini = (pg - 1) * porPagina, itens = lista.slice(ini, ini + porPagina);
+  const nums = []; for (let i = 1; i <= paginas; i++) if (i === 1 || i === paginas || Math.abs(i - pg) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
+  const html = `<div class="tl-pag"><span class="sutil">${total ? `Exibindo ${ini + 1}–${ini + itens.length} de ${total}` : 'Nenhum registro'}</span>${paginas > 1 ? `<span class="tl-pags"><button type="button" data-pg="${pg - 1}" ${pg === 1 ? 'disabled' : ''} aria-label="Anterior">${icone('o-voltar')}</button>${nums.map((n) => (n === '…' ? '<em>…</em>' : `<button type="button" data-pg="${n}" class="${n === pg ? 'atual' : ''}">${n}</button>`)).join('')}<button type="button" data-pg="${pg + 1}" ${pg === paginas ? 'disabled' : ''} aria-label="Próxima">${icone('chevron')}</button></span>` : ''}</div>`;
+  return { itens, pagina: pg, html };
+}
+
 const icone = (k, cls = 'ico') => (ICONES[k] ? `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[k]}"/></svg>` : '');
 
 function iconesMenu() {
