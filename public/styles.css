@@ -1014,3 +1014,9 @@ a.kp:hover { border-color: var(--laranja); }
 .tl-btn-borda { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 12px; border: 1.5px solid var(--laranja); background: transparent; color: var(--laranja); font-weight: 600; cursor: pointer; text-decoration: none; }
 .kp-seta .ico, .tl-pags button[aria-label="Próxima"] .ico { transform: rotate(-90deg); }
 .tl-topo > .acoes { flex-basis: 100%; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+.tl-mes { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px; }
+.tl-mes label { display: flex; flex-direction: column; font-size: .78rem; color: var(--tinta-2); margin: 0; }
+.tl-mes input { background: transparent; border: 0; padding: 2px 0; color: var(--tinta); font-weight: 600; }
+.tl-mes .orc-ico { width: 40px; height: 40px; }
+.tl-dica > div strong + span { margin-left: 6px; }

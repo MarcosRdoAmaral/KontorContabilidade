@@ -2349,22 +2349,23 @@ async function telaAgenda() {
   const totalProntas = prontas.reduce((t, i) => t + i.valor, 0);
   const acaoTxt = (m) => ({ NOTA: 'nota', NOTA_BOLETO: 'nota + boleto', BOLETO: 'boleto' }[m] ?? m);
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Emissão automática</h1><p class="sutil">Todo mês, na data de cada cliente, o sistema deixa a emissão pronta com o serviço padrão e o valor cadastrados. Você confere e confirma; nada é emitido sem a sua confirmação.</p></div>
-      <div><label>Mês <input type="month" id="mes-ag" value="${mes}"></label>
-        <button class="primario" id="todas" ${prontas.length ? '' : 'disabled'}>Emitir ${prontas.length ? prontas.length + ' pronta(s)' : 'prontas'}</button></div></div>
-    ${porCliente.size ? `<div class="resumo">
-      <div class="cartao"><div class="sutil">Prontas para confirmar</div><div class="valor" style="color:${COR.laranja}">${d.resumo.prontas}</div><div class="dica">${prontas.length ? brl(totalProntas) + ' em serviços' : 'nada pendente'}</div></div>
-      <div class="cartao"><div class="sutil">Agendadas</div><div class="valor">${d.resumo.agendadas}</div><div class="dica">ainda não chegou a data</div></div>
-      <div class="cartao"><div class="sutil">Com erro</div><div class="valor" style="color:${d.resumo.erros ? COR.vermelho : COR.verde}">${d.resumo.erros}</div></div>
-    </div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>Serviço</th><th class="num">Valor</th><th>O que gera</th><th>Data</th><th>Situação</th><th></th></tr></thead><tbody>
+    ${cabecaTela('agenda', 'Emissão automática', 'Configure e agende a emissão de notas fiscais para seus clientes, de forma prática e eficiente. Todo mês, na data de cada cliente, o sistema deixa a emissão pronta com o serviço padrão e o valor cadastrados; nada é emitido sem a sua confirmação.',
+      `<div class="tl-mes"><span class="orc-ico">${icone('calendario')}</span><label>Mês de referência <input type="month" id="mes-ag" value="${mes}"></label></div>
+       <button class="tl-btn-ouro" id="todas" ${prontas.length ? '' : 'disabled'}>${icone('seta')} Emitir ${prontas.length ? prontas.length + ' pronta(s)' : 'prontas'}</button>`)}
+    ${porCliente.size ? `${cartoesKpi([
+      { ic: 'tl-check', tom: 'verde', valor: d.resumo.prontas, rotulo: `Prontas para confirmar${prontas.length ? ' · ' + brl(totalProntas) : ''}` },
+      { ic: 'tl-relogio', tom: 'laranja', valor: d.resumo.agendadas, rotulo: 'Agendadas (ainda não chegou a data)' },
+      { ic: 'tl-alerta', tom: d.resumo.erros ? 'vermelho' : 'neutro', valor: d.resumo.erros, rotulo: 'Com erro' },
+    ])}
+    <div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Cliente</th><th>Serviço</th><th class="num">Valor</th><th>O que gera</th><th>Data</th><th>Situação</th><th></th></tr></thead><tbody>
     ${[...porCliente.values()].map((itens) => itens.map((i, k) => `<tr>
       ${k === 0 ? `<td rowspan="${itens.length}"><strong>${esc(i.tomador)}</strong><br>${i.agenda_ativa ? `<span class="dica">todo dia ${i.agenda_dia}</span> ` : ''}<button data-cfg="${i.tomador_id}">${i.agenda_ativa ? 'Alterar' : 'Agendar'}</button></td>` : ''}
       <td>${esc(i.servico)}</td><td class="num">${brl(i.valor)}</td><td>${acaoTxt(i.modo)}</td><td>${i.data_prevista ? dataBr(i.data_prevista) : '—'}</td>
       <td><span class="${STATUS_AGENDA[i.status][1]}">${STATUS_AGENDA[i.status][0]}</span>${i.mensagem && i.status !== 'PULADA' ? `<br><span class="dica">${esc(i.mensagem)}</span>` : ''}</td>
       <td class="acoes-linha">${i.status === 'PRONTA' || i.status === 'ERRO' ? `<button data-exe="${i.tomador_id}:${i.servico_id}">${i.status === 'ERRO' ? 'Tentar de novo' : 'Emitir'}</button> <button data-pul="${i.tomador_id}:${i.servico_id}">Pular</button>` : i.status === 'PULADA' ? `<button data-des="${i.tomador_id}:${i.servico_id}">Desfazer</button>` : i.nota_id ? `<a href="#/nota/${i.nota_id}">Ver nota</a>` : ''}</td></tr>`).join('')).join('')}
-    </tbody></table></div>`
-    : '<div class="vazio">Nenhum cliente com serviço padrão. Abra um cliente, cadastre o serviço e o valor na aba <strong>Serviços padrão</strong> e volte aqui para agendar. ' + (empresa()?.eh_escritorio ? '<a href="#/carteira">Ir para a Carteira (botão Faturamento)</a>' : '<a href="#/tomadores">Ir para os tomadores</a>') + '</div>'}`;
+    </tbody></table></div></div>`
+    : `${dicaTela('Automatize sua rotina', 'Nenhum cliente com serviço padrão. Abra um cliente, cadastre o serviço e o valor na aba <strong>Serviços padrão</strong> e volte aqui para agendar.', '<a href="#/tomadores">Ir para Clientes →</a>')}
+      ${vazioTela('agenda', 'Pronto para automatizar?', 'Após configurar seus clientes e serviços, você poderá agendar a emissão automática de notas fiscais.', `<a class="tl-btn-ouro" href="#/tomadores">${icone('agenda')} Ir para Clientes</a>`)}`}`;
   $('#mes-ag').onchange = (ev) => { telaAgenda.mes = ev.target.value || mesAtual(); telaAgenda(); };
   const recarregar = async () => { const y = window.scrollY; await telaAgenda(); window.scrollTo(0, y); };
   const par = (v) => v.split(':').map(Number);
