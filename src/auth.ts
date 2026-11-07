@@ -101,6 +101,7 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/escritorio\/conexao\/clientes\/\d+$/, m: 'GET', mod: ['carteira', 'situacao', 'controle'] },
   { r: /^\/api\/escritorio\/conexao\/clientes\/\d+(\/convite|\/aparelhos\/\d+)?$/, mod: ['carteira'] },
   { m: 'POST', r: /^\/api\/escritorio\/conexao\/sincronizar$/, mod: ['carteira', 'situacao', 'controle', 'captura'] },
+  { r: /^\/api\/escritorio\/conexao\/automatico$/, mod: ['situacao', 'controle'] },
   { m: 'POST', r: /^\/api\/escritorio\/conexao\/clientes\/\d+\/guias\/\d+\/enviar$/, mod: ['situacao', 'controle'] },
   { r: /^\/api\/escritorio\/solicitacoes(\/\d+\/(gerar|anexar|enviar|recusar))?$/, mod: ['situacao', 'controle'] },
   { m: 'GET', r: /^\/api\/escritorio\/recebidos(\/\d+\/zip)?$/, mod: ['captura', 'controle'] },

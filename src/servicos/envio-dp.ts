@@ -8,6 +8,7 @@ import { camposCliente, camposMes, type Variaveis } from './modelos-email.js';
 import { lerGuia } from './fechamento.js';
 import { lancarNoControle } from './controle-mensal.js';
 import { norm, porNome } from './importar-controle.js';
+import { aparelhosConectados, enviarAoCliente, pacoteDocumento, pacoteGuia } from '../conexao/escritorio.js';
 
 /**
  * Envio automático dos documentos do departamento pessoal. O escritório guarda os arquivos em
@@ -162,23 +163,49 @@ export async function varrerPastaDp(escritorioId: number, enviar: boolean): Prom
         if (!novos.length) { res.push({ ...base, situacao: 'JA_ENVIADO' }); continue; }
         if (!jaEnviou && faltando.length) { res.push({ ...base, situacao: 'AGUARDANDO' }); continue; }
         const emails = String(e.email ?? '').split(/[,;\s]+/).filter((x) => x.includes('@'));
-        if (!emails.length) { res.push({ ...base, situacao: 'SEM_EMAIL', mensagem: 'Cliente sem e-mail no cadastro da Carteira.' }); continue; }
+        const app = aparelhosConectados(e.id); // conectado pelo Kontor Empresas ou pelo aplicativo: os documentos vão por lá também
+        if (!emails.length && !app) { res.push({ ...base, situacao: 'SEM_EMAIL', mensagem: 'Cliente sem e-mail no cadastro da Carteira e sem conexão pelo aplicativo.' }); continue; }
         if (!enviar) { res.push({ ...base, situacao: jaEnviou ? 'COMPLEMENTO' : 'ENVIADO', mensagem: 'pronto para enviar' }); continue; }
         const r = await enviarConjunto(escritorioId, e, comp, jaEnviou ? novos : arqs, jaEnviou, emails);
-        res.push({ ...base, situacao: r.ok ? (jaEnviou ? 'COMPLEMENTO' : 'ENVIADO') : 'ERRO', mensagem: r.ok ? `enviado para ${emails.join(', ')}` : r.erro });
+        res.push({ ...base, situacao: r.ok ? (jaEnviou ? 'COMPLEMENTO' : 'ENVIADO') : 'ERRO', mensagem: r.ok ? `enviado para ${r.destino}` : r.erro });
       }
     }
   }
   return res;
 }
 
+/** Guias do DP como o aplicativo/Kontor Empresas entende (a DARF previdenciária é a guia da DCTFWeb). */
+const GUIA_APP: Partial<Record<TipoDp, string>> = { DARF: 'DCTFWEB', FGTS: 'FGTS', SINDICATO: 'SINDICATO' };
+
+/** Manda os documentos do DP aos aparelhos conectados do cliente; devolve quantos aparelhos receberam. */
+async function enviarPelaConexao(escritorioId: number, e: any, comp: string, arqs: ArqDp[]) {
+  const doc = (db.prepare('SELECT documento FROM empresas WHERE id = ?').get(e.id) as any).documento as string;
+  let n = 0;
+  for (const a of arqs) {
+    const pdf = fs.readFileSync(a.caminho);
+    const titulo = `${TIPOS_DP[a.tipo]} — ${rotulo(comp)}`;
+    n = GUIA_APP[a.tipo]
+      ? await enviarAoCliente(escritorioId, e.id, 'GUIA', await pacoteGuia({ tipo: GUIA_APP[a.tipo]!, titulo, periodo: rotulo(comp), valor: a.valor ?? null, validade: a.vencimento ?? null, pdf }, doc, { pedido: null, competencia: comp }))
+      : await enviarAoCliente(escritorioId, e.id, 'DOCUMENTO', pacoteDocumento({ tipo: a.tipo, titulo, competencia: comp, nome: path.basename(a.caminho), arquivo: pdf }));
+  }
+  return n;
+}
+
 async function enviarConjunto(escritorioId: number, e: any, comp: string, arqs: ArqDp[], complemento: boolean, emails: string[]) {
   const vars: Variaveis = { ...camposCliente(e.id), ...camposMes(comp),
     documentos: arqs.map((a) => ({ rotulo: TIPOS_DP[a.tipo], valor: a.valor != null ? brl(a.valor) : null, detalhe: a.vencimento ? `Vencimento ${dataBr(a.vencimento)}` : null })) };
+  const destinos: string[] = [];
   try {
-    const anexos = arqs.map((a) => ({ filename: path.basename(a.caminho), content: fs.readFileSync(a.caminho), contentType: 'application/pdf' }));
-    const ok = await enviarComModelo(escritorioId, complemento ? 'dp_complemento' : 'dp', vars, emails, { anexos });
-    if (!ok) throw new ErroNegocio('Configure o servidor de e-mail em Configurações > E-mail.');
+    if (aparelhosConectados(e.id)) {
+      try { const n = await enviarPelaConexao(escritorioId, e, comp, arqs); destinos.push(`aplicativo (${n} aparelho${n === 1 ? '' : 's'})`); }
+      catch (err) { if (!emails.length) throw err; } // com e-mail, a falha da conexão não segura o envio
+    }
+    if (emails.length) {
+      const anexos = arqs.map((a) => ({ filename: path.basename(a.caminho), content: fs.readFileSync(a.caminho), contentType: 'application/pdf' }));
+      const ok = await enviarComModelo(escritorioId, complemento ? 'dp_complemento' : 'dp', vars, emails, { anexos });
+      if (!ok) throw new ErroNegocio('Configure o servidor de e-mail em Configurações > E-mail.');
+      destinos.unshift(emails.join(', '));
+    }
   } catch (err: any) {
     const erro = String(err?.message ?? err);
     const ultimo = db.prepare('SELECT situacao, erro FROM dp_envios WHERE empresa_id = ? AND competencia = ? ORDER BY id DESC LIMIT 1').get(e.id, comp) as any;
@@ -188,7 +215,7 @@ async function enviarConjunto(escritorioId: number, e: any, comp: string, arqs: 
   }
   db.transaction(() => {
     const envio = Number(db.prepare("INSERT INTO dp_envios (empresa_id, competencia, situacao, destino, itens, complemento) VALUES (?,?, 'ENVIADO',?,?,?)")
-      .run(e.id, comp, emails.join(', '), arqs.map((a) => a.tipo).join(','), complemento ? 1 : 0).lastInsertRowid);
+      .run(e.id, comp, destinos.join(' e '), arqs.map((a) => a.tipo).join(','), complemento ? 1 : 0).lastInsertRowid);
     const marca = db.prepare('UPDATE dp_arquivos SET envio_id = ? WHERE id = ?');
     for (const a of arqs) marca.run(envio, a.id);
     // valores das guias no Controle mensal (a guia manda) e a data do envio
@@ -202,7 +229,7 @@ async function enviarConjunto(escritorioId: number, e: any, comp: string, arqs: 
         ON CONFLICT(empresa_id, competencia, area) DO UPDATE SET dados_json = excluded.dados_json, atualizado_em = datetime('now')`).run(e.id, comp, JSON.stringify(d));
     }
   })();
-  return { ok: true as const };
+  return { ok: true as const, destino: destinos.join(' e ') };
 }
 
 /** Tela de configuração: pastas encontradas, ligação com os clientes, documentos esperados e os últimos envios. */

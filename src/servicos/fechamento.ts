@@ -1,7 +1,7 @@
 import { diaUtil } from './diautil.js';
 import { z } from 'zod';
 import { db } from '../db.js';
-import { aparelhosConectados, enviarAoCliente, pacoteGuia } from '../conexao/escritorio.js';
+import { lerEnvioAutomatico, salvarEnvioAutomatico, aparelhosConectados, enviarAoCliente, pacoteDocumento, pacoteGuia } from '../conexao/escritorio.js';
 import { ErroNegocio, certificadoDaEmpresa } from './emissao.js';
 import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from './integra-contador.js';
 import { assinarDctfweb } from '../nfse/assinatura.js';
@@ -611,6 +611,15 @@ export async function enviarFechamento(escritorioId: number, usuarioId: number, 
       for (const g of paraApp) {
         const a = arquivoFechamento(escritorioId, empresaId, mes, g.tipo, 'guia');
         aparelhos = await enviarAoCliente(escritorioId, empresaId, 'GUIA', await pacoteGuia({ tipo: g.tipo === 'PGDASD' ? 'DAS' : 'DCTFWEB', titulo: `${g.nome} — ${rotuloMes(mes)}`, periodo: rotuloMes(mes), valor: g.valor, validade: g.venc, pdf: a.pdf }, doc, { pedido: null, competencia: mes }));
+        // junto da guia, a declaração e o recibo da entrega (quando o Kontor tem)
+        const docs: [('recibo' | 'declaracao'), string, string][] = g.tipo === 'PGDASD'
+          ? [['declaracao', 'DECLARACAO_PGDAS', 'Declaração do PGDAS-D'], ['recibo', 'RECIBO_PGDAS', 'Recibo de entrega do PGDAS-D']]
+          : [['recibo', 'RECIBO_DCTF', 'Recibo de entrega da DCTFWeb']];
+        for (const [qual, tipoDoc, titulo] of docs) {
+          let arq: { pdf: Buffer; nome: string } | null = null;
+          try { arq = arquivoFechamento(escritorioId, empresaId, mes, g.tipo, qual); } catch { arq = null; }
+          if (arq) await enviarAoCliente(escritorioId, empresaId, 'DOCUMENTO', pacoteDocumento({ tipo: tipoDoc, titulo: `${titulo} — ${rotuloMes(mes)}`, competencia: mes, nome: arq.nome, arquivo: arq.pdf }));
+        }
       }
       if (canal !== 'APP') db.prepare('INSERT INTO envios_fechamento (empresa_id, competencia, canal, destino, itens, usuario_id) VALUES (?,?,?,?,?,?)').run(empresaId, mes, 'APP', `aplicativo (${aparelhos} aparelho${aparelhos === 1 ? '' : 's'})`, paraApp.map((g) => g.tipo).join(','), usuarioId);
     } catch (e) {
@@ -638,4 +647,29 @@ export async function enviarFechamento(escritorioId: number, usuarioId: number, 
   }
   if (canal === 'EMAIL' || canal === 'WHATSAPP') db.prepare('UPDATE empresas SET canal_envio = COALESCE(canal_envio, ?) WHERE id = ?').run(canal, empresaId);
   return { enviadoPara: destino, guias: m.guias.length, aparelhos, avisoApp };
+}
+
+/**
+ * Envio automático pela conexão (a cada 2 min, junto da sincronização): guia do Controle mensal que ficou pronta
+ * (DAS ou DARF da DCTFWeb) vai sozinha para o Kontor Empresas e o aplicativo dos clientes conectados, uma vez por mês.
+ * Só competências do mês atual e do anterior e só o que ficou pronto depois de ligar o envio automático.
+ */
+export async function envioAutomaticoFechamentos() {
+  const hoje = new Date(Date.now() - 3 * 3600e3);
+  const anterior = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+  const escritorios = db.prepare(`SELECT DISTINCT e.escritorio_id FROM conexao_aparelhos a JOIN empresas e ON e.id = a.empresa_id WHERE a.situacao = 'CONECTADO'`).all() as { escritorio_id: number }[];
+  for (const { escritorio_id: esc } of escritorios) {
+    const cfg = lerEnvioAutomatico(esc);
+    if (!cfg.ligado) continue;
+    if (!cfg.desde) { salvarEnvioAutomatico(esc, true); continue; } // primeira volta: marca o começo e não manda nada antigo
+    const prontos = db.prepare(`SELECT DISTINCT f.empresa_id, f.competencia, f.tipo FROM fechamentos f JOIN empresas e ON e.id = f.empresa_id
+      WHERE e.escritorio_id = ? AND f.competencia >= ? AND f.guia_pdf IS NOT NULL AND f.atualizado_em >= ?
+        AND EXISTS (SELECT 1 FROM conexao_aparelhos a WHERE a.empresa_id = f.empresa_id AND a.situacao = 'CONECTADO')
+        AND NOT EXISTS (SELECT 1 FROM envios_fechamento v WHERE v.empresa_id = f.empresa_id AND v.competencia = f.competencia AND v.canal = 'APP' AND (',' || v.itens || ',') LIKE '%,' || f.tipo || ',%')`)
+      .all(esc, anterior, cfg.desde) as { empresa_id: number; competencia: string; tipo: TipoGuia }[];
+    for (const p of prontos) {
+      try { await enviarFechamento(esc, null as unknown as number, p.empresa_id, p.competencia, 'APP', p.tipo); }
+      catch { /* tenta de novo na próxima volta */ }
+    }
+  }
 }

@@ -295,6 +295,26 @@ export async function pacoteGuia(g: { tipo: string; titulo: string; periodo: str
     linha: pag.linha, pix: pag.pix, enviada_em: new Date().toISOString(), ...extra };
 }
 
+/** Documento que não é guia (recibo, declaração, espelho da folha) para o aplicativo/Kontor Empresas. */
+export function pacoteDocumento(d: { tipo: string; titulo: string; competencia: string | null; nome: string; arquivo: Buffer; mime?: string }) {
+  return { tipo: d.tipo, titulo: d.titulo, competencia: d.competencia, nome: d.nome.replace(/[^\w.\- ]+/g, '_'), mime: d.mime ?? 'application/pdf', arquivo: d.arquivo.toString('base64'), enviado_em: new Date().toISOString() };
+}
+
+// ---- envio automático pela conexão ----
+const chaveAuto = (escritorioId: number) => `conexao_auto:${escritorioId}`;
+/** Configuração do envio automático: guias e documentos vão sozinhos aos clientes conectados, sem o cliente pedir. */
+export function lerEnvioAutomatico(escritorioId: number) {
+  const v = (db.prepare('SELECT valor FROM parametros WHERE nome = ?').get(chaveAuto(escritorioId)) as any)?.valor;
+  try { const d = v ? JSON.parse(v) : null; return { ligado: d?.ligado ?? true, desde: (d?.desde as string | undefined) ?? null }; } catch { return { ligado: true, desde: null }; }
+}
+export function salvarEnvioAutomatico(escritorioId: number, ligado: boolean) {
+  const atual = lerEnvioAutomatico(escritorioId);
+  // ao ligar, só o que ficar pronto daqui para a frente vai sozinho (não reenvia meses antigos)
+  const desde = ligado ? (atual.ligado && atual.desde ? atual.desde : new Date().toISOString().replace('T', ' ').slice(0, 19)) : null;
+  db.prepare('INSERT INTO parametros (nome, valor) VALUES (?, ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor').run(chaveAuto(escritorioId), JSON.stringify({ ligado, desde }));
+  return lerEnvioAutomatico(escritorioId);
+}
+
 /** Envia uma guia ao cliente (Kontor Empresas e celulares), com ou sem solicitação. */
 export async function enviarGuiaAoCliente(escritorioId: number, usuarioId: number, empresaId: number, guiaId: number, mensagem?: string | null, solicitacaoId?: number) {
   const g = db.prepare('SELECT g.* FROM guias_recalculadas g JOIN empresas e ON e.id = g.empresa_id WHERE g.id = ? AND g.empresa_id = ? AND e.escritorio_id = ?').get(guiaId, empresaId, escritorioId) as any;

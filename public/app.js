@@ -5418,8 +5418,16 @@ async function telaSolicitacoes(aba) {
   conteudo.innerHTML = `
     ${cabecaTela('solicitacoes', 'Solicitações dos clientes', 'Pedidos de guia atualizada e fechamentos do mês enviados pelos clientes conectados ao Kontor Gestão Empresas. Para conectar um cliente, use o menu ⋮ dele na Carteira.',
       `<button type="button" class="orc-ouro" id="sol-sinc">${icone('refazer')} Buscar agora</button>`)}
+    <div class="cx-auto" id="cx-auto"></div>
     <nav class="abas"><a href="#/solicitacoes" class="${aba === 'pedidos' ? 'ativo' : ''}">Pedidos de guia</a><a href="#/solicitacoes/recebidos" class="${aba === 'recebidos' ? 'ativo' : ''}">Fechamentos recebidos</a></nav>
     <div id="sol-corpo"></div>`;
+  const pintarAuto = (a) => {
+    $('#cx-auto').innerHTML = `<span class="orc-ico">${icone('aviao')}</span><div><strong>Envio automático aos clientes conectados: ${a.ligado ? '<span class="cor-verde">ligado</span>' : '<span class="cor-ambar">desligado</span>'}</strong>
+      <span class="dica">${a.ligado ? 'Sem o cliente pedir: o DAS e o DARF da DCTFWeb do Controle mensal vão sozinhos ao Kontor Empresas e ao aplicativo assim que ficam prontos (com a declaração e o recibo), uma vez por mês. Os documentos do DP (FGTS, DARF previdenciária, sindicato, recibos e folha) vão junto do envio automático da pasta do DP.' : 'As guias só vão ao aplicativo quando você clicar em Enviar no Controle mensal.'}</span></div>
+      ${pode('situacao') || pode('controle') ? `<button type="button" class="orc-ouro" id="cx-auto-bt">${a.ligado ? 'Desligar' : 'Ligar'}</button>` : ''}`;
+    $('#cx-auto-bt') && ($('#cx-auto-bt').onclick = async () => { try { pintarAuto(await api('PUT', '/api/escritorio/conexao/automatico', { ligado: !a.ligado })); } catch (e) { aviso(mensagemErro(e)); } });
+  };
+  api('GET', '/api/escritorio/conexao/automatico').then(pintarAuto).catch(() => {});
   $('#sol-sinc').onclick = async (ev) => {
     const b = ev.currentTarget; b.disabled = true;
     try { const r = await api('POST', '/api/escritorio/conexao/sincronizar'); aviso(r.erros?.length ? r.erros.join(' ') : r.recebidos ? `${r.recebidos} novidade(s) recebida(s).` : 'Nada novo dos clientes.'); telaSolicitacoes(aba); }

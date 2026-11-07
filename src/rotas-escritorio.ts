@@ -23,7 +23,7 @@ import { Acesso, acessoDoCliente, listarAcessos, revelarAcesso, salvarAcesso } f
 import { analisarControle, importarControle } from './servicos/importar-controle.js';
 import { DocumentoFgts, ResultadoFgts, detalheFgts, documentoFgts, salvarDocumentoFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
-import { DadosDarf, anexarNaSolicitacao, convidar, desconectar, enviarGuiaAoCliente, enviarSolicitacao, gerarDaSolicitacao, listarRecebidos, listarSolicitacoes, recusarSolicitacao, sincronizar, statusConexao, zipRecebido } from './conexao/escritorio.js';
+import { lerEnvioAutomatico, salvarEnvioAutomatico, DadosDarf, anexarNaSolicitacao, convidar, desconectar, enviarGuiaAoCliente, enviarSolicitacao, gerarDaSolicitacao, listarRecebidos, listarSolicitacoes, recusarSolicitacao, sincronizar, statusConexao, zipRecebido } from './conexao/escritorio.js';
 import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
@@ -453,6 +453,8 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.delete('/api/escritorio/conexao/clientes/:id', async (req) => { checar(req, id(req)); return desconectar(u(req).escritorio_id, id(req)); });
     api.delete('/api/escritorio/conexao/clientes/:id/aparelhos/:vinculo', async (req) => { checar(req, id(req)); return desconectar(u(req).escritorio_id, id(req), id(req, 'vinculo')); });
     api.post('/api/escritorio/conexao/sincronizar', async (req) => sincronizar(u(req).escritorio_id));
+    api.get('/api/escritorio/conexao/automatico', async (req) => lerEnvioAutomatico(u(req).escritorio_id));
+    api.put('/api/escritorio/conexao/automatico', async (req) => salvarEnvioAutomatico(u(req).escritorio_id, z.object({ ligado: z.boolean() }).parse(req.body).ligado));
     api.post('/api/escritorio/conexao/clientes/:id/guias/:guia/enviar', async (req) => {
       checar(req, id(req));
       const b = z.object({ mensagem: z.string().max(1000).nullish() }).parse(req.body ?? {});
