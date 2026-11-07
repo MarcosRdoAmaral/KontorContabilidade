@@ -210,7 +210,7 @@ export async function sincronizarPagos(empresaId: number): Promise<{ baixadas: n
         const f = await a.consultar(c.cora_id);
         if (f.status !== 'PAID') continue;
         const valor = f.total_paid ? reais(f.total_paid) : undefined;
-        try { marcarPago(c.id, f.occurrence_date?.slice(0, 10) ?? hoje, valor); baixadas++; } catch { /* já encerrada */ }
+        try { marcarPago(c.id, f.occurrence_date?.slice(0, 10) ?? hoje, valor, { fonte: 'CORA' }); baixadas++; } catch { /* já encerrada */ }
       }
       db.prepare('UPDATE contas_cora SET ultima_sync_pagos = ? WHERE empresa_id = ?').run(hoje, empresaId);
       return { baixadas };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { db } from '../db.js';
+import { contarItensRetorno, guardarArquivoRetorno, registrarEvento, registrarLiquidacao, registrarOcorrencia } from '../cobranca/historico.js';
 import { ajustarVencimento } from './diautil.js';
 import { ErroNegocio } from './emissao.js';
 import { gerarRemessa400 } from '../cobranca/ailos400.js';
@@ -316,23 +317,28 @@ export async function demonstrativoPdf(cobrancaId: number): Promise<{ pdf: Buffe
   return { pdf, nome: `Demonstrativo_Cobranca_${nome(t.nome)}_${referencia.replace('/', '-')}.pdf` };
 }
 
-export function cancelarCobranca(id: number) {
+export function cancelarCobranca(id: number, usuarioId?: number) {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(id) as any;
   if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
   if (c.status === 'PAGO' || c.status === 'CANCELADO') throw new ErroNegocio('Esta cobrança já está encerrada.');
   if (c.forma === 'PIX' || c.status === 'AGUARDANDO_BANCO' || c.status === 'A_REMETER' || c.status === 'REJEITADO') {
     db.prepare("UPDATE cobrancas SET status = 'CANCELADO' WHERE id = ?").run(id);
+    registrarEvento({ cobrancaId: id, tipo: 'ACAO', origem: 'TELA', usuarioId, dados: { texto: 'Cancelada no Kontor (ainda não estava no banco)' } });
     return { baixaNoBanco: false };
   }
   db.prepare('UPDATE cobrancas SET baixa_pendente = 1 WHERE id = ?').run(id); // pedido de baixa vai na próxima remessa
+  registrarEvento({ cobrancaId: id, tipo: 'BAIXA_PEDIDA', origem: 'TELA', usuarioId, dados: { texto: 'Pedido de baixa: vai na próxima remessa' } });
   return { baixaNoBanco: true };
 }
 
-export function marcarPago(id: number, data?: string, valor?: number) {
+export function marcarPago(id: number, data?: string, valor?: number, origem: { usuarioId?: number; fonte?: string } = {}) {
   const c = db.prepare('SELECT * FROM cobrancas WHERE id = ?').get(id) as any;
   if (!c) throw new ErroNegocio('Cobrança não encontrada.', 404);
   if (c.status === 'PAGO' || c.status === 'CANCELADO') throw new ErroNegocio('Esta cobrança já está encerrada.');
   db.prepare("UPDATE cobrancas SET status = 'PAGO', pago_em = ?, valor_pago = ?, baixa_pendente = 0 WHERE id = ?").run(data ?? hojeBr(), valor ?? c.valor, id);
+  const fonte = origem.fonte ?? 'MANUAL';
+  registrarLiquidacao({ cobrancaId: id, valorPago: valor ?? c.valor, dataPagamento: data ?? hojeBr(), fonte, chave: `${fonte}:${id}:${data ?? hojeBr()}` });
+  if (fonte === 'MANUAL') registrarEvento({ cobrancaId: id, tipo: 'ACAO', origem: 'TELA', usuarioId: origem.usuarioId, dados: { texto: 'Baixa manual (pagamento informado no Kontor)' } });
 }
 
 export function registrarEmailCobranca(id: number, status: 'ENVIADO' | 'ERRO', para: string) {
@@ -372,6 +378,7 @@ export function gerarRemessaEmpresa(empresaId: number, usuarioId: number) {
     for (const c of linhas) {
       if (c.status === 'A_REMETER') db.prepare("UPDATE cobrancas SET status = 'REMETIDO', remessa_id = ? WHERE id = ?").run(rid, c.id);
       else db.prepare('UPDATE cobrancas SET baixa_pendente = 2 WHERE id = ?').run(c.id);
+      registrarEvento({ cobrancaId: c.id, tipo: 'REMESSA', origem: 'REMESSA', usuarioId, dados: { texto: `${c.status === 'A_REMETER' ? 'Entrada' : 'Pedido de baixa'} na remessa ${nome} (nº ${numero})` } });
     }
     return { id: rid, numero, nome_arquivo: nome, qtd_titulos: linhas.length, entradas: entradas.length, baixas: linhas.length - entradas.length, valor_total: total };
   })();
@@ -384,21 +391,34 @@ export function obterRemessa(id: number) {
   return db.prepare('SELECT * FROM remessas WHERE id = ?').get(id) as { id: number; empresa_id: number; nome_arquivo: string; conteudo: string } | undefined;
 }
 
-export function processarRetorno(empresaId: number, texto: string) {
+export function processarRetorno(empresaId: number, texto: string, origem: { nome?: string | null; usuarioId?: number | null } = {}) {
   let r;
   try { r = lerRetornoAuto(texto); } catch (e: any) { throw new ErroNegocio(e.message); }
   const resumo = { titulos: r.itens.length, registrados: 0, rejeitados: 0, pagos: 0, baixados: 0, tarifas: 0, naoEncontrados: [] as string[], detalhes: [] as string[] };
   db.transaction(() => {
+    // o arquivo fica guardado por inteiro e não é processado duas vezes
+    const arquivoId = guardarArquivoRetorno(empresaId, texto, { nome: origem.nome, contaRef: 'CONVENIO', usuarioId: origem.usuarioId });
+    contarItensRetorno(arquivoId, r.itens.length);
     for (const i of r.itens) {
       const c = db.prepare('SELECT * FROM cobrancas WHERE empresa_id = ? AND nosso_numero = ?').get(empresaId, i.nossoNumero.slice(0, 17)) as any;
       if (!c) { if (i.movimento !== '28') resumo.naoEncontrados.push(i.nossoNumero); continue; }
       const motivos = i.motivos.map(descreverMotivo).join('; ');
       const rotulo = MOVIMENTO_RETORNO[i.movimento] ?? `Movimento ${i.movimento}`;
+      // a ocorrência fica como o banco mandou: código, texto e motivos originais
+      registrarOcorrencia({ cobrancaId: c.id, codigo: i.movimento, descricao: rotulo, motivos: motivos || null, dataEvento: i.dataOcorrencia ?? i.dataCredito ?? null, fonte: 'RETORNO', arquivoRetornoId: arquivoId,
+        bruto: JSON.stringify({ nossoNumero: i.nossoNumero, valorPago: i.valorPago ?? null, tarifa: i.tarifa, valorTitulo: i.valorTitulo }) });
       switch (i.movimento) {
         case '02': if (c.status !== 'PAGO') db.prepare("UPDATE cobrancas SET status = 'REGISTRADO', observacao_banco = NULL WHERE id = ?").run(c.id); resumo.registrados++; break;
         case '03': db.prepare("UPDATE cobrancas SET status = 'REJEITADO', observacao_banco = ? WHERE id = ?").run(motivos || 'Entrada rejeitada pelo banco (veja o motivo no internet banking do banco)', c.id); resumo.rejeitados++; resumo.detalhes.push(`${c.id}: ${motivos}`); break;
-        case '06': case '15': case '17': case '76': case '77':
-          db.prepare("UPDATE cobrancas SET status = 'PAGO', pago_em = ?, valor_pago = ?, baixa_pendente = 0, observacao_banco = NULL WHERE id = ?").run(i.dataCredito ?? i.dataOcorrencia ?? hojeBr(), i.valorPago || c.valor, c.id); resumo.pagos++; break;
+        case '06': case '15': case '17': case '76': case '77': {
+          const valorPago = i.valorPago || c.valor, dataPag = i.dataCredito ?? i.dataOcorrencia ?? hojeBr();
+          // a mesma liquidação (título, data e valor) nunca entra duas vezes
+          const nova = registrarLiquidacao({ cobrancaId: c.id, valorPago, tarifa: i.tarifa || null, dataPagamento: i.dataOcorrencia ?? null, dataCredito: i.dataCredito ?? null, fonte: 'RETORNO', chave: `CONVENIO:${c.nosso_numero}:${dataPag}:${valorPago.toFixed(2)}` });
+          if (!nova || c.status === 'PAGO') { resumo.detalhes.push(`${c.id}: liquidação já registrada antes`); break; }
+          db.prepare("UPDATE cobrancas SET status = 'PAGO', pago_em = ?, valor_pago = ?, baixa_pendente = 0, observacao_banco = NULL WHERE id = ?").run(dataPag, valorPago, c.id); resumo.pagos++;
+          if (Math.abs(valorPago - c.valor) >= 0.01) resumo.detalhes.push(`${c.id}: valor pago ${valorPago.toFixed(2)} diferente do valor do boleto ${Number(c.valor).toFixed(2)}`);
+          break;
+        }
         case '09': case '10': if (c.status !== 'PAGO') db.prepare("UPDATE cobrancas SET status = 'CANCELADO', baixa_pendente = 0 WHERE id = ?").run(c.id); resumo.baixados++; break;
         case '26': db.prepare('UPDATE cobrancas SET observacao_banco = ? WHERE id = ?').run(`Instrução rejeitada: ${motivos}`, c.id); resumo.detalhes.push(`${c.id}: instrução rejeitada – ${motivos}`); break;
         case '28': resumo.tarifas++; break;

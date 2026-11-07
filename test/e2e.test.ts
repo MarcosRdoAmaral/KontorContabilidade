@@ -343,10 +343,23 @@ test('fluxo completo: cadastro, emissão, rejeição, queda de rede, DANFSe e ca
   assert.equal(listaCob.find((c: any) => c.id === cob2.id).status, 'REGISTRADO');
   const pago = listaCob.find((c: any) => c.id === soB.json.cobranca.id);
   assert.equal(pago.status, 'PAGO'); assert.equal(pago.pago_em, '2027-01-20'); assert.equal(pago.valor_pago, 250);
+  // o mesmo arquivo de retorno não é processado duas vezes
+  const dup = await call('POST', `/api/empresas/${eid}/retorno`, { conteudo: retArq }, token);
+  assert.equal(dup.status, 409); assert.match(dup.json.erro, /já foi importado/);
+  // histórico: criação, remessa, ocorrência original do banco, situação e liquidação única
+  const hist = (await call('GET', `/api/cobrancas/${soB.json.cobranca.id}/historico`, undefined, token)).json;
+  const tipos = hist.map((e: any) => e.tipo);
+  assert.ok(tipos.includes('CRIADA') && tipos.includes('REMESSA') && tipos.includes('OCORRENCIA') && tipos.includes('LIQUIDACAO'), JSON.stringify(tipos));
+  assert.ok(hist.some((e: any) => e.tipo === 'SITUACAO' && /Pago/.test(e.texto)));
+  assert.equal(hist.filter((e: any) => e.tipo === 'LIQUIDACAO').length, 1);
+  assert.ok(hist.find((e: any) => e.tipo === 'OCORRENCIA').texto.startsWith('Banco: 06'));
   // cancelar título já registrado = pedido de baixa na próxima remessa
   assert.equal((await call('POST', `/api/cobrancas/${cob2.id}/cancelar`, {}, token)).json.baixaNoBanco, true);
   const rem2 = await call('POST', `/api/empresas/${eid}/remessas`, {}, token);
   assert.equal(rem2.json.baixas, 1);
+  const hist2 = (await call('GET', `/api/cobrancas/${cob2.id}/historico`, undefined, token)).json;
+  assert.ok(hist2.some((e: any) => e.tipo === 'BAIXA_PEDIDA' && e.usuario), 'o pedido de baixa guarda quem pediu');
+  assert.ok(hist2.some((e: any) => e.tipo === 'REMESSA' && /Pedido de baixa/.test(e.texto)));
   assert.equal((await call('POST', `/api/empresas/${eid}/retorno`, { conteudo: 'lixo'.repeat(100) }, token)).status, 400);
 
   // 8) o certificado está criptografado em repouso

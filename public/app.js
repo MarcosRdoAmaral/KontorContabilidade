@@ -1230,6 +1230,7 @@ async function telaCobrancas() {
       c.forma === 'PIX' && podeEditar && ativo(c) && c.pix_copia_cola ? `<button data-pix="${c.id}">Trocar o Pix</button>` : '',
       ativo(c) && c.vencimento < hoje ? `<button data-carta="${c.id}">Carta de cobrança (PDF)</button>` : '',
       podeEditar ? `<button data-reemitir="${c.id}">Reemitir</button>` : '',
+      `<button data-historico="${c.id}">Histórico</button>`,
       podeEditar && ativo(c) ? `<button data-pago="${c.id}">Marcar pago</button><button data-cancelar="${c.id}">Cancelar</button>` : '',
     ].join('');
     return `<div class="cob-acoes">${principais}${mais ? `<details class="cob-mais"><summary title="Mais ações">⋯</summary><div class="cob-menu">${mais}</div></details>` : ''}</div>`;
@@ -1465,6 +1466,20 @@ async function telaCobrancas() {
     });
   };
 
+  // ---- Histórico: situações, alterações, remessas, ocorrências do banco e pagamentos ----
+  conteudo.querySelectorAll('[data-historico]').forEach((b) => (b.onclick = async () => {
+    const c = lista.find((x) => x.id === Number(b.dataset.historico));
+    try {
+      const h = await api('GET', `/api/cobrancas/${c.id}/historico`);
+      const ORIGEM = { TELA: 'Kontor', REMESSA: 'Remessa', RETORNO: 'Retorno do banco', BANCO_API: 'Banco', SISTEMA: 'Sistema', MANUAL: 'Kontor', CORA: 'Banco', EXTRATO: 'Extrato' };
+      abrirDialogo(`<h2>Histórico da cobrança</h2><p class="sutil">${esc(c.tomador_nome ?? '')} · ${brl(c.valor)} · vencimento ${dataBr(c.vencimento)}</p>
+        ${h.length ? `<div class="rolagem" style="max-height:60vh"><table class="tabela"><thead><tr><th>Quando</th><th>O que aconteceu</th><th>Origem</th></tr></thead><tbody>
+          ${h.slice().reverse().map((e) => `<tr><td style="white-space:nowrap">${esc(dhBr(e.quando))}</td><td>${esc(e.texto)}</td><td>${esc(ORIGEM[e.origem] ?? e.origem)}${e.usuario ? ` · ${esc(e.usuario)}` : ''}</td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="vazio">Sem registros ainda.</p>'}
+        <div class="acoes"><button type="button" class="primario" data-fechar>Fechar</button></div>`);
+    } catch (e) { aviso(mensagemErro(e)); }
+  }));
+
   // ---- Reemitir: nova cobrança com os mesmos dados e outro vencimento ----
   conteudo.querySelectorAll('[data-reemitir]').forEach((b) => (b.onclick = async () => {
     const c = lista.find((x) => x.id === Number(b.dataset.reemitir));
@@ -1512,7 +1527,8 @@ async function telaCobrancas() {
     arq.onchange = async () => {
       const f = arq.files[0]; if (!f) return;
       try {
-        const r = await api('POST', `/api/empresas/${estado.empresaId}/retorno`, { conteudo: await f.text() });
+        const r = await api('POST', `/api/empresas/${estado.empresaId}/retorno`, { conteudo: await f.text(), nome: f.name });
+        arq.value = '';
         const partes = [r.pagos && `${r.pagos} pago(s)`, r.registrados && `${r.registrados} registrado(s)`, r.rejeitados && `${r.rejeitados} rejeitado(s)`, r.baixados && `${r.baixados} baixado(s)`].filter(Boolean);
         aviso(`Retorno processado: ${partes.join(', ') || 'sem alterações'}.${r.naoEncontrados.length ? ` ${r.naoEncontrados.length} título(s) não encontrados.` : ''}`);
         telaCobrancas();
@@ -3659,7 +3675,7 @@ async function telaConfig(aba) {
   ].filter((x) => x[2]);
   if (!abas.some((x) => x[0] === aba)) aba = abas[0][0];
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Configurações</h1><p class="sutil">Ajustes gerais do sistema${adm ? '' : ' e da sua conta'}.</p></div></div>
+    ${cabecaTela('config', 'Configurações', `Ajustes gerais do sistema${adm ? '' : ' e da sua conta'} e preferências da sua operação.`)}
     <nav class="abas" aria-label="Configurações">${abas.map(([k, nome]) => `<a href="#/config/${k}" class="${k === aba ? 'ativo' : ''}">${nome}</a>`).join('')}</nav>
     <div id="cfg-corpo"></div>`;
   const tela = { integra: telaIntegra, avisos: telaAvisos, conta: telaMinhaConta, usuarios: telaUsuarios, email: telaEmail, modelos: telaModelosEmail, aparencia: telaAparencia, backup: telaBackup, contabilidade: telaContabilidade, licenca: telaLicenca, atualizacoes: telaAtualizacoes }[aba];
@@ -3669,14 +3685,19 @@ async function telaConfig(aba) {
 function telaMinhaConta() {
   const u = estado.usuario;
   corpoConfig().innerHTML = `
-    <h2>Minha conta</h2>
-    <div class="cartao">
-      <div class="conta-avatar">${avatarSvg(u.avatar, 56) || `<span class="avatar-iniciais">${esc(iniciaisDoUsuario())}</span>`}<div>
-      <p><strong>${esc(u.nome)}</strong> · usuário <strong>${esc(u.login)}</strong></p>
-      <p class="sutil">Perfil: ${u.tipo === 'adm' ? 'Administrador (acesso total)' : 'Normal'}${u.email ? ' · ' + esc(u.email) : ' · sem e-mail cadastrado (a recuperação de senha por e-mail não fica disponível)'}</p></div></div>
+    <div class="cartao conta-novo">
+      <h2 style="margin-top:0">Minha conta</h2>
+      <div class="conta-avatar">${avatarSvg(u.avatar, 84) || `<span class="avatar-iniciais">${esc(iniciaisDoUsuario())}</span>`}<div>
+        <h3 style="margin:0">${esc(u.nome)} <span class="sutil">· usuário</span> <strong>${esc(u.login)}</strong></h3>
+        <p class="sutil">Perfil: ${u.tipo === 'adm' ? 'Administrador (acesso total)' : 'Normal'}${u.email ? '' : ' — sem e-mail cadastrado, a recuperação de senha por e-mail não fica disponível.'}</p></div></div>
+      <div class="kp-grade">
+        <div class="kp kp-neutro"><span class="kp-ico">${icone('o-email')}</span><span class="kp-txt"><strong style="font-size:1rem">${u.email ? esc(u.email) : 'Não cadastrado'}</strong><small>E-mail${!u.email && u.tipo === 'adm' ? ' · <a href="#/config/usuarios">Adicionar e-mail →</a>' : ''}</small></span></div>
+        <div class="kp kp-verde"><span class="kp-ico">${icone('tl-check')}</span><span class="kp-txt"><strong style="font-size:1rem">Ativa</strong><small>Status da conta</small></span></div>
+      </div>
       ${u.tipo === 'adm' ? '' : `<p class="sutil">Funcionalidades liberadas: ${u.modulos.length ? u.modulos.map((m) => esc(u.todosModulos[m])).join(', ') : 'nenhuma'}.</p>`}
-      <div class="acoes"><button class="primario" id="alterar-senha">Alterar minha senha</button><button type="button" id="trocar-avatar">Escolher avatar</button></div>
-    </div>`;
+      <div class="acoes"><button class="tl-btn-ouro" id="alterar-senha">${icone('o-ok')} Alterar minha senha</button><button type="button" class="tl-btn-borda" id="trocar-avatar">Escolher avatar</button></div>
+    </div>
+    ${dicaTela('Sua conta está segura', 'Mantenha seus dados sempre atualizados e troque a senha de tempos em tempos.')}`;
   $('#alterar-senha').onclick = () => trocarSenha();
   $('#trocar-avatar').onclick = () => escolherAvatar(() => telaMinhaConta());
 }
@@ -6769,9 +6790,9 @@ function pintarAbas() {
   const caixa = $('#abas-app'); if (!caixa) return;
   const fechavel = abas.lista.length > 1;
   caixa.innerHTML = abas.lista.map((a) => `<div class="aba-app ${a.id === abas.ativa ? 'ativa' : ''}" data-aba="${a.id}" title="${esc(tituloDaAba(a.hash))}">
-      <button type="button" class="aba-ir">${esc(tituloDaAba(a.hash))}</button>${fechavel ? `<button type="button" class="aba-fechar" data-fechar-aba="${a.id}" aria-label="Fechar aba">×</button>` : ''}</div>`).join('')
+      <button type="button" class="aba-ir">${a.hash === '#/inicio' ? icone('inicio') : ''}${esc(tituloDaAba(a.hash))}</button>${fechavel ? `<button type="button" class="aba-fechar" data-fechar-aba="${a.id}" aria-label="Fechar aba">×</button>` : ''}</div>`).join('')
     + '<div class="aba-mais" id="aba-mais" hidden><button type="button" class="aba-mais-botao" id="aba-mais-botao" aria-haspopup="true" aria-expanded="false" title="Outras abas abertas">☰ <span id="aba-mais-qtd"></span></button><div class="aba-mais-lista" id="aba-mais-lista" hidden></div></div>'
-    + '<button type="button" class="aba-nova" id="aba-nova" title="Nova aba (Início)" aria-label="Nova aba">+</button>';
+    + `<button type="button" class="aba-nova" id="aba-nova" title="Nova aba (Início)" aria-label="Nova aba">${icone('o-mais')}</button>`;
   caixa.querySelectorAll('[data-aba]').forEach((el) => {
     const aba = abas.lista.find((x) => x.id === Number(el.dataset.aba));
     el.querySelector('.aba-ir').onclick = () => irParaAba(aba);

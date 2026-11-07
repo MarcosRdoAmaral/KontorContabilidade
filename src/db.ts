@@ -1232,6 +1232,132 @@ const migracoes: string[] = [
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX idx_radar_auditoria ON radar_auditoria(escritorio_id, criado_em);`,
+  // 52: integração bancária, fase 1 — contas de cobrança por banco, registro no banco, histórico, ocorrências, retornos e liquidações
+  `CREATE TABLE contas_cobranca (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    banco TEXT NOT NULL,
+    nome TEXT NOT NULL,
+    modalidade TEXT NOT NULL DEFAULT 'CNAB' CHECK (modalidade IN ('CNAB','API')),
+    layout TEXT,
+    ambiente TEXT NOT NULL DEFAULT 'HOMOLOGACAO' CHECK (ambiente IN ('HOMOLOGACAO','PRODUCAO')),
+    agencia TEXT NOT NULL DEFAULT '',
+    agencia_dv TEXT NOT NULL DEFAULT '',
+    conta TEXT NOT NULL DEFAULT '',
+    conta_dv TEXT NOT NULL DEFAULT '',
+    convenio TEXT NOT NULL DEFAULT '',
+    carteira TEXT NOT NULL DEFAULT '',
+    parametros TEXT NOT NULL DEFAULT '{}',
+    servicos TEXT NOT NULL DEFAULT '{}',
+    proximo_nosso_numero INTEGER NOT NULL DEFAULT 1,
+    proxima_remessa INTEGER NOT NULL DEFAULT 1,
+    ativa INTEGER NOT NULL DEFAULT 1,
+    padrao INTEGER NOT NULL DEFAULT 0,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (empresa_id, banco, agencia, convenio)
+  );
+  CREATE UNIQUE INDEX contas_cobranca_padrao ON contas_cobranca(empresa_id) WHERE padrao = 1;
+  CREATE TABLE credenciais_cobranca (
+    conta_id INTEGER NOT NULL REFERENCES contas_cobranca(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL,
+    valor_enc TEXT NOT NULL,
+    valido_ate TEXT,
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (conta_id, tipo)
+  );
+  ALTER TABLE cobrancas ADD COLUMN conta_cobranca_id INTEGER REFERENCES contas_cobranca(id);
+  CREATE TABLE registros_bancarios (
+    id INTEGER PRIMARY KEY,
+    cobranca_id INTEGER NOT NULL REFERENCES cobrancas(id) ON DELETE CASCADE,
+    conta_id INTEGER NOT NULL REFERENCES contas_cobranca(id),
+    nosso_numero TEXT NOT NULL,
+    linha_digitavel TEXT,
+    codigo_barras TEXT,
+    pix_copia_cola TEXT,
+    protocolo TEXT,
+    estado TEXT NOT NULL DEFAULT 'AGUARDANDO_REGISTRO' CHECK (estado IN ('AGUARDANDO_REGISTRO','EM_PROCESSAMENTO','RESULTADO_DESCONHECIDO','REGISTRADO','REJEITADO','BAIXA_SOLICITADA','BAIXADO','LIQUIDADO','EM_ANALISE')),
+    alteracao_pendente TEXT,
+    ativo INTEGER NOT NULL DEFAULT 1,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (conta_id, nosso_numero)
+  );
+  CREATE UNIQUE INDEX registros_bancarios_ativo ON registros_bancarios(cobranca_id) WHERE ativo = 1;
+  CREATE TABLE solicitacoes_bancarias (
+    id INTEGER PRIMARY KEY,
+    registro_id INTEGER NOT NULL REFERENCES registros_bancarios(id) ON DELETE CASCADE,
+    operacao TEXT NOT NULL,
+    chave TEXT NOT NULL,
+    tentativa INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE','ENVIADA','CONFIRMADA','RECUSADA','DESCONHECIDA')),
+    dados TEXT,
+    resposta TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (operacao, chave)
+  );
+  CREATE TABLE eventos_cobranca (
+    id INTEGER PRIMARY KEY,
+    cobranca_id INTEGER NOT NULL REFERENCES cobrancas(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL,
+    de TEXT,
+    para TEXT,
+    origem TEXT NOT NULL DEFAULT 'SISTEMA',
+    usuario_id INTEGER,
+    dados TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX eventos_cobranca_cob ON eventos_cobranca(cobranca_id, id);
+  CREATE TABLE arquivos_retorno (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    conta_ref TEXT NOT NULL DEFAULT '',
+    nome TEXT,
+    hash TEXT NOT NULL,
+    conteudo TEXT NOT NULL,
+    itens INTEGER NOT NULL DEFAULT 0,
+    usuario_id INTEGER,
+    processado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (empresa_id, hash)
+  );
+  CREATE TABLE ocorrencias_bancarias (
+    id INTEGER PRIMARY KEY,
+    cobranca_id INTEGER NOT NULL REFERENCES cobrancas(id) ON DELETE CASCADE,
+    codigo TEXT NOT NULL,
+    descricao TEXT NOT NULL,
+    motivos TEXT,
+    estado_mapeado TEXT,
+    data_evento TEXT,
+    fonte TEXT NOT NULL,
+    arquivo_retorno_id INTEGER REFERENCES arquivos_retorno(id) ON DELETE SET NULL,
+    bruto TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX ocorrencias_unicas ON ocorrencias_bancarias(cobranca_id, codigo, IFNULL(data_evento, ''), fonte, IFNULL(bruto, ''));
+  CREATE TABLE liquidacoes (
+    id INTEGER PRIMARY KEY,
+    cobranca_id INTEGER NOT NULL REFERENCES cobrancas(id) ON DELETE CASCADE,
+    valor_pago REAL NOT NULL,
+    tarifa REAL,
+    data_pagamento TEXT,
+    data_credito TEXT,
+    fonte TEXT NOT NULL,
+    chave TEXT NOT NULL UNIQUE,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  -- histórico automático: toda mudança de situação, valor ou vencimento fica registrada, qualquer que seja a tela ou rotina
+  CREATE TRIGGER cobranca_evento_criada AFTER INSERT ON cobrancas BEGIN
+    INSERT INTO eventos_cobranca (cobranca_id, tipo, para, dados) VALUES (NEW.id, 'CRIADA', NEW.status, json_object('valor', NEW.valor, 'vencimento', NEW.vencimento));
+  END;
+  CREATE TRIGGER cobranca_evento_situacao AFTER UPDATE OF status ON cobrancas WHEN OLD.status IS NOT NEW.status BEGIN
+    INSERT INTO eventos_cobranca (cobranca_id, tipo, de, para, dados) VALUES (NEW.id, 'SITUACAO', OLD.status, NEW.status, CASE WHEN NEW.observacao_banco IS NOT NULL THEN json_object('observacao', NEW.observacao_banco) END);
+  END;
+  CREATE TRIGGER cobranca_evento_valores AFTER UPDATE OF valor, vencimento ON cobrancas WHEN OLD.valor IS NOT NEW.valor OR OLD.vencimento IS NOT NEW.vencimento BEGIN
+    INSERT INTO eventos_cobranca (cobranca_id, tipo, dados) VALUES (NEW.id, 'ALTERACAO', json_object('valor_de', OLD.valor, 'valor_para', NEW.valor, 'vencimento_de', OLD.vencimento, 'vencimento_para', NEW.vencimento));
+  END;
+  -- as cobranças que já existem ganham um evento inicial com a situação atual
+  INSERT INTO eventos_cobranca (cobranca_id, tipo, para, dados, criado_em)
+    SELECT id, 'SITUACAO_INICIAL', status, json_object('valor', valor, 'vencimento', vencimento), criado_em FROM cobrancas;`,
 ];
 
 export function migrar(): void {

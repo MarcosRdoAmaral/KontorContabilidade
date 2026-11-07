@@ -247,7 +247,7 @@ export function conciliar(empresaId: number, lancId: number, cobrancaId: number 
   if (!c) throw new ErroNegocio('Boleto não encontrado.', 404);
   if (db.prepare('SELECT 1 FROM extrato_lancamentos WHERE cobranca_id = ? AND id <> ?').get(cobrancaId, lancId)) throw new ErroNegocio('Este boleto já está ligado a outro lançamento.');
   db.transaction(() => {
-    if (darBaixa && c.status !== 'PAGO' && c.status !== 'CANCELADO') marcarPago(cobrancaId, l.data, l.valor);
+    if (darBaixa && c.status !== 'PAGO' && c.status !== 'CANCELADO') marcarPago(cobrancaId, l.data, l.valor, { fonte: 'EXTRATO' });
     db.prepare("UPDATE extrato_lancamentos SET cobranca_id = ?, categoria = 'Receita de serviços', categoria_origem = 'manual' WHERE id = ?").run(cobrancaId, lancId);
   })();
 }

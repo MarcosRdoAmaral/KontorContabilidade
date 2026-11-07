@@ -14,6 +14,7 @@ import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiber
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, ConfigPix, configPixPublica, gerarPixCobranca, gerarPixPendentes, salvarConfigPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
+import { historicoDaCobranca } from './cobranca/historico.js';
 import { Despesa, criarDespesa, editarDespesa, excluirDespesa, listarCategorias, listarDespesas, painelFinanceiro, salvarCategorias } from './servicos/financeiro.js';
 import { ClassificacaoCartao, classificarCartao, excluirFatura, faturasDoMes, importarFatura } from './servicos/cartao.js';
 import { Classificacao, balancoExtrato, candidatosBoleto, candidatosDespesa, classificar, conciliar, excluirImportacao, extratoDoMes, importarExtrato, ligarDespesa } from './servicos/extrato.js';
@@ -748,6 +749,8 @@ export async function rotas(app: FastifyInstance) {
       return salvarConfigPix(id, ConfigPix.parse(req.body));
     });
     api.post('/api/empresas/:id/pix-gerar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => { const id = Number((req.params as any).id); checarEmpresa(req, id); return gerarPixPendentes(id); });
+    // histórico da cobrança: situações, alterações, remessas, ocorrências do banco e liquidações
+    api.get('/api/cobrancas/:id/historico', async (req) => { const id = Number((req.params as any).id); cobrancaDoUsuario(req, id); return historicoDaCobranca(id); });
     // QR Code do Pix da cobrança (PNG), para baixar e mandar ao cliente
     api.get('/api/cobrancas/:id/qrcode', async (req, reply) => {
       const id = Number((req.params as any).id);
@@ -786,7 +789,7 @@ export async function rotas(app: FastifyInstance) {
     api.post('/api/cobrancas/:id/cancelar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id);
       cobrancaDoUsuario(req, id);
-      return (cobrancaDoUsuario(req, id) as any).cora_id ? cancelarNaCora(id) : cancelarCobranca(id);
+      return (cobrancaDoUsuario(req, id) as any).cora_id ? cancelarNaCora(id) : cancelarCobranca(id, u(req).id);
     });
     api.post('/api/cobrancas/:id/reemitir', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id);
@@ -809,7 +812,7 @@ export async function rotas(app: FastifyInstance) {
       const id = Number((req.params as any).id);
       cobrancaDoUsuario(req, id);
       const d = z.object({ data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(), valor: z.number().positive().nullish() }).parse(req.body ?? {});
-      marcarPago(id, d.data ?? undefined, d.valor ?? undefined);
+      marcarPago(id, d.data ?? undefined, d.valor ?? undefined, { usuarioId: u(req).id });
       return { ok: true };
     });
     api.get('/api/empresas/:id/remessas', async (req) => {
@@ -831,8 +834,8 @@ export async function rotas(app: FastifyInstance) {
     api.post('/api/empresas/:id/retorno', { preHandler: exigirPapel('admin', 'operador'), bodyLimit: 10 * 1024 * 1024 }, async (req) => {
       const id = Number((req.params as any).id);
       checarEmpresa(req, id);
-      const d = z.object({ conteudo: z.string().min(240) }).parse(req.body);
-      return processarRetorno(id, d.conteudo);
+      const d = z.object({ conteudo: z.string().min(240), nome: z.string().max(200).nullish() }).parse(req.body);
+      return processarRetorno(id, d.conteudo, { nome: d.nome ?? null, usuarioId: u(req).id });
     });
 
     api.get('/api/licenca', async () => ({ ...statusLicenca(), modulosPagos: Object.fromEntries(Object.entries(MODULOS_PAGOS).filter(([, m]) => !m.emBreve).map(([k, m]) => [k, { nome: m.nome, resumo: m.resumo }])), planos: PLANOS, uso: usoAtual(), suporteWhatsapp: SUPORTE_WHATSAPP }));

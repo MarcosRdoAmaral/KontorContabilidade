@@ -1039,3 +1039,13 @@ a.kp:hover { border-color: var(--laranja); }
 .sefaz .sefaz-topo { margin: 12px 0; }
 
 .tl-sub { font-size: 1.1rem; margin: 22px 0 10px; }
+
+/* Barra do topo: abas arredondadas, Início com ícone, botão + quadrado */
+.aba-app { border-radius: 12px; background: var(--superficie-2, var(--superficie)); }
+.aba-app .aba-ir { display: flex; align-items: center; gap: 8px; }
+.aba-app .aba-ir .ico { width: 16px; height: 16px; color: var(--laranja); }
+.aba-app.ativa { box-shadow: inset 0 -2px 0 var(--laranja), 0 0 14px var(--laranja-fundo); }
+.aba-nova { display: grid; place-items: center; border: 1px solid var(--linha); background: var(--superficie); }
+.aba-nova .ico { width: 17px; height: 17px; }
+.aba-nova:hover { border-color: var(--laranja); color: var(--laranja); }
+.barra-topo { background: linear-gradient(100deg, transparent 55%, var(--laranja-fundo) 100%); }
