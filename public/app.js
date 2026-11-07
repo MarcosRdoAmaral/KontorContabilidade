@@ -4309,44 +4309,51 @@ async function telaEscritorio() {
   const mes = telaEscritorio.mes ?? mesAtual();
   const v = await api('GET', `/api/escritorio/visao?mes=${mes}`);
   const t = v.tarefas, c = v.certificados, h = v.honorarios;
-  const pend = t.total - t.entregues - t.dispensadas;
+  const pend = t.total - t.entregues - t.dispensadas, doMes = t.total - t.dispensadas;
   const regimes = (await tabelasEscritorio()).regimes;
   const passos = [
     [!h.escritorioConfigurado, 'Marque em <a href="#/empresas">Cadastros &gt; Empresas</a> qual é a empresa do escritório (ela emite as notas e boletos de honorários).'],
     [v.clientes.ativos === 0, 'Cadastre os clientes em <a href="#/carteira">Carteira de clientes</a>: com o regime e o perfil, o sistema monta a agenda de obrigações de cada um.'],
     [v.clientes.ativos > 0 && v.clientes.semContrato === v.clientes.ativos, 'Crie os contratos em <a href="#/honorarios">Contratos e honorários</a>. Contrato assinado liga o faturamento mensal automático.'],
   ].filter((p) => p[0]);
+  const aba = telaEscritorio.aba ?? 'ATRASADAS';
   const linhaTarefa = (x) => `<tr><td>${dataBr(x.vencimento)}</td><td><strong>${esc(x.codigo)}</strong> <span class="dica">${esc(x.competencia_rotulo)}</span><br><span class="dica">${esc(x.cliente)}</span></td><td>${esc(x.responsavel ?? '—')}</td><td>${selo(PRAZO[x.prazo])}</td></tr>`;
+  const listaTarefas = (l, vazioTit, vazioTxt) => l.length
+    ? `<div class="rolagem"><table><thead><tr><th>Vencimento</th><th>Obrigação / cliente</th><th>Responsável</th><th>Situação</th></tr></thead><tbody>${l.map(linhaTarefa).join('')}</tbody></table></div>`
+    : `<div class="vg-vazio">${icone('calendario')}<strong>${vazioTit}</strong><span>${vazioTxt}</span></div>`;
+  const certCor = c.vencidos + c.vence7 ? 'vermelho' : c.vence30 ? 'laranja' : 'verde';
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Visão geral do escritório</h1><p class="sutil">Prazos, certificados e honorários de toda a carteira em ${rotuloMes(mes)}.</p></div>
-      <label>Mês <input type="month" id="mes-vg" value="${mes}"></label></div>
-    ${passos.length ? `<div class="cartao primeiros-passos"><h2 style="margin-top:0">Para começar</h2><ol>${passos.map((p) => `<li>${p[1]}</li>`).join('')}</ol></div>` : ''}
-    <div class="resumo cinco">
-      <a class="cartao link-cartao" href="#/carteira"><div class="sutil">Clientes ativos</div><div class="valor">${v.clientes.ativos}</div>
-        <div class="dica">${Object.entries(v.clientes.porRegime).map(([r, n]) => `${esc(regimes[r] ?? 'Sem regime')}: ${n}`).join(' · ') || 'nenhum ainda'}</div></a>
-      <a class="cartao link-cartao" href="#/obrigacoes"><div class="sutil">Obrigações do mês</div><div class="valor">${t.entregues}<span class="sutil" style="font-size:1rem"> / ${t.total - t.dispensadas}</span></div>
-        <div class="dica">${pend ? `${pend} em aberto` : 'tudo entregue'}${t.hoje ? ` · <span class="cor-ambar">${t.hoje} vence(m) hoje</span>` : ''}</div></a>
-      <a class="cartao link-cartao ${t.atrasadas ? 'alerta-cartao' : ''}" href="#/obrigacoes"><div class="sutil">Atrasadas</div><div class="valor" style="color:${t.atrasadas ? COR.vermelho : COR.verde}">${t.atrasadas}</div><div class="dica">inclui meses anteriores</div></a>
-      <a class="cartao link-cartao" href="#/certificados"><div class="sutil">Certificados e procurações</div><div class="valor" style="color:${c.vencidos + c.vence7 ? COR.vermelho : c.vence30 ? COR.laranja : COR.verde}">${c.vencidos + c.vence7 + c.vence30}</div>
-        <div class="dica">${c.vencidos} vencido(s) · ${c.vence7} em 7 dias · ${c.vence30} em 30 dias</div></a>
-      ${v.situacaoFiscal ? `<a class="cartao link-cartao ${v.situacaoFiscal.comPendencias ? 'alerta-cartao' : ''}" href="#/monitor"><div class="sutil">Pendências fiscais</div><div class="valor" style="color:${v.situacaoFiscal.comPendencias ? COR.vermelho : COR.verde}">${v.situacaoFiscal.comPendencias}</div>
-        <div class="dica">${v.situacaoFiscal.comPendencias ? `cliente(s) · ${brl(v.situacaoFiscal.totalAberto)} em aberto` : 'nenhum cliente com pendência'}${v.situacaoFiscal.naoConsultados ? ` · ${v.situacaoFiscal.naoConsultados} não consultado(s)` : ''}</div></a>` : ''}
-      <a class="cartao link-cartao" href="#/honorarios"><div class="sutil">Honorários mensais</div><div class="valor">${brl(h.total)}</div>
-        <div class="dica">${h.contratos} contrato(s) assinado(s)${h.vencidos.n ? ` · <span class="cor-vermelho">${brl(h.vencidos.total)} vencido(s)</span>` : ''}</div></a>
+    ${cabecaTela('visao', 'Visão geral do escritório', `Prazos, certificados e honorários de toda a carteira em ${rotuloMes(mes)}.`, campoMes('mes-vg', mes))}
+    ${passos.length ? `<div class="tl-dica">${icone('tl-ajuda')}<div><strong>Para começar</strong><ol class="vg-passos">${passos.map((p) => `<li>${p[1]}</li>`).join('')}</ol></div></div>` : ''}
+    ${cartoesKpi([
+      { ic: 'carteira', tom: 'laranja', rotulo: 'Clientes ativos', valor: v.clientes.ativos, href: '#/carteira', sub: Object.entries(v.clientes.porRegime).map(([r, n]) => `${esc(regimes[r] ?? 'Sem regime')}: ${n}`).join(' · ') || 'nenhum ainda' },
+      { ic: 'obrigacoes', tom: 'azul', rotulo: 'Obrigações do mês', valor: `${t.entregues}<span class="kp-de"> / ${doMes}</span>`, href: '#/obrigacoes', sub: `${pend ? `${pend} em aberto` : 'tudo entregue'}${t.hoje ? ` · <span class="cor-ambar">${t.hoje} vence(m) hoje</span>` : ''}`, barra: doMes ? (t.entregues / doMes) * 100 : 0 },
+      { ic: 'tl-alerta', tom: t.atrasadas ? 'vermelho' : 'verde', rotulo: 'Atrasadas', valor: t.atrasadas, href: '#/obrigacoes', sub: 'inclui meses anteriores' },
+      { ic: 'certificados', tom: certCor, rotulo: 'Certificados e procurações', valor: c.vencidos + c.vence7 + c.vence30, href: '#/certificados', sub: `${c.vencidos} vencido(s) · ${c.vence7} em 7 dias · ${c.vence30} em 30 dias` },
+      ...(v.situacaoFiscal ? [{ ic: 'monitor', tom: v.situacaoFiscal.comPendencias ? 'vermelho' : 'verde', rotulo: 'Pendências fiscais', valor: v.situacaoFiscal.comPendencias, href: '#/monitor',
+        sub: `${v.situacaoFiscal.comPendencias ? `cliente(s) · ${brl(v.situacaoFiscal.totalAberto)} em aberto` : 'nenhum cliente com pendência'}${v.situacaoFiscal.naoConsultados ? ` · ${v.situacaoFiscal.naoConsultados} não consultado(s)` : ''}` }] : []),
+    ])}
+    <div class="vg-grade">
+      <a class="cartao vg-hon" href="#/honorarios"><h2>${icone('monitor')} Honorários mensais</h2><strong class="vg-valor">${brl(h.total)}</strong>
+        <span class="sutil">${h.contratos} contrato(s) assinado(s)</span>${h.vencidos.n ? `<span class="cor-vermelho">${brl(h.vencidos.total)} vencido(s) em ${h.vencidos.n} cobrança(s)</span>` : '<span class="cor-verde">Nenhum honorário vencido</span>'}</a>
+      <section class="cartao vg-tarefas">${abasCartao([['ATRASADAS', `Atrasadas${t.atrasadas ? ` (${t.atrasadas})` : ''}`], ['PROXIMAS', 'Vencem hoje e nos próximos dias']], aba)}
+        <div class="tl-tabela solta vg-tab">${aba === 'ATRASADAS'
+          ? listaTarefas(v.atrasadas, 'Nenhuma obrigação atrasada.', 'Tudo em dia!') + (t.atrasadas > v.atrasadas.length ? `<p class="vg-mais"><a href="#/obrigacoes" id="ver-atrasadas">Ver as ${t.atrasadas} atrasadas ${icone('chevron')}</a></p>` : '')
+          : listaTarefas(v.proximas, 'Nada vencendo nos próximos dias.', 'Sem entregas para hoje e para os próximos dias.')}</div></section>
     </div>
-    <div class="duas-colunas">
-      <section><h2>Atrasadas</h2>${v.atrasadas.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Venc.</th><th>Obrigação / cliente</th><th>Responsável</th><th></th></tr></thead><tbody>${v.atrasadas.map(linhaTarefa).join('')}</tbody></table></div>${t.atrasadas > v.atrasadas.length ? `<p class="dica"><a href="#/obrigacoes" id="ver-atrasadas">Ver as ${t.atrasadas} atrasadas</a></p>` : ''}` : '<div class="vazio">Nenhuma obrigação atrasada.</div>'}</section>
-      <section><h2>Vencem hoje e nos próximos dias</h2>${v.proximas.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Venc.</th><th>Obrigação / cliente</th><th>Responsável</th><th></th></tr></thead><tbody>${v.proximas.map(linhaTarefa).join('')}</tbody></table></div>` : '<div class="vazio">Nada vencendo nos próximos dias.</div>'}</section>
-    </div>
-    <div class="duas-colunas">
-      <section><h2>Carga da equipe no mês</h2>${v.porResponsavel.length ? `<table class="tabela"><thead><tr><th>Responsável</th><th class="num">Em aberto</th><th class="num">Atrasadas</th></tr></thead><tbody>
-        ${v.porResponsavel.sort((a, b) => b.atrasadas - a.atrasadas || b.abertas - a.abertas).map((r) => `<tr><td>${esc(r.responsavel)}</td><td class="num">${r.abertas}</td><td class="num ${r.atrasadas ? 'cor-vermelho' : ''}">${r.atrasadas}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Sem tarefas em aberto.</div>'}
-        ${v.clientes.semResponsavel ? `<p class="dica">${v.clientes.semResponsavel} cliente(s) sem responsável definido na carteira.</p>` : ''}</section>
-      <section><h2>Certificados a vencer</h2>${c.lista.length ? `<table class="tabela"><thead><tr><th>Titular</th><th>Tipo</th><th>Validade</th><th></th></tr></thead><tbody>
-        ${c.lista.map((x) => `<tr><td>${esc(x.titular)}${x.cliente && x.cliente !== x.titular ? `<br><span class="dica">${esc(x.cliente)}</span>` : ''}</td><td>${esc(({ A1: 'A1', A3: 'A3', ECPF: 'e-CPF', PROCURACAO: 'Procuração', OUTRO: 'Outro' })[x.tipo] ?? x.tipo)}</td><td>${dataBr(x.validade)}<br><span class="dica">${diasTxt(x.dias)}</span></td><td>${selo(CERT[x.situacao])}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum certificado vencendo nos próximos 30 dias.</div>'}</section>
+    <div class="vg-grade metade">
+      <section class="cartao"><h2>${icone('carteira')} Carga da equipe no mês</h2>${v.porResponsavel.length ? `<div class="tl-tabela solta"><table><thead><tr><th>Responsável</th><th class="num">Em aberto</th><th class="num">Atrasadas</th></tr></thead><tbody>
+        ${v.porResponsavel.sort((a, b) => b.atrasadas - a.atrasadas || b.abertas - a.abertas).map((r) => `<tr><td>${esc(r.responsavel)}</td><td class="num">${r.abertas}</td><td class="num ${r.atrasadas ? 'cor-vermelho' : ''}">${r.atrasadas}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sutil">Sem tarefas em aberto.</p>'}
+        ${v.clientes.semResponsavel ? `<a class="vg-link" href="#/carteira" id="vg-sem-resp">${v.clientes.semResponsavel} cliente(s) sem responsável definido na carteira. ${icone('chevron')}</a>` : ''}</section>
+      <section class="cartao"><h2>${icone('certificados')} Certificados a vencer</h2>${c.lista.length ? `<div class="tl-tabela solta"><table><thead><tr><th>Titular</th><th>Tipo</th><th>Validade</th><th>Situação</th></tr></thead><tbody>
+        ${c.lista.map((x) => `<tr><td>${esc(x.titular)}${x.cliente && x.cliente !== x.titular ? `<br><span class="dica">${esc(x.cliente)}</span>` : ''}</td><td>${esc(({ A1: 'A1', A3: 'A3', ECPF: 'e-CPF', PROCURACAO: 'Procuração', OUTRO: 'Outro' })[x.tipo] ?? x.tipo)}</td><td>${dataBr(x.validade)}<br><span class="dica">${diasTxt(x.dias)}</span></td><td>${selo(CERT[x.situacao])}</td></tr>`).join('')}</tbody></table></div>`
+        : `<div class="vg-vazio">${icone('certificados')}<span>Nenhum certificado vencendo nos próximos 30 dias.</span></div>`}</section>
     </div>`;
   $('#mes-vg').onchange = (ev) => { telaEscritorio.mes = ev.target.value || mesAtual(); telaEscritorio(); };
+  conteudo.querySelectorAll('.tl-abas [data-aba]').forEach((b) => (b.onclick = () => { telaEscritorio.aba = b.dataset.aba; telaEscritorio(); }));
   $('#ver-atrasadas') && ($('#ver-atrasadas').onclick = () => { (prazosDoMes.filtro ??= { mes: mesAtual(), resp: '', q: '', sit: 'ABERTAS', esfera: '' }).sit = 'ATRASADA'; });
+  $('#vg-sem-resp') && ($('#vg-sem-resp').onclick = () => { Object.assign(telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' }, { resp: '0', q: '' }); });
+  buscaTopoCarteira();
 }
 
 // ---------------------------------------------------------------------------
@@ -4358,46 +4365,68 @@ async function telaCarteira() {
   const [lista, tab, equipe, fora] = await Promise.all([api('GET', '/api/escritorio/carteira'), tabelasEscritorio(), equipeEscritorio(), podeEditar ? api('GET', '/api/escritorio/carteira/fora').catch(() => []) : []]);
   const f = telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' };
   const escCart = estado.empresas.find((e) => e.eh_escritorio); // a empresa do escritório (Cadastros > Empresas)
+  const clientes = lista.filter((c) => !c.eh_escritorio);
+  const ativos = clientes.filter((c) => c.situacao === 'ATIVO').length;
+  const receita = clientes.filter((c) => c.situacao === 'ATIVO').reduce((a, c) => a + (Number(c.honorario) || 0), 0);
+  const pct = (n) => (clientes.length ? `${Math.round((n / clientes.length) * 1000) / 10}%`.replace('.', ',') : '0%');
+  const sel = (telaCarteira.sel ??= new Set());
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Carteira de clientes</h1><p class="sutil">Cadastro único dos clientes: regime, perfil e responsável definem as obrigações; a cobrança dos honorários (nota, boleto, serviços padrão) fica em <em>Faturamento</em>, no botão ⋯ ou dentro de Editar.</p></div>
-      ${podeEditar ? `<div>${fora.length ? `<button id="trazer-cli" title="Clientes cadastrados só como avulsos na empresa do escritório">Trazer avulsos (${fora.length})</button> ` : ''}${escCart && pode('tomadores') ? '<button id="avulsos-cli" title="Quem o escritório fatura mas não é cliente da contabilidade">Clientes avulsos</button> ' : ''}<button id="imp-cli">Importar planilha</button> <button class="primario" id="novo-cli">Novo cliente</button></div>` : ''}</div>
-    <div class="filtros">
-      <label style="flex:1 1 240px">Buscar <input type="search" id="f-q" placeholder="Nome ou CNPJ/CPF" value="${esc(f.q)}"></label>
-      <label>Situação <select id="f-sit"><option value="">Todas</option>${Object.entries(SITUACAO_CLI).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label>
-      <label>Regime <select id="f-reg"><option value="">Todos</option>${Object.entries(tab.regimes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
-      <label>Responsável <select id="f-resp">${opcoesEquipe(equipe, null, 'Todos')}<option value="0">Sem responsável</option></select></label>
-    </div>
-    <p class="dica" id="cont-cli"></p>
-    <div class="rolagem"><table class="tabela"><thead><tr><th>Cliente</th><th>Regime</th><th>Responsável</th><th>Prazos</th><th>Certificado</th><th class="num">Honorário</th><th>Situação</th><th></th></tr></thead><tbody id="lista-cli"></tbody></table></div>`;
+    ${cabecaTela('carteira', 'Carteira de clientes', 'Cadastro único dos clientes: regime, perfil e responsável definem as obrigações. A cobrança dos honorários (nota, boleto, serviços padrão) fica em <em>Faturamento</em>, no menu ⋮ ou dentro de Editar.',
+      podeEditar ? `${fora.length ? `<button type="button" class="orc-ouro" id="trazer-cli" title="Clientes cadastrados só como avulsos na empresa do escritório">Trazer avulsos (${fora.length})</button>` : ''}${escCart && pode('tomadores') ? `<button type="button" class="orc-ouro" id="avulsos-cli" title="Quem o escritório fatura mas não é cliente da contabilidade">${icone('tomadores')} Clientes avulsos</button>` : ''}<button type="button" class="orc-ouro" id="imp-cli">${icone('tl-baixar')} Importar planilha</button><button type="button" class="tl-btn-ouro" id="novo-cli">${icone('o-mais')} Novo cliente</button>` : '')}
+    ${cartoesKpi([
+      { ic: 'carteira', tom: 'azul', rotulo: 'Total de clientes', valor: clientes.length, sub: 'na carteira', filtro: '' },
+      { ic: 'tl-check', tom: 'verde', rotulo: 'Ativos', valor: ativos, sub: `<b class="cor-verde">${pct(ativos)}</b> da carteira`, filtro: 'ATIVO' },
+      { ic: 'tl-relogio', tom: 'laranja', rotulo: 'Inativos', valor: clientes.length - ativos, sub: `<b class="cor-ambar">${pct(clientes.length - ativos)}</b> da carteira (suspensos e encerrados)`, filtro: 'INATIVOS' },
+      { ic: 'tl-moedas', tom: 'laranja', rotulo: 'Receita da carteira', valor: brl(receita), sub: 'honorários mensais dos contratos assinados dos ativos' },
+    ])}
+    <section class="tl-tabela solta cart-lista">
+      <div class="tl-cab-lista"><h2>${icone('tl-lista')} Clientes</h2>
+        <label class="tl-busca">${icone('busca')}<input type="search" id="f-q" placeholder="Buscar na carteira..." value="${esc(f.q)}" aria-label="Buscar na carteira"></label>
+        <label>Situação <select id="f-sit"><option value="">Todas</option><option value="INATIVOS">Inativos</option>${Object.entries(SITUACAO_CLI).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label>
+        <label>Regime <select id="f-reg"><option value="">Todos</option>${Object.entries(tab.regimes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
+        <label>Responsável <select id="f-resp">${opcoesEquipe(equipe, null, 'Todos')}<option value="0">Sem responsável</option></select></label></div>
+      <div class="rolagem"><table><thead><tr><th class="c"><input type="checkbox" id="cart-todos" aria-label="Selecionar todos"></th><th>Cliente</th><th>CNPJ / CPF</th><th>Regime</th><th>Responsável</th><th>Prazos</th><th>Certificado</th><th class="num">Honorário</th><th>Situação</th><th class="c">Ações</th></tr></thead><tbody id="lista-cli"></tbody></table></div>
+      <div id="cart-pag"></div>
+    </section>`;
   $('#f-sit').value = f.situacao; $('#f-reg').value = f.regime; $('#f-resp').value = f.resp;
   const pintar = () => {
     const q = norm(f.q), qd = f.q.replace(/\D/g, '');
-    const vis = lista.filter((c) => (!f.situacao || c.situacao === f.situacao || c.eh_escritorio) && (!f.regime || c.regime === f.regime)
+    const vis = lista.filter((c) => (!f.situacao || (f.situacao === 'INATIVOS' ? c.situacao !== 'ATIVO' && !c.eh_escritorio : c.situacao === f.situacao || c.eh_escritorio)) && (!f.regime || c.regime === f.regime)
       && (!f.resp || (f.resp === '0' ? !c.responsavel_id : String(c.responsavel_id) === f.resp))
       && (!q || norm(c.razao_social).includes(q) || norm(c.nome_fantasia).includes(q) || (qd && c.documento.includes(qd))));
-    $('#cont-cli').textContent = `${vis.filter((c) => !c.eh_escritorio).length} cliente(s) na lista.`;
-    $('#lista-cli').innerHTML = vis.length ? vis.map((c) => `<tr class="${c.situacao === 'ENCERRADO' ? 'inativo' : ''}">
-      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong><br><span class="dica">${fmtDoc(c.documento)}${c.nome_fantasia ? ' · ' + esc(c.razao_social) : ''}</span></td>
+    const pg = paginar(vis, telaCarteira.pg ?? 1, 15); telaCarteira.pg = pg.pagina;
+    $('#lista-cli').innerHTML = pg.itens.length ? pg.itens.map((c) => `<tr class="${c.situacao === 'ENCERRADO' ? 'inativo' : ''}">
+      <td class="c">${c.eh_escritorio ? '' : `<input type="checkbox" data-sel="${c.id}" ${sel.has(c.id) ? 'checked' : ''} aria-label="Selecionar">`}</td>
+      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong>${c.nome_fantasia ? `<br><span class="dica">${esc(c.razao_social)}</span>` : ''}</td>
+      <td style="white-space:nowrap">${fmtDoc(c.documento)}</td>
       <td>${esc(tab.regimes[c.regime] ?? '—')}${c.regime && !c.regime_informado ? '<br><span class="dica">pelo cadastro de emissão</span>' : ''}</td>
       <td>${esc(c.responsavel ?? '—')}</td>
-      <td>${c.eh_escritorio ? '—' : c.atrasadas ? `<span class="cor-vermelho"><strong>${c.atrasadas}</strong> atrasada(s)</span>` : c.proximo_vencimento ? `próximo ${dataBr(c.proximo_vencimento)}` : '<span class="dica">nada em aberto</span>'}</td>
+      <td>${c.eh_escritorio ? '—' : c.atrasadas ? `<span class="cor-vermelho"><strong>${c.atrasadas}</strong> atrasada(s)</span>` : c.proximo_vencimento ? `próximo<br>${dataBr(c.proximo_vencimento)}` : '<span class="dica">nada em aberto</span>'}</td>
       <td>${c.cert_mais_proximo ? `<span class="${c.cert_dias < 0 ? 'cor-vermelho' : c.cert_dias <= 30 ? 'cor-ambar' : ''}">${dataBr(c.cert_mais_proximo)}</span>` : '<span class="dica">—</span>'}</td>
       <td class="num">${c.eh_escritorio ? '—' : c.honorario ? brl(c.honorario) : c.contrato_status ? `<span class="dica">${CONTRATO[c.contrato_status][0]}</span>` : '<span class="dica">sem contrato</span>'}</td>
       <td>${selo(SITUACAO_CLI[c.situacao])}</td>
-      <td class="acoes-linha">${podeEditar ? `<button data-ed="${c.id}">Editar</button> ` : ''}${!c.eh_escritorio && pode('obrigacoes') ? `<button data-ob="${c.id}">Obrigações</button> ` : ''}<button data-mais="${c.id}" aria-label="Mais ações">⋯</button></td></tr>`).join('')
-      : `<tr><td colspan="8"><div class="vazio" style="border:0">${lista.length ? 'Nenhum cliente com esses filtros.' : 'Cadastre o primeiro cliente da carteira, ou importe uma planilha com os CNPJs.'}</div></td></tr>`;
+      <td class="c"><span class="tl-ac">${!c.eh_escritorio && pode('obrigacoes') ? `<button type="button" data-ob="${c.id}" title="Obrigações do cliente" aria-label="Obrigações do cliente">${icone('tl-olho')}</button>` : ''}${podeEditar ? `<button type="button" data-ed="${c.id}" title="Editar" aria-label="Editar">${icone('lapis')}</button>` : ''}<button type="button" data-mais="${c.id}" title="Mais ações" aria-label="Mais ações">${icone('pontos')}</button></span></td></tr>`).join('')
+      : `<tr><td colspan="10"><div class="vazio" style="border:0">${lista.length ? 'Nenhum cliente com esses filtros.' : 'Cadastre o primeiro cliente da carteira, ou importe uma planilha com os CNPJs.'}</div></td></tr>`;
+    $('#cart-pag').innerHTML = pg.html.replace(/Exibindo/, 'Mostrando').replace(/ de (\d+)<\/span>/, ' de $1 cliente(s)</span>');
+    $('#cart-pag').querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { telaCarteira.pg = Number(b.dataset.pg); pintar(); }));
+    conteudo.querySelectorAll('[data-sel]').forEach((x) => (x.onchange = () => { x.checked ? sel.add(Number(x.dataset.sel)) : sel.delete(Number(x.dataset.sel)); }));
+    $('#cart-todos').checked = pg.itens.length > 0 && pg.itens.every((c) => c.eh_escritorio || sel.has(c.id));
     conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formCliente(lista.find((c) => c.id === Number(b.dataset.ed)), tab, equipe)));
     conteudo.querySelectorAll('[data-ob]').forEach((b) => (b.onclick = () => obrigacoesDoCliente(lista.find((c) => c.id === Number(b.dataset.ob)), equipe)));
     conteudo.querySelectorAll('[data-mais]').forEach((b) => (b.onclick = () => maisAcoesCliente(lista.find((c) => c.id === Number(b.dataset.mais)))));
+    $('#cart-todos').onchange = (ev) => { pg.itens.forEach((c) => { if (!c.eh_escritorio) ev.target.checked ? sel.add(c.id) : sel.delete(c.id); }); pintar(); };
   };
-  $('#f-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
-  $('#f-sit').onchange = (ev) => { f.situacao = ev.target.value; pintar(); };
-  $('#f-reg').onchange = (ev) => { f.regime = ev.target.value; pintar(); };
-  $('#f-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
+  const filtrar = (q) => { f.q = q; telaCarteira.pg = 1; if ($('#f-q').value !== q) $('#f-q').value = q; pintar(); };
+  $('#f-q').oninput = (ev) => filtrar(ev.target.value);
+  $('#f-sit').onchange = (ev) => { f.situacao = ev.target.value; telaCarteira.pg = 1; pintar(); };
+  $('#f-reg').onchange = (ev) => { f.regime = ev.target.value; telaCarteira.pg = 1; pintar(); };
+  $('#f-resp').onchange = (ev) => { f.resp = ev.target.value; telaCarteira.pg = 1; pintar(); };
+  conteudo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { f.situacao = k.dataset.kp; $('#f-sit').value = f.situacao; telaCarteira.pg = 1; pintar(); }));
   $('#novo-cli') && ($('#novo-cli').onclick = () => formCliente(null, tab, equipe, lista.some((c) => c.eh_escritorio)));
   $('#trazer-cli') && ($('#trazer-cli').onclick = () => trazerDeClientes(fora, tab));
   $('#imp-cli') && ($('#imp-cli').onclick = () => importarPlanilhaClientes(true));
   $('#avulsos-cli') && ($('#avulsos-cli').onclick = () => irParaEmpresa(escCart.id, '#/tomadores'));
+  buscaTopo('Buscar clientes, CNPJ ou nome...', filtrar, f.q);
   pintar();
   if (telaCarteira.abrirNovo && $('#novo-cli')) { telaCarteira.abrirNovo = false; $('#novo-cli').click(); }
   if (telaCarteira.abrirTrazer) { telaCarteira.abrirTrazer = false; if ($('#trazer-cli')) $('#trazer-cli').click(); }
@@ -4655,10 +4684,13 @@ async function obrigacoesDoCliente(c, equipe) {
 
 async function telaObrigacoes(aba) {
   aba = aba === 'catalogo' ? 'catalogo' : 'prazos';
+  const f = prazosDoMes.filtro ??= { mes: mesAtual(), resp: '', q: '', sit: 'ABERTAS', esfera: '' };
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Obrigações e prazos</h1><p class="sutil">A agenda de entregas e guias de cada cliente, com o vencimento já ajustado a fins de semana e feriados.</p></div></div>
+    ${cabecaTela('obrigacoes', 'Obrigações e prazos', 'A agenda de entregas e guias de cada cliente, com o vencimento já ajustado a fins de semana e feriados.', aba === 'prazos' ? campoMes('ob-mes', f.mes) : '')}
     <nav class="abas"><a href="#/obrigacoes/prazos" class="${aba === 'prazos' ? 'ativo' : ''}">Prazos do mês</a><a href="#/obrigacoes/catalogo" class="${aba === 'catalogo' ? 'ativo' : ''}">Catálogo de obrigações</a></nav>
     <div id="ob-corpo"></div>`;
+  if (aba !== 'catalogo') buscaTopo('Buscar obrigações, clientes ou documentos...', (q) => { f.q = q; const c = $('#ob-q'); if (c) { c.value = q; c.oninput?.({ target: c }); } }, f.q);
+  else buscaTopoCarteira();
   return aba === 'catalogo' ? catalogoObrigacoes() : prazosDoMes();
 }
 
@@ -4666,35 +4698,42 @@ async function prazosDoMes() {
   const f = prazosDoMes.filtro ??= { mes: mesAtual(), resp: '', q: '', sit: 'ABERTAS', esfera: '' };
   const [d, equipe] = await Promise.all([api('GET', `/api/escritorio/tarefas?mes=${f.mes}`), equipeEscritorio()]);
   const corpo = $('#ob-corpo');
-  const r = d.resumo;
+  const r = d.resumo, doMes = r.total - r.dispensadas;
+  const minhas = f.resp === 'eu';
   corpo.innerHTML = `
-    <div class="filtros">
-      <label>Mês <input type="month" id="ob-mes" value="${f.mes}"></label>
-      <label>Responsável <select id="ob-resp"><option value="">Todos</option><option value="eu">Minhas</option>${equipe.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}<option value="0">Sem responsável</option></select></label>
-      <label>Situação <select id="ob-sit"><option value="ABERTAS">Em aberto</option><option value="ATRASADA">Atrasadas</option><option value="ENTREGUE">Entregues</option><option value="">Todas</option></select></label>
-      <label>Esfera <select id="ob-esf"><option value="">Todas</option>${Object.entries(ESFERA).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
-      <label style="flex:1 1 200px">Cliente ou obrigação <input type="search" id="ob-q" value="${esc(f.q)}"></label>
-    </div>
-    <div class="resumo" style="margin-top:14px">
-      <div class="cartao"><div class="sutil">Entregues</div><div class="valor" style="color:${COR.verde}">${r.entregues}</div><div class="dica">de ${r.total - r.dispensadas} no mês</div></div>
-      <div class="cartao"><div class="sutil">Atrasadas</div><div class="valor" style="color:${r.atrasadas ? COR.vermelho : COR.verde}">${r.atrasadas}</div><div class="dica">inclui meses anteriores</div></div>
-      <div class="cartao"><div class="sutil">Hoje e próximos dias</div><div class="valor" style="color:${r.hoje + r.em_breve ? COR.laranja : 'inherit'}">${r.hoje + r.em_breve}</div></div>
-      <div class="cartao"><div class="sutil">No prazo</div><div class="valor">${r.no_prazo}</div></div>
-    </div>
-    <div class="acoes" style="margin:14px 0 8px"><button id="ob-lote" disabled>Marcar selecionadas como entregues</button><button id="ob-receita" title="Consulta no Integra Contador (SERPRO) o PGDAS-D, a DCTFWeb e a DEFIS dos clientes">Conferir na Receita</button><span class="dica" id="ob-cont"></span></div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th><input type="checkbox" id="ob-todas" aria-label="Selecionar todas"></th><th>Vencimento</th><th>Cliente</th><th>Obrigação</th><th>Competência</th><th>Responsável</th><th>Situação</th><th></th></tr></thead><tbody id="ob-lista"></tbody></table></div>`;
+    ${cartoesKpi([
+      { ic: 'obrigacoes', tom: 'azul', rotulo: 'Entregues', valor: r.entregues, sub: `de ${doMes} no mês`, barra: doMes ? (r.entregues / doMes) * 100 : 0, filtro: 'ENTREGUE' },
+      { ic: 'tl-relogio', tom: r.atrasadas ? 'vermelho' : 'verde', rotulo: 'Atrasadas', valor: r.atrasadas, sub: 'inclui meses anteriores', filtro: 'ATRASADA' },
+      { ic: 'tl-alerta', tom: 'laranja', rotulo: 'Hoje e próximos dias', valor: r.hoje + r.em_breve, sub: 'vencem hoje ou nos próximos dias', filtro: 'PROXIMAS' },
+      { ic: 'tl-check', tom: 'verde', rotulo: 'No prazo', valor: r.no_prazo, sub: 'para este mês', filtro: 'NO_PRAZO' },
+    ])}
+    <section class="tl-tabela solta">
+      <div class="tl-cab-lista">${abasCartao([['eu', 'Minhas obrigações', 'calendario'], ['', 'Todas as obrigações', 'visao']], minhas ? 'eu' : '', 'data-dono')}
+        <label class="tl-busca">${icone('busca')}<input type="search" id="ob-q" value="${esc(f.q)}" placeholder="Buscar por cliente, obrigação..." aria-label="Buscar por cliente ou obrigação"></label>
+        <details class="tl-filtros-mais"><summary class="orc-ouro">${icone('tl-filtro')} Filtros</summary><div class="cob-menu tl-filtros-caixa">
+          <label>Responsável <select id="ob-resp"><option value="">Todos</option><option value="eu">Minhas</option>${equipe.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}<option value="0">Sem responsável</option></select></label>
+          <label>Situação <select id="ob-sit"><option value="ABERTAS">Em aberto</option><option value="ATRASADA">Atrasadas</option><option value="PROXIMAS">Hoje e próximos dias</option><option value="NO_PRAZO">No prazo</option><option value="ENTREGUE">Entregues</option><option value="">Todas</option></select></label>
+          <label>Esfera <select id="ob-esf"><option value="">Todas</option>${Object.entries(ESFERA).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label></div></details></div>
+      <div class="tl-barra-interna"><button type="button" id="ob-lote" disabled>${icone('tl-check')} Marcar selecionadas como entregues</button><button type="button" id="ob-receita" title="Consulta no Integra Contador (SERPRO) o PGDAS-D, a DCTFWeb e a DEFIS dos clientes">${icone('tl-ajuda')} Conferir na Receita</button><span class="dica" id="ob-cont"></span></div>
+      <div class="rolagem"><table><thead><tr><th class="c"><input type="checkbox" id="ob-todas" aria-label="Selecionar todas"></th><th>Vencimento</th><th>Cliente</th><th>Obrigação</th><th>Competência</th><th>Responsável</th><th>Situação</th><th class="c">Ações</th></tr></thead><tbody id="ob-lista"></tbody></table></div>
+      <div id="ob-pag"></div>
+    </section>`;
   $('#ob-resp').value = f.resp; $('#ob-sit').value = f.sit; $('#ob-esf').value = f.esfera;
   const meu = estado.usuario.id;
   const filtradas = () => {
     const q = norm(f.q);
     return d.tarefas.filter((t) => (!f.resp || (f.resp === 'eu' ? t.responsavel_id === meu : f.resp === '0' ? !t.responsavel_id : String(t.responsavel_id) === f.resp))
       && (!f.esfera || t.esfera === f.esfera)
-      && (!f.sit || (f.sit === 'ABERTAS' ? !['ENTREGUE', 'DISPENSADA'].includes(t.prazo) : t.prazo === f.sit))
+      && (!f.sit || (f.sit === 'ABERTAS' ? !['ENTREGUE', 'DISPENSADA'].includes(t.prazo) : f.sit === 'PROXIMAS' ? ['HOJE', 'EM_BREVE'].includes(t.prazo) : t.prazo === f.sit))
       && (!q || norm(t.cliente).includes(q) || norm(t.codigo).includes(q) || norm(t.obrigacao).includes(q)));
   };
   const pintar = () => {
-    const vis = filtradas();
-    $('#ob-cont').textContent = `${vis.length} item(ns)`;
+    const todas = filtradas();
+    const pg = paginar(todas, prazosDoMes.pg ?? 1, 15); prazosDoMes.pg = pg.pagina;
+    const vis = pg.itens;
+    $('#ob-cont').textContent = `${todas.length} item(ns)`;
+    $('#ob-pag').innerHTML = pg.html.replace(/Exibindo/, 'Mostrando').replace(/ de (\d+)<\/span>/, ' de $1 registro(s)</span>');
+    $('#ob-pag').querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { prazosDoMes.pg = Number(b.dataset.pg); pintar(); }));
     $('#ob-lista').innerHTML = vis.length ? vis.map((t) => `<tr>
       <td>${['ENTREGUE', 'DISPENSADA'].includes(t.prazo) ? '' : `<input type="checkbox" data-sel="${t.id}" aria-label="Selecionar">`}</td>
       <td>${dataBr(t.vencimento)}</td>
@@ -4703,10 +4742,11 @@ async function prazosDoMes() {
       <td>${esc(t.competencia_rotulo)}</td>
       <td>${esc(t.responsavel ?? '—')}</td>
       <td>${selo(PRAZO[t.prazo])}${t.status === 'ANDAMENTO' ? '<br><span class="dica">em andamento</span>' : ''}${t.entregue_em ? `<br><span class="dica">${dataBr(t.entregue_em)}${t.entregue_por_nome ? ' · ' + esc(t.entregue_por_nome) : ''}</span>` : ''}</td>
-      <td class="acoes-linha">${['ENTREGUE', 'DISPENSADA'].includes(t.prazo) ? '' : `<button data-ok="${t.id}">Entregue</button> `}<button data-det="${t.id}">Detalhes</button></td></tr>`).join('')
+      <td class="c"><span class="tl-ac tl-ac-texto"><button type="button" data-det="${t.id}" title="Detalhes">${icone('tl-olho')} Detalhes</button>${menuLinhaTl(['ENTREGUE', 'DISPENSADA'].includes(t.prazo) ? [[`data-det="${t.id}"`, 'Abrir detalhes']] : [[`data-ok="${t.id}"`, 'Marcar como entregue'], [`data-det="${t.id}"`, 'Abrir detalhes']])}</span></td></tr>`).join('')
       : `<tr><td colspan="8"><div class="vazio" style="border:0">${d.tarefas.length ? 'Nada com esses filtros.' : 'Nenhuma obrigação neste mês. Confira o regime e o perfil dos clientes na Carteira.'}</div></td></tr>`;
     const lote = () => { const n = corpo.querySelectorAll('[data-sel]:checked').length; $('#ob-lote').disabled = !n; $('#ob-lote').textContent = n ? `Marcar ${n} como entregue(s)` : 'Marcar selecionadas como entregues'; $('#ob-receita').textContent = n ? `Conferir ${n} selecionada(s) na Receita` : 'Conferir na Receita'; };
     corpo.querySelectorAll('[data-sel]').forEach((c) => (c.onchange = lote)); lote();
+    ligarMenusLinha();
     corpo.querySelectorAll('[data-ok]').forEach((b) => (b.onclick = () => detalheTarefa(d.tarefas.find((t) => t.id === Number(b.dataset.ok)), equipe, true)));
     corpo.querySelectorAll('[data-det]').forEach((b) => (b.onclick = () => detalheTarefa(d.tarefas.find((t) => t.id === Number(b.dataset.det)), equipe)));
   };
@@ -4718,10 +4758,12 @@ async function prazosDoMes() {
   };
   $('#ob-receita').onclick = () => conferirNaReceita(f.mes, [...corpo.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel)));
   $('#ob-mes').onchange = (ev) => { f.mes = ev.target.value || mesAtual(); prazosDoMes(); };
-  $('#ob-resp').onchange = (ev) => { f.resp = ev.target.value; pintar(); };
-  $('#ob-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
-  $('#ob-esf').onchange = (ev) => { f.esfera = ev.target.value; pintar(); };
-  $('#ob-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
+  $('#ob-resp').onchange = (ev) => { f.resp = ev.target.value; prazosDoMes.pg = 1; prazosDoMes(); };
+  $('#ob-sit').onchange = (ev) => { f.sit = ev.target.value; prazosDoMes.pg = 1; pintar(); };
+  $('#ob-esf').onchange = (ev) => { f.esfera = ev.target.value; prazosDoMes.pg = 1; pintar(); };
+  $('#ob-q').oninput = (ev) => { f.q = ev.target.value; prazosDoMes.pg = 1; pintar(); };
+  corpo.querySelectorAll('[data-dono]').forEach((b) => (b.onclick = () => { f.resp = b.dataset.dono; prazosDoMes.pg = 1; prazosDoMes(); }));
+  corpo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { f.sit = k.dataset.kp; $('#ob-sit').value = f.sit; prazosDoMes.pg = 1; pintar(); }));
   pintar();
 }
 
@@ -4829,18 +4871,19 @@ async function telaCertificados() {
   const [d, tab, carteira] = await Promise.all([api('GET', '/api/escritorio/certificados'), tabelasEscritorio(), api('GET', '/api/escritorio/carteira')]);
   const f = telaCertificados.filtro ??= { q: '', sit: 'ATIVOS' };
   const r = d.resumo;
+  const ativos = d.certificados.filter((c) => c.situacao !== 'RENOVADO').length;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Certificados e procurações</h1><p class="sutil">Envie aqui o certificado A1 do cliente com a senha (em Cadastrar, tipo Certificado A1): titular e validade vêm do arquivo. Cadastre também os A3, e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura).</p></div>
-      <button class="primario" id="novo-cert">Cadastrar</button></div>
-    <div class="resumo">
-      <div class="cartao"><div class="sutil">Vencidos</div><div class="valor" style="color:${r.vencidos ? COR.vermelho : COR.verde}">${r.vencidos}</div></div>
-      <div class="cartao"><div class="sutil">Vencem em até 7 dias</div><div class="valor" style="color:${r.vence7 ? COR.vermelho : 'inherit'}">${r.vence7}</div></div>
-      <div class="cartao"><div class="sutil">Vencem em até 30 dias</div><div class="valor" style="color:${r.vence30 ? COR.laranja : 'inherit'}">${r.vence30}</div></div>
-      <div class="cartao"><div class="sutil">Em dia</div><div class="valor">${r.ok}</div></div>
-    </div>
-    <div class="filtros" style="margin:16px 0 10px"><label style="flex:1 1 240px">Buscar <input type="search" id="ce-q" value="${esc(f.q)}" placeholder="Titular, cliente ou documento"></label>
-      <label>Mostrar <select id="ce-sit"><option value="ATIVOS">Em uso</option><option value="ALERTA">Só vencidos e a vencer</option><option value="">Todos (com renovados)</option></select></label></div>
-    <div class="rolagem"><table class="tabela"><thead><tr><th>Situação</th><th>Titular</th><th>Tipo</th><th>Cliente</th><th>Validade</th><th>Onde fica</th><th></th></tr></thead><tbody id="ce-lista"></tbody></table></div>`;
+    ${cabecaTela('certificados', 'Certificados e procurações', 'Envie aqui o certificado A1 do cliente com a senha (em Cadastrar, tipo Certificado A1): titular e validade vêm do arquivo. Cadastre também os A3, e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura).', `<button type="button" class="tl-btn-ouro" id="novo-cert">${icone('o-mais')} Cadastrar</button>`)}
+    ${cartoesKpi([
+      { ic: 'certificados', tom: 'azul', rotulo: 'Certificados em uso', valor: ativos, sub: r.vencidos ? `<span class="cor-vermelho">${r.vencidos} vencido(s)</span>` : 'nenhum vencido', filtro: 'ATIVOS' },
+      { ic: 'calendario', tom: r.vence7 ? 'vermelho' : 'verde', rotulo: 'Vencem em até 7 dias', valor: r.vence7, sub: r.vence7 ? 'renove já' : 'nenhum certificado', filtro: 'ALERTA' },
+      { ic: 'calendario', tom: 'laranja', rotulo: 'Vencem em até 30 dias', valor: r.vence30, sub: r.vence30 ? 'programe a renovação' : 'nenhum certificado', filtro: 'ALERTA' },
+      { ic: 'tl-check', tom: 'verde', rotulo: 'Em dia', valor: r.ok, sub: ativos ? `${Math.round((r.ok / ativos) * 100)}% em conformidade` : '—' },
+    ])}
+    <form class="tl-filtros" onsubmit="return false"><label class="busca">Buscar <input type="search" id="ce-q" value="${esc(f.q)}" placeholder="Titular, cliente ou documento..."></label>
+      <label>Mostrar <select id="ce-sit"><option value="ATIVOS">Em uso</option><option value="ALERTA">Só vencidos e a vencer</option><option value="">Todos (com renovados)</option></select></label></form>
+    <div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Situação</th><th>Titular</th><th>Tipo</th><th>Cliente</th><th>Validade</th><th>Onde fica</th><th class="c">Ações</th></tr></thead><tbody id="ce-lista"></tbody></table></div></div>
+    ${dicaTela('Dica importante', 'Mantenha os certificados sempre atualizados para não interromper as consultas e transmissões na Receita Federal. O sistema avisa no sino 30 e 7 dias antes do vencimento.')}`;
   $('#ce-sit').value = f.sit;
   const pintar = () => {
     const q = norm(f.q), qd = f.q.replace(/\D/g, '');
@@ -4852,7 +4895,7 @@ async function telaCertificados() {
       <td>${esc(tab.tiposCertificado[c.tipo] ?? c.tipo)}${c.emissor ? `<br><span class="dica">${esc(c.emissor)}</span>` : ''}</td>
       <td>${esc(c.cliente ?? '—')}</td><td>${dataBr(c.validade)}</td>
       <td>${esc(c.guarda ?? '')}${c.observacoes ? `<br><span class="dica">${esc(c.observacoes)}</span>` : ''}</td>
-      <td class="acoes-linha">${c.origem === 'SISTEMA' ? `<button data-emp="${c.empresa_id}">Trocar A1</button>` : `<button data-ed="${c.id}">Editar</button> ${c.situacao !== 'RENOVADO' ? `<button data-ren="${c.id}">Renovado</button>` : ''}`}</td></tr>`).join('')
+      <td class="c"><span class="tl-ac tl-ac-texto">${c.origem === 'SISTEMA' ? `<button type="button" data-emp="${c.empresa_id}">${icone('refazer')} Trocar A1</button>` : `${c.situacao !== 'RENOVADO' ? `<button type="button" data-ren="${c.id}">${icone('refazer')} Renovado</button>` : ''}<button type="button" data-ed="${c.id}" title="Editar" aria-label="Editar" class="so-ic">${icone('lapis')}</button>`}</span></td></tr>`).join('')
       : '<tr><td colspan="7"><div class="vazio" style="border:0">Nenhum certificado nesta lista.</div></td></tr>';
     conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formCert(d.certificados.find((c) => c.id === Number(b.dataset.ed)), tab, carteira)));
     conteudo.querySelectorAll('[data-ren]').forEach((b) => (b.onclick = () => renovarCert(d.certificados.find((c) => c.id === Number(b.dataset.ren)))));
@@ -4860,6 +4903,8 @@ async function telaCertificados() {
   };
   $('#ce-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
   $('#ce-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
+  conteudo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { f.sit = k.dataset.kp; $('#ce-sit').value = f.sit; pintar(); }));
+  buscaTopo('Buscar certificados, procurações...', (q) => { f.q = q; $('#ce-q').value = q; pintar(); }, f.q);
   $('#novo-cert').onclick = () => formCert(null, tab, carteira);
   pintar();
 }
@@ -4937,9 +4982,10 @@ async function telaHonorarios(aba) {
   const abas = [['contratos', 'Contratos'], ['reajustes', 'Reajustes'], ['decimo', '13º honorário'], ['inadimplencia', 'Em atraso'], ['modelos', 'Modelos de contrato'], ['faturamento', 'Configurar faturamento']];
   if (!abas.some((a) => a[0] === aba)) aba = 'contratos';
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Contratos e honorários</h1><p class="sutil">Contrato assinado vira faturamento mensal automático pela empresa do escritório: NFS-e e/ou boleto na data combinada.</p></div></div>
+    ${cabecaTela('tl-moedas', 'Contratos e honorários', 'Contrato assinado vira faturamento mensal automático pela empresa do escritório: NFS-e e/ou boleto na data combinada.')}
     <nav class="abas">${abas.map(([k, n]) => `<a href="#/honorarios/${k}" class="${k === aba ? 'ativo' : ''}">${n}</a>`).join('')}</nav>
     <div id="ho-corpo"></div>`;
+  buscaTopoCarteira('Buscar clientes...');
   return { contratos: abaContratos, reajustes: abaReajustes, decimo: abaDecimo, inadimplencia: abaInadimplencia, modelos: abaModelos, faturamento: abaFaturamento }[aba]();
 }
 
@@ -4953,21 +4999,48 @@ async function abaContratos() {
   const [lista, cfg] = await Promise.all([api('GET', '/api/escritorio/contratos'), api('GET', '/api/escritorio/honorarios/config')]);
   const corpo = $('#ho-corpo');
   const ativos = lista.filter((c) => c.status === 'ASSINADO');
+  const aguardando = lista.filter((c) => ['RASCUNHO', 'ENVIADO'].includes(c.status)).length;
+  const reaj = lista.filter((c) => c.reajuste_pendente).length;
+  const semFat = ativos.filter((c) => !c.tomador_id).length;
+  const f = abaContratos.f ??= { q: '', st: '' };
   corpo.innerHTML = `
     ${!cfg.escritorio || !cfg.servicoId ? `<div class="banner teste">O faturamento automático ainda não está configurado. <a href="#/honorarios/faturamento">Configurar faturamento</a></div>` : ''}
-    <div class="topo" style="margin-bottom:12px"><p class="sutil" style="margin:0">${ativos.length} contrato(s) assinado(s) · ${brl(ativos.reduce((s, c) => s + c.valor, 0))} por mês</p>
-      <button class="primario" id="novo-ct">Novo contrato</button></div>
-    ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Nº</th><th>Cliente</th><th class="num">Honorário</th><th>Cobrança</th><th>Reajuste</th><th>Situação</th><th></th></tr></thead><tbody>
-    ${lista.map((c) => `<tr class="${c.status === 'ENCERRADO' ? 'inativo' : ''}"><td>${String(c.numero).padStart(4, '0')}</td>
+    ${cartoesKpi([
+      { ic: 'tl-check', tom: 'verde', rotulo: 'Contratos assinados', valor: ativos.length, sub: semFat ? `<span class="cor-ambar">${semFat} com faturamento não ligado</span>` : 'faturamento ligado em todos', filtro: 'ASSINADO' },
+      { ic: 'tl-moedas', tom: 'laranja', rotulo: 'Honorários por mês', valor: brl(ativos.reduce((t, c) => t + c.valor, 0)), sub: 'soma dos contratos assinados' },
+      { ic: 'tl-relogio', tom: 'azul', rotulo: 'Aguardando assinatura', valor: aguardando, sub: 'em rascunho ou enviados', filtro: 'PENDENTES' },
+      { ic: 'calendario', tom: reaj ? 'vermelho' : 'verde', rotulo: 'Reajustar este mês', valor: reaj, sub: reaj ? 'veja a aba Reajustes' : 'nenhum reajuste pendente', href: '#/honorarios/reajustes' },
+    ])}
+    <section class="tl-tabela solta">
+      <div class="tl-cab-lista"><h2>${icone('tl-doc')} Contratos</h2>
+        <label class="tl-busca">${icone('busca')}<input type="search" id="hc-q" value="${esc(f.q)}" placeholder="Buscar por cliente ou número..." aria-label="Buscar contrato"></label>
+        <label>Situação <select id="hc-st"><option value="">Todas</option><option value="PENDENTES">Aguardando assinatura</option>${Object.entries(CONTRATO).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label>
+        <button type="button" class="tl-btn-ouro" id="novo-ct">${icone('o-mais')} Novo contrato</button></div>
+      <div class="rolagem"><table><thead><tr><th>Nº</th><th>Cliente</th><th class="num">Honorário</th><th>Cobrança</th><th>Reajuste</th><th>Situação</th><th class="c">Ações</th></tr></thead><tbody id="hc-lista"></tbody></table></div>
+      <div id="hc-pag"></div>
+    </section>`;
+  $('#hc-st').value = f.st;
+  const pintar = () => {
+    const q = norm(f.q);
+    const vis = lista.filter((c) => (!f.st || (f.st === 'PENDENTES' ? ['RASCUNHO', 'ENVIADO'].includes(c.status) : c.status === f.st)) && (!q || norm(c.cliente).includes(q) || String(c.numero).padStart(4, '0').includes(q)));
+    const pg = paginar(vis, abaContratos.pg ?? 1, 15); abaContratos.pg = pg.pagina;
+    $('#hc-lista').innerHTML = pg.itens.length ? pg.itens.map((c) => `<tr class="${c.status === 'ENCERRADO' ? 'inativo' : ''}"><td>${String(c.numero).padStart(4, '0')}</td>
       <td><strong>${esc(c.cliente)}</strong><br><span class="dica">desde ${dataBr(c.inicio)}${c.fim ? ' até ' + dataBr(c.fim) : ''}</span></td>
       <td class="num">${brl(c.valor)}${c.decimo_terceiro ? '<br><span class="dica">+ 13º</span>' : ''}</td>
       <td>${MODO_FAT[c.modo_faturamento]}<br><span class="dica">emite dia ${c.dia_emissao} · vence dia ${c.dia_vencimento}</span></td>
       <td>${c.indice === 'FIXO' ? `${String(c.percentual_fixo).replace('.', ',')}% fixo` : c.indice === 'NENHUM' ? '—' : c.indice}${c.mes_reajuste ? ` em ${MESES_NOME[c.mes_reajuste - 1]}` : ''}${c.reajuste_pendente ? '<br><span class="cor-ambar"><strong>reajustar este mês</strong></span>' : ''}</td>
       <td>${selo(CONTRATO[c.status])}${c.arquivo_nome ? '<br><span class="dica">via assinada anexada</span>' : ''}${c.status === 'ASSINADO' && !c.tomador_id ? '<br><span class="cor-ambar dica">faturamento não ligado</span>' : ''}</td>
-      <td class="acoes-linha"><button data-acoes="${c.id}">Abrir</button></td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhum contrato ainda. Crie o primeiro: o texto sai do modelo, pronto para imprimir ou enviar em PDF.</div>'}`;
+      <td class="c"><span class="tl-ac tl-ac-texto"><button type="button" data-acoes="${c.id}">${icone('tl-olho')} Abrir</button></span></td></tr>`).join('')
+      : `<tr><td colspan="7"><div class="vazio" style="border:0">${lista.length ? 'Nenhum contrato com esses filtros.' : 'Nenhum contrato ainda. Crie o primeiro: o texto sai do modelo, pronto para imprimir ou enviar em PDF.'}</div></td></tr>`;
+    $("#hc-pag").innerHTML = vis.length ? pg.html : "";
+    $('#hc-pag').querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { abaContratos.pg = Number(b.dataset.pg); pintar(); }));
+    corpo.querySelectorAll('[data-acoes]').forEach((b) => (b.onclick = () => acoesContrato(lista.find((c) => c.id === Number(b.dataset.acoes)))));
+  };
+  $('#hc-q').oninput = (ev) => { f.q = ev.target.value; abaContratos.pg = 1; pintar(); };
+  $('#hc-st').onchange = (ev) => { f.st = ev.target.value; abaContratos.pg = 1; pintar(); };
+  corpo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { f.st = k.dataset.kp; $('#hc-st').value = f.st; abaContratos.pg = 1; pintar(); }));
+  pintar();
   $('#novo-ct').onclick = () => formContrato(null);
-  corpo.querySelectorAll('[data-acoes]').forEach((b) => (b.onclick = () => acoesContrato(lista.find((c) => c.id === Number(b.dataset.acoes)))));
 }
 
 async function acoesContrato(c) {
@@ -5264,11 +5337,16 @@ async function telaCaptura() {
   const e = ax.escritorio;
   const ultima = (data, resultado, erro, proxima, pode, cert) => `${data ? `<span class="dica">${dhBr(data)}</span>` : '<span class="dica">nunca</span>'}${erro ? `<br><span class="dica cor-vermelho">${esc(erro)}</span>` : resultado ? `<br><span class="dica">${esc(resultado)}</span>` : ''}${proxima && !pode && cert ? `<br><span class="dica">próxima a partir de ${dhBr(proxima)}</span>` : ''}`;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Captura de documentos</h1><p class="sutil">Notas de compra, de venda e de serviço de cada cliente, baixadas da SEFAZ e do Ambiente Nacional da NFS-e, prontas para a escrituração.</p></div>
-      <label>Mês <input type="month" id="mes-cap" value="${mes}"></label></div>
+    ${cabecaTela('nuvem', 'Captura de documentos', 'Notas de compra, de venda e de serviço de cada cliente, baixadas da SEFAZ e do Ambiente Nacional da NFS-e, prontas para a escrituração.', campoMes('mes-cap', mes))}
+    ${cartoesKpi([
+      { ic: 'certificados', tom: 'azul', rotulo: 'Clientes com certificado ou procuração', valor: comCert.filter((l) => !l.eh_escritorio).length, sub: `de ${lista.filter((l) => !l.eh_escritorio).length} cliente(s) ativo(s)` },
+      { ic: 'tl-doc', tom: 'laranja', rotulo: `Notas em ${rotuloMes(mes)}`, valor: lista.reduce((t, l) => t + l.nfe_mes + (l.eh_escritorio ? 0 : l.vendas_mes + l.nfse_tomadas) + l.nfse_prestadas, 0), sub: 'compras, vendas e serviços capturados' },
+      { ic: 'refazer', tom: 'verde', rotulo: 'Busca automática ligada', valor: lista.filter((l) => (l.tem_certificado || l.procuracao_ok) && (l.automatica || l.adn_automatica)).length, sub: 'cliente(s) consultados sozinhos' },
+      { ic: 'tl-relogio', tom: prontos ? 'laranja' : 'verde', rotulo: 'Prontos para buscar agora', valor: prontos, sub: prontos ? 'use Buscar agora' : 'aguardando o intervalo dos órgãos' },
+    ])}
     <div class="duas-colunas cap-fontes">
       <div class="cartao">
-        <h2 style="margin-top:0">Notas de venda dos clientes (NF-e)</h2>
+        <h2 style="margin-top:0">${icone('tl-xml')} Notas de venda dos clientes (NF-e)</h2>
         ${!e ? '<p class="sutil">Marque na <a href="#/carteira">Carteira</a> qual empresa é o escritório para receber as notas de venda dos clientes.</p>' : `
         <p class="sutil">Peça a cada cliente para informar o CNPJ do escritório no campo <strong>“Autorizados a baixar o XML” (autXML)</strong> do sistema emissor de notas dele. Daí em diante, as NF-e de venda chegam aqui pelo certificado do escritório e vão para o cliente certo pelo CNPJ.</p>
         <div class="cnpj-copia"><span>${fmtDoc(e.documento)}</span><button type="button" id="copiar-cnpj">Copiar CNPJ</button></div>
@@ -5277,19 +5355,19 @@ async function telaCaptura() {
         ${ax.foraDaCarteira.length ? `<details><summary class="dica">${ax.foraDaCarteira.length} emitente(s) fora da carteira mandaram notas para o escritório</summary><ul class="dicas">${ax.foraDaCarteira.map((f) => `<li>${fmtDoc(f.emitente_documento)} ${esc(f.emitente_nome ?? '')} — ${f.notas} nota(s), ${brl(f.total)}</li>`).join('')}</ul><p class="dica">Cadastre o CNPJ na Carteira e as notas passam a aparecer no cliente.</p></details>` : ''}`}
       </div>
       <div class="cartao">
-        <h2 style="margin-top:0">Compras e serviços</h2>
+        <h2 style="margin-top:0">${icone('tl-predio')} Compras e serviços</h2>
         <p class="sutil">Com o certificado A1 de cada cliente, o sistema baixa as <strong>NF-e de compra</strong> (SEFAZ) e as <strong>NFS-e prestadas e tomadas</strong> (Ambiente Nacional da NFS-e, nos municípios do padrão nacional).</p>
         <p class="dica"><strong>NFS-e por procuração:</strong> marque na coluna do certificado os clientes que deram procuração eletrônica ao escritório para a NFS-e. As notas desses clientes são emitidas e buscadas no Ambiente Nacional com o certificado do escritório, sem o A1 deles.</p>
         <p class="dica">A busca automática consulta sozinha com o programa aberto, respeitando o intervalo de 1 hora de cada órgão quando não há notas novas. Para enviar o certificado de um cliente, use Cadastros &gt; Empresas.</p>
       </div>
     </div>
-    <div class="acoes">
-      <button class="primario" id="cap-todos" ${prontos ? '' : 'disabled'}>Buscar agora (${prontos} cliente(s))</button>
-      <button id="cap-auto-on" ${comCert.length ? '' : 'disabled'}>Ligar busca automática para todos</button>
-      <button id="cap-auto-off" ${comCert.length ? '' : 'disabled'}>Desligar para todos</button>
+    <div class="cap-barra">
+      <button type="button" class="tl-btn-ouro" id="cap-todos" ${prontos ? '' : 'disabled'}>${icone('busca')} Buscar agora (${prontos} cliente(s))</button>
+      <button type="button" class="orc-ouro" id="cap-auto-on" ${comCert.length ? '' : 'disabled'}>${icone('refazer')} Ligar busca automática para todos</button>
+      <button type="button" class="orc-ouro" id="cap-auto-off" ${comCert.length ? '' : 'disabled'}>Desligar para todos</button>
     </div>
     <div id="cap-res"></div>
-    <div class="rolagem" style="margin-top:12px"><table class="tabela tabela-captura"><thead><tr><th>Cliente</th><th>Certificado A1</th><th class="num">NF-e compras</th><th class="num">NF-e vendas</th><th class="num">NFS-e prestadas</th><th class="num">NFS-e tomadas</th><th>Última consulta</th><th>Automática</th><th></th></tr></thead><tbody>
+    <section class="tl-tabela solta"><div class="tl-cab-lista"><h2>${icone('tl-lista')} Arquivos por cliente</h2></div><div class="rolagem"><table class="tabela-captura"><thead><tr><th>Cliente</th><th>Certificado A1</th><th class="num">NF-e compras</th><th class="num">NF-e vendas</th><th class="num">NFS-e prestadas</th><th class="num">NFS-e tomadas</th><th>Última consulta</th><th>Automática</th><th class="c">Ações</th></tr></thead><tbody>
     ${lista.map((l) => `<tr><td><strong>${esc(l.cliente)}</strong>${l.eh_escritorio ? ' <span class="selo PZ-PRAZO">Escritório</span>' : ''}<br><span class="dica">${fmtDoc(l.documento)}</span></td>
       <td>${!l.tem_certificado ? '<span class="dica">não enviado</span>' : l.cert_vencido ? '<span class="cor-vermelho">vencido</span>' : `até ${dataBr(l.cert_validade)}`}
         ${l.eh_escritorio ? '' : `<br><label class="dica" title="NFS-e emitidas e buscadas com o certificado do escritório, pela procuração eletrônica do cliente (Emissor Nacional e APIs da NFS-e, desde 01/11/2026)"><input type="checkbox" data-proc="${l.id}" ${l.nfse_procuracao ? 'checked' : ''}> NFS-e por procuração</label>`}</td>
@@ -5299,20 +5377,21 @@ async function telaCaptura() {
       <td><span class="dica">NF-e:</span> ${ultima(l.ultima_consulta, l.ultimo_resultado, l.ultimo_erro, l.proxima_consulta, l.pode_consultar, l.tem_certificado)}
         ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado || l.procuracao_ok)}`}</td>
       <td>${!l.tem_certificado && !l.procuracao_ok ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
-      <td class="acoes-linha">${l.eh_escritorio ? '' : `<a href="#/resumo/${l.id}"><button type="button">Resumo</button></a> `}<button data-notas="${l.id}">Notas</button> <button data-pac="${l.id}" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>Pacote do mês</button></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
-    </tbody></table></div>
+      <td class="c"><span class="tl-ac">${l.eh_escritorio ? '' : `<a href="#/resumo/${l.id}" title="Resumo do cliente" aria-label="Resumo do cliente">${icone('grafico')}</a>`}<button type="button" data-notas="${l.id}" title="Notas do mês" aria-label="Notas do mês">${icone('tl-olho')}</button><button type="button" data-pac="${l.id}" title="Pacote do mês (ZIP)" aria-label="Pacote do mês (ZIP)" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>${icone('tl-baixar')}</button></span></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
+    </tbody></table></div></section>
     <p class="dica">O pacote do mês (ZIP) traz os XML das notas de compra, de venda e de serviço (prestadas e tomadas), com planilhas de conferência.</p>`;
   $('#mes-cap').onchange = (ev) => { telaCaptura.mes = ev.target.value || mesAtual(); telaCaptura(); };
+  buscaTopo('Buscar cliente na captura...', (q) => { const n = norm(q), d = q.replace(/\D/g, ''); conteudo.querySelectorAll('.tabela-captura tbody tr').forEach((tr) => { const t = tr.textContent; tr.hidden = !!q && !norm(t).includes(n) && !(d && t.replace(/\D/g, '').includes(d)); }); });
   $('#copiar-cnpj') && ($('#copiar-cnpj').onclick = async () => { try { await navigator.clipboard.writeText(e.documento); aviso('CNPJ copiado.'); } catch { aviso(fmtDoc(e.documento)); } });
   $('#cap-todos').onclick = async (ev) => {
-    ev.target.disabled = true; ev.target.textContent = 'Consultando…';
+    const bt = ev.currentTarget; bt.disabled = true; bt.textContent = 'Consultando…';
     try {
       const r = await api('POST', '/api/escritorio/captura/buscar');
       $('#cap-res').innerHTML = `<div class="cartao" style="margin-top:12px"><strong>${r.consultados} cliente(s) consultado(s), ${r.novas} nota(s) nova(s)${r.erros ? `, ${r.erros} com erro` : ''}.</strong>
         <ul class="dicas">${r.resultados.map((x) => `<li class="${x.ok ? '' : 'cor-vermelho'}">${esc(x.cliente)}: ${esc(x.mensagem)}</li>`).join('')}</ul>
         <div class="acoes"><button type="button" id="cap-atualizar">Atualizar a lista</button></div></div>`;
       $('#cap-atualizar').onclick = () => telaCaptura();
-    } catch (er) { aviso(mensagemErro(er)); ev.target.disabled = false; ev.target.textContent = 'Buscar agora'; }
+    } catch (er) { aviso(mensagemErro(er)); bt.disabled = false; bt.textContent = 'Buscar agora'; }
   };
   const auto = (ligar) => async () => { try { const r = await api('POST', '/api/escritorio/captura/automatica', { ligar }); aviso(`Busca automática ${ligar ? 'ligada' : 'desligada'} para ${r.alterados} cliente(s).`); telaCaptura(); } catch (er) { aviso(mensagemErro(er)); } };
   $('#cap-auto-on').onclick = auto(true); $('#cap-auto-off').onclick = auto(false);
@@ -5719,6 +5798,7 @@ async function telaControle() {
   };
   $('#ct-mes').onchange = (ev) => { if (ev.target.value) { f.mes = ev.target.value; telaControle(); } };
   $('#ct-q').oninput = (ev) => { f.q = ev.target.value; f.pagina = 1; pintar(); };
+  buscaTopo('Buscar cliente no controle...', (q) => { f.q = q; f.pagina = 1; $('#ct-q').value = q; pintar(); }, f.q);
   $('#ct-pend').onchange = (ev) => { f.pendentes = ev.target.checked; f.pagina = 1; pintar(); };
   $('#ct-todos') && ($('#ct-todos').onchange = (ev) => { f.todosDp = ev.target.checked; f.pagina = 1; pintar(); });
   conteudo.querySelectorAll('#ct-abas [data-a]').forEach((a) => (a.onclick = () => { f.area = a.dataset.a; f.pagina = 1; sel.clear(); telaControle(); }));
@@ -6185,15 +6265,15 @@ async function telaMonitor() {
   const fgtsAberto = (sf?.clientes ?? []).filter((c) => c.fgts?.situacao === 'EM_ABERTO' && !ignoraProc(c.empresa_id, 'FGTS'));
   const segsGeral = ESTADOS.map(([k, r]) => ({ valor: d.geral[k], cor: COR_ESTADO[k], rotulo: r }));
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
-      <div class="mon-atual"><label class="mon-comp" title="O escritório processa o mês anterior: em novembro, a competência outubro. O Monitor olha esta competência e as anteriores.">Competência <select id="mon-comp">${(() => { const base = mesAnterior(mesAtual()); const l = []; for (let i = 0, m = base; i < 6; i++, m = mesAnterior(m)) l.push(m); if (!l.includes(d.competencia)) l.push(d.competencia); return l.map((m) => `<option value="${m}" ${m === d.competencia ? 'selected' : ''}>${rotuloMes(m)}${m === base ? ' (em processamento)' : ''}</option>`).join(''); })()}</select></label> <span class="dica">Atualizado em ${dhBr(d.atualizado_em)}</span> <button id="mon-pend-pdf" class="primario" title="PDF com as pendências de cada cliente: os marcados na lista ou, sem marcação, todos os da lista">Pendências por cliente (PDF)</button> <button id="mon-atualizar">Atualizar</button></div></div>
+    <div class="orc-topo tl-topo"><span class="orc-ico grande">${icone('monitor')}</span><div class="tl-tit"><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
+      <div class="mon-atual"><label class="mon-comp" title="O escritório processa o mês anterior: em novembro, a competência outubro. O Monitor olha esta competência e as anteriores.">Competência <select id="mon-comp">${(() => { const base = mesAnterior(mesAtual()); const l = []; for (let i = 0, m = base; i < 6; i++, m = mesAnterior(m)) l.push(m); if (!l.includes(d.competencia)) l.push(d.competencia); return l.map((m) => `<option value="${m}" ${m === d.competencia ? 'selected' : ''}>${rotuloMes(m)}${m === base ? ' (em processamento)' : ''}</option>`).join(''); })()}</select></label> <span class="dica">Atualizado em<br>${dhBr(d.atualizado_em)}</span> <button type="button" class="orc-ouro" id="mon-atualizar">${icone('refazer')} Atualizar</button> <button type="button" id="mon-pend-pdf" class="tl-btn-ouro" title="PDF com as pendências de cada cliente: os marcados na lista ou, sem marcação, todos os da lista">${icone('tl-baixar')} Pendências por cliente (PDF)</button></div></div>
     ${sf && !sf.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado: as consultas à Receita (situação fiscal, parcelamentos e caixa postal) não funcionam. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador.'}</div>` : ''}
-    ${sf ? `<div class="mon-kpis sf-kpis">
-      <button type="button" class="cartao kpi ${sf.resumo.comPendencias ? 'kpi-alerta' : ''}" data-sit="PENDENCIAS"><span class="dica">Débitos na Receita e PGFN</span><strong class="${sf.resumo.comPendencias ? 'cor-vermelho' : 'cor-verde'}">${sf.resumo.comPendencias} ${sf.resumo.comPendencias === 1 ? 'cliente' : 'clientes'}</strong><span class="dica">${brl(sf.resumo.totalAberto)} em aberto na Receita</span></button>
-      <button type="button" class="cartao kpi" data-sit="REGULAR"><span class="dica">Situação fiscal regular</span><strong class="cor-verde">${sf.resumo.regulares}</strong><span class="dica">sem pendências na última consulta</span></button>
-      <button type="button" class="cartao kpi" data-sit="NUNCA"><span class="dica">Situação fiscal não consultada</span><strong>${sf.resumo.naoConsultados}</strong><span class="dica">ainda sem relatório da Receita</span></button>
-      <button type="button" class="cartao kpi ${fgtsAberto.length ? 'kpi-alerta' : ''}" data-sit="FGTS"><span class="dica">FGTS Digital em aberto</span><strong class="${fgtsAberto.length ? 'cor-vermelho' : ''}">${fgtsAberto.length} ${fgtsAberto.length === 1 ? 'cliente' : 'clientes'}</strong><span class="dica">${brl(fgtsAberto.reduce((t, c) => t + (c.fgts.total ?? 0), 0))} na última consulta</span></button>
-    </div>` : ''}
+    ${sf ? `<div class="sf-kpis">${cartoesKpi([
+      { ic: 'tl-alerta', tom: sf.resumo.comPendencias ? 'vermelho' : 'verde', rotulo: 'Débitos na Receita e PGFN', valor: `${sf.resumo.comPendencias} ${sf.resumo.comPendencias === 1 ? 'cliente' : 'clientes'}`, sub: `${brl(sf.resumo.totalAberto)} em aberto na Receita`, filtro: 'PENDENCIAS' },
+      { ic: 'tl-check', tom: 'verde', rotulo: 'Situação fiscal regular', valor: sf.resumo.regulares, sub: 'sem pendências na última consulta', filtro: 'REGULAR' },
+      { ic: 'tl-relogio', tom: 'azul', rotulo: 'Situação fiscal não consultada', valor: sf.resumo.naoConsultados, sub: 'ainda sem relatório da Receita', filtro: 'NUNCA' },
+      { ic: 'tl-moedas', tom: fgtsAberto.length ? 'vermelho' : 'laranja', rotulo: 'FGTS Digital em aberto', valor: `${fgtsAberto.length} ${fgtsAberto.length === 1 ? 'cliente' : 'clientes'}`, sub: `${brl(fgtsAberto.reduce((t, c) => t + (c.fgts.total ?? 0), 0))} na última consulta`, filtro: 'FGTS' },
+    ])}</div>` : ''}
     <div class="mon-grade">
       <section class="cartao mon-pend">
         <h2>Pendências fiscais</h2><p class="sutil">Clique numa situação ou num processo para ver os clientes.</p>
@@ -6303,7 +6383,7 @@ async function telaMonitor() {
   if (sf) {
     $('#mon-sit').value = f.sit;
     $('#mon-sit').onchange = (e) => { f.sit = e.target.value; pintarClientes(); };
-    conteudo.querySelectorAll('.sf-kpis [data-sit]').forEach((b) => (b.onclick = () => { f.sit = f.sit === b.dataset.sit ? '' : b.dataset.sit; $('#mon-sit').value = f.sit; pintarClientes(); $('#mon-sec-clientes').scrollIntoView({ behavior: 'smooth' }); }));
+    conteudo.querySelectorAll('.sf-kpis [data-kp]').forEach((b) => (b.onclick = () => { f.sit = f.sit === b.dataset.kp ? '' : b.dataset.kp; $('#mon-sit').value = f.sit; pintarClientes(); $('#mon-sec-clientes').scrollIntoView({ behavior: 'smooth' }); }));
     $('#mon-sf').onclick = (ev) => {
       const ids = alvo().map((c) => c.empresa_id);
       if (!ids.length) return aviso('Nenhum cliente na lista.');
@@ -6314,6 +6394,7 @@ async function telaMonitor() {
     ligarAgendaSituacao(ag, telaMonitor);
   }
   $('#mon-atualizar').onclick = () => telaMonitor();
+  buscaTopo('Buscar clientes no Monitor...', (q) => { f.qc = q; const c = $('#mon-qc'); if (c) { c.value = q; c.dispatchEvent(new Event('input')); } }, f.qc);
   $('#mon-comp').onchange = (e) => { telaMonitor.comp = e.target.value === mesAnterior(mesAtual()) ? '' : e.target.value; telaMonitor(); };
   $('#mon-pend-pdf').onclick = async (ev) => {
     const ids = alvo().map((c) => c.empresa_id);
@@ -6672,6 +6753,8 @@ const ICONES = {
   nuvem: 'M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.6 8 4 4 0 0 1 17 18M12 12v8M9 15l3-3 3 3',
   refazer: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   'o-mais': 'M12 5v14M5 12h14',
+  lapis: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  'tl-lista': 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
   dados: 'M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   olho: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   documento: 'M14 3H6v18h12V7zM14 3v4h4M9 12h6M9 16h6',
@@ -6691,10 +6774,26 @@ const ICONES = {
 function cabecaTela(ic, titulo, sub, direita = '') {
   return `<div class="orc-topo tl-topo"><span class="orc-ico grande">${icone(ic)}</span><div class="tl-tit"><h1>${titulo}</h1><p class="sutil">${sub}</p></div>${direita ? `<div class="tl-dir">${direita}</div>` : ''}</div>`;
 }
-/** Cartões de indicadores: [{ ic, tom: 'laranja' | 'verde' | 'vermelho' | 'neutro', valor, rotulo, href?, filtro? }]. */
+/**
+ * Cartões de indicadores: [{ ic, tom: 'laranja' | 'verde' | 'vermelho' | 'azul' | 'neutro', valor, rotulo, href?, filtro?, sub?, barra? }].
+ * Com `sub` o cartão fica no formato detalhado: rótulo em cima, número, linha de apoio e (opcional) barra de progresso em %.
+ */
 function cartoesKpi(lista) {
-  return `<div class="kp-grade">${lista.map((k) => `<${k.href || k.filtro != null ? 'a' : 'div'} class="kp kp-${k.tom ?? 'neutro'}" ${k.href ? `href="${k.href}"` : ''} ${k.filtro != null ? `data-kp="${esc(k.filtro)}" href="javascript:void(0)"` : ''}><span class="kp-ico">${icone(k.ic)}</span><span class="kp-txt"><strong>${k.valor}</strong><small>${k.rotulo}</small></span>${k.href || k.filtro != null ? `<span class="kp-seta">${icone('chevron')}</span>` : ''}</${k.href || k.filtro != null ? 'a' : 'div'}>`).join('')}</div>`;
+  return `<div class="kp-grade">${lista.map((k) => {
+    const tag = k.href || k.filtro != null ? 'a' : 'div';
+    const det = k.sub !== undefined;
+    const txt = det
+      ? `<span class="kp-txt kp-det"><small class="kp-rot">${k.rotulo}</small><strong>${k.valor}</strong>${k.sub ? `<em>${k.sub}</em>` : ''}${k.barra != null ? `<span class="kp-barra"><i style="width:${Math.max(0, Math.min(100, k.barra))}%"></i></span>` : ''}</span>`
+      : `<span class="kp-txt"><strong>${k.valor}</strong><small>${k.rotulo}</small></span>`;
+    return `<${tag} class="kp kp-${k.tom ?? 'neutro'}${det ? ' kp-detalhe' : ''}" ${k.href ? `href="${k.href}"` : ''} ${k.filtro != null ? `data-kp="${esc(k.filtro)}" href="javascript:void(0)"` : ''}><span class="kp-ico">${icone(k.ic)}</span>${txt}${!det && (k.href || k.filtro != null) ? `<span class="kp-seta">${icone('chevron')}</span>` : ''}</${tag}>`;
+  }).join('')}</div>`;
 }
+/** Abas dentro de um cartão: [[valor, rótulo, ícone?]]. */
+const abasCartao = (itens, ativo, attr = 'data-aba') => `<nav class="tl-abas">${itens.map(([v, r, ic]) => `<button type="button" ${attr}="${v}" class="${v === ativo ? 'ativo' : ''}">${ic ? icone(ic) : ''}${r}</button>`).join('')}</nav>`;
+/** Menu ⋮ de uma linha: [[atributo, rótulo]] (botões com data-*); posição fixa via ligarMenusLinha(). */
+const menuLinhaTl = (itens) => itens.length ? `<details class="cob-mais tl-mais"><summary title="Mais ações" aria-label="Mais ações">${icone('pontos')}</summary><div class="cob-menu">${itens.map(([a, r]) => `<button type="button" ${a}>${r}</button>`).join('')}</div></details>` : '';
+/** Campo de mês com ícone, no cabeçalho das telas. */
+const campoMes = (id, mes, rot = 'Mês') => `<div class="tl-mes"><span class="orc-ico">${icone('calendario')}</span><label>${rot} <input type="month" id="${id}" value="${mes}"></label></div>`;
 /** Estado vazio: ilustração simples, título, texto e uma ação. */
 function vazioTela(ic, titulo, texto, acao = '') {
   return `<div class="tl-vazio"><span class="tl-vazio-ico">${icone(ic)}</span><div><h2>${titulo}</h2><p>${texto}</p>${acao}</div></div>`;
@@ -7235,17 +7334,29 @@ const ILUSTRACAO_DICA = `<svg class="rd-dica-ilu" viewBox="0 0 120 96" aria-hidd
   <rect x="62" y="38" width="16" height="48" rx="2" fill="url(#rdg)" opacity=".85"/><rect x="84" y="24" width="16" height="62" rx="2" fill="url(#rdg)"/>
   <path d="M14 58 L44 36 L62 44 L100 10" fill="none" stroke="url(#rdg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M88 8 L104 6 L102 22 Z" fill="#ffb347"/></svg>`;
 
-/** No topo, enquanto o Radar está aberto: busca rápida por nome ou CNPJ. */
-function buscaTopoRadar() {
+/**
+ * Busca no topo, conforme a tela aberta: `aoBuscar(texto)` é chamado ao digitar (com espera curta) ou ao teclar Enter.
+ * Sai sozinha quando a tela muda e a nova tela não pede busca.
+ */
+function buscaTopo(placeholder, aoBuscar, valor = '', aoDigitar = true) {
   const barra = $('#barra-topo'); if (!barra) return;
-  let caixa = $('#topo-busca-radar');
-  if (!caixa) {
-    barra.insertAdjacentHTML('afterbegin', `<form class="topo-busca" id="topo-busca-radar" role="search">${icone('busca')}<input name="q" placeholder="Buscar oportunidades..." aria-label="Buscar oportunidades"></form>`);
-    caixa = $('#topo-busca-radar');
-    caixa.onsubmit = (ev) => { ev.preventDefault(); const f = telaRadar.f; f.texto = caixa.q.value.trim() || null; f.pagina = 1; if (location.hash.startsWith('#/radar')) telaRadar(); };
-    window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/radar')) $('#topo-busca-radar')?.remove(); });
+  $('#topo-busca')?.remove();
+  barra.insertAdjacentHTML('afterbegin', `<form class="topo-busca" id="topo-busca" role="search">${icone('busca')}<input name="q" type="search" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off"></form>`);
+  const caixa = $('#topo-busca'), hash = location.hash;
+  caixa.q.value = valor ?? '';
+  let t;
+  caixa.onsubmit = (ev) => { ev.preventDefault(); clearTimeout(t); aoBuscar(caixa.q.value.trim()); };
+  if (aoDigitar) caixa.q.oninput = () => { clearTimeout(t); t = setTimeout(() => aoBuscar(caixa.q.value.trim()), 250); };
+  if (!buscaTopo.ligado) {
+    buscaTopo.ligado = true;
+    window.addEventListener('hashchange', () => { const c = $('#topo-busca'); if (c && c.dataset.hash !== location.hash) c.remove(); });
   }
-  caixa.q.value = telaRadar.f.texto ?? '';
+  caixa.dataset.hash = hash;
+}
+/** Busca do topo nas telas sem lista própria: procura o cliente na Carteira. */
+const buscaTopoCarteira = (placeholder = 'Buscar no sistema...') => buscaTopo(placeholder, (q) => { if (!q) return; (telaCarteira.filtro ??= { q: '', situacao: 'ATIVO', regime: '', resp: '' }).q = q; telaCarteira.pg = 1; location.hash = '#/carteira'; }, '', false);
+function buscaTopoRadar() {
+  buscaTopo('Buscar oportunidades...', (q) => { const f = telaRadar.f; f.texto = q || null; f.pagina = 1; if (location.hash.startsWith('#/radar')) telaRadar(); }, telaRadar.f.texto ?? '', false);
 }
 
 /** A pesquisa traz só parte do cadastro: falta algum dos dados que a consulta por CNPJ completa. */
