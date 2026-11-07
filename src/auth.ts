@@ -120,7 +120,6 @@ const REGRAS: Regra[] = [
   { r: /^\/api\/empresas\/\d+\/cora\/(sincronizar)$/, mod: ['cobrancas', 'banco'] },
   { r: /^\/api\/empresas\/\d+\/cora(\/testar)?$/, mod: ['banco', 'empresas'] },
   { r: /^\/api\/(empresas\/\d+\/(cobrancas|remessas|retorno|boleto-avulso)|cobrancas\/\d+\/(cancelar|pagar|reemitir|pix(\/gerar)?|qrcode|email|carta|historico)|empresas\/\d+\/pix-gerar|empresas\/\d+\/(modelos-whatsapp|demonstrativo)|remessas\/\d+\/arquivo)$/, mod: ['cobrancas'] },
-  { r: /^\/api\/empresas\/\d+\/whatsapp\/(enviar|historico)$/, mod: ['cobrancas', 'notas', 'emitir'] },
   { m: 'GET', r: /^\/api\/cobrancas\/\d+\/(boleto|demonstrativo)$/, mod: ['cobrancas', 'notas', 'emitir'] },
   { m: 'POST', r: /^\/api\/(notas|faturar)$/, mod: ['emitir'] },
   { m: 'GET', r: /^\/api\/relatorios$|^\/api\/empresas\/\d+\/relatorios\/[a-z-]+$/, mod: ['relatorios'] },

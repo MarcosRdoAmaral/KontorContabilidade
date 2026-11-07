@@ -13,7 +13,6 @@ import { ConfigSmtp, ListaEmails, enviarComModelo, assinaturaDoEscritorio, confi
 import { ativarLicenca, exigirLicenca, exigirLimite, MODULOS_PAGOS, modulosLiberados, PLANOS, SUPORTE_WHATSAPP, statusLicenca, usoAtual, acessoDeSuporte, codigoDoComputador } from './licenca.js';
 import { BoletoAvulso, EntradaFaturamento, faturar, gerarBoletoAvulso, listarCobrancas, enviarCobrancaPorEmail } from './servicos/faturamento.js';
 import { ContaCoraEntrada, obterContaCora, salvarContaCora, removerContaCora, testarCora, sincronizarTudo, cancelarNaCora } from './servicos/cora.js';
-import { enviarWhatsapp, historicoWhatsapp, PedidoWhatsapp } from './servicos/whatsapp.js';
 import { ContaBancaria, obterModelosWhatsapp, reemitirCobranca, salvarModelosWhatsapp, boletoPdf, demonstrativoPdf, informarPix, ConfigPix, configPixPublica, gerarPixCobranca, gerarPixPendentes, salvarConfigPix, cancelarCobranca, gerarRemessaEmpresa, listarRemessas, marcarPago, obterCobranca, obterConta, obterRemessa, processarRetorno, salvarConta } from './servicos/cobranca.js';
 import { historicoDaCobranca } from './cobranca/historico.js';
 import { Despesa, criarDespesa, editarDespesa, excluirDespesa, listarCategorias, listarDespesas, painelFinanceiro, salvarCategorias } from './servicos/financeiro.js';
@@ -804,14 +803,6 @@ export async function rotas(app: FastifyInstance) {
     api.get('/api/empresas/:id/modelos-whatsapp', async (req) => {
       const id = Number((req.params as any).id); checarEmpresa(req, id);
       return obterModelosWhatsapp(id);
-    });
-    api.post('/api/empresas/:id/whatsapp/enviar', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
-      const id = Number((req.params as any).id); checarEmpresa(req, id);
-      return enviarWhatsapp(id, u(req).id, PedidoWhatsapp.parse(req.body));
-    });
-    api.get('/api/empresas/:id/whatsapp/historico', async (req) => {
-      const id = Number((req.params as any).id); checarEmpresa(req, id);
-      return historicoWhatsapp(id);
     });
     api.put('/api/empresas/:id/modelos-whatsapp', { preHandler: exigirPapel('admin', 'operador') }, async (req) => {
       const id = Number((req.params as any).id); checarEmpresa(req, id);

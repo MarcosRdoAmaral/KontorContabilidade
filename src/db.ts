@@ -1358,23 +1358,6 @@ const migracoes: string[] = [
   -- as cobranças que já existem ganham um evento inicial com a situação atual
   INSERT INTO eventos_cobranca (cobranca_id, tipo, para, dados, criado_em)
     SELECT id, 'SITUACAO_INICIAL', status, json_object('valor', valor, 'vencimento', vencimento), criado_em FROM cobrancas;`,
-  // WhatsApp automático (Twilio): autorização do cliente e histórico de envios
-  `ALTER TABLE tomadores ADD COLUMN whatsapp_aceite INTEGER NOT NULL DEFAULT 0;
-  CREATE TABLE whatsapp_envios (
-    id INTEGER PRIMARY KEY,
-    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-    tipo TEXT NOT NULL,
-    destino TEXT NOT NULL,
-    status TEXT NOT NULL,
-    erro TEXT,
-    sid TEXT,
-    tomador_id INTEGER REFERENCES tomadores(id) ON DELETE SET NULL,
-    cobranca_id INTEGER,
-    nota_id INTEGER,
-    usuario_id INTEGER,
-    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-  CREATE INDEX idx_whatsapp_empresa ON whatsapp_envios(empresa_id, id);`,
 ];
 
 export function migrar(): void {
