@@ -3422,15 +3422,28 @@ function resumoTributacao(s) {
 
 async function telaServicos() {
   const lista = await api('GET', `/api/empresas/${estado.empresaId}/servicos`);
+  const q = (telaServicos.q ?? '').trim().toLowerCase();
+  const vis = q ? lista.filter((s) => `${s.nome} ${s.c_trib_nac} ${s.c_trib_mun ?? ''} ${s.c_nbs ?? ''}`.toLowerCase().includes(q)) : lista;
+  const pg = paginar(vis, telaServicos.pg || 1);
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Serviços</h1><p class="sutil">Modelos com código de tributação e alíquota, para emitir em poucos cliques.</p></div>
-      <button class="primario" id="novo">Cadastrar serviço</button></div>
-    ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Nome</th><th>Código nacional</th><th>NBS</th><th>Tributação</th><th class="num">Alíquota</th><th class="num">Valor padrão</th></tr></thead><tbody>
-      ${lista.map((s, i) => `<tr class="clicavel" data-i="${i}"><td>${esc(s.nome)}</td><td>${s.c_trib_nac}${s.c_trib_mun ? ' / ' + s.c_trib_mun : ''}</td><td>${s.c_nbs ?? ''}</td><td>${resumoTributacao(s)}</td>
+    ${cabecaTela('servicos', 'Serviços', 'Modelos com código de tributação e alíquota, para emitir em poucos cliques.', `<button class="tl-btn-ouro" id="novo">${icone('o-mais')} Cadastrar serviço</button>`)}
+    ${cartoesKpi([
+      { ic: 'servicos', tom: 'laranja', valor: lista.length, rotulo: 'Serviços cadastrados' },
+      { ic: 'tl-moedas', tom: 'verde', valor: lista.filter((s) => s.valor_padrao).length, rotulo: 'Com valor padrão' },
+      { ic: 'tl-alerta', tom: 'neutro', valor: lista.filter((s) => !s.valor_padrao).length, rotulo: 'Sem valor padrão (informado na emissão)' },
+    ])}
+    ${lista.length ? `<form class="tl-filtros" id="form-busca-srv"><label class="busca">Buscar <input name="q" value="${esc(telaServicos.q ?? '')}" placeholder="Buscar por nome, código ou NBS…"></label>
+      <span class="tl-acoes"><button type="button" id="srv-limpar">${icone('tl-limpar')} Limpar</button><button type="submit" class="tl-btn-ouro">${icone('o-busca')} Buscar</button></span></form>` : ''}
+    ${vis.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Nome</th><th>Código nacional</th><th>NBS</th><th>Tributação</th><th class="num">Alíquota</th><th class="num">Valor padrão</th></tr></thead><tbody>
+      ${pg.itens.map((s, i) => `<tr class="clicavel" data-i="${i}"><td>${esc(s.nome)}</td><td>${s.c_trib_nac}${s.c_trib_mun ? ' / ' + s.c_trib_mun : ''}</td><td>${s.c_nbs ?? ''}</td><td>${resumoTributacao(s)}</td>
         <td class="num">${s.aliquota != null ? s.aliquota + '%' : '—'}</td><td class="num">${s.valor_padrao ? brl(s.valor_padrao) : '—'}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Cadastre os serviços que esta empresa presta.</div>'}`;
+    </tbody></table></div>${pg.html}</div>` : lista.length ? vazioTela('servicos', 'Nenhum serviço encontrado', 'Nenhum cadastro bate com a busca. Tente outro nome ou código.') : vazioTela('servicos', 'Nenhum serviço cadastrado', 'Cadastre os serviços que esta empresa presta para emitir notas em poucos cliques.', `<button class="tl-btn-ouro" id="vz-srv">${icone('o-mais')} Cadastrar serviço</button>`)}`;
   $('#novo').onclick = () => formServico();
-  conteudo.querySelectorAll('tr[data-i]').forEach((tr) => (tr.onclick = () => formServico(lista[tr.dataset.i])));
+  $('#vz-srv')?.addEventListener('click', () => formServico());
+  $('#form-busca-srv')?.addEventListener('submit', (ev) => { ev.preventDefault(); telaServicos.q = ev.target.q.value; telaServicos.pg = 1; telaServicos(); });
+  $('#srv-limpar')?.addEventListener('click', () => { telaServicos.q = ''; telaServicos.pg = 1; telaServicos(); });
+  conteudo.querySelectorAll('.tl-pag [data-pg]').forEach((b) => (b.onclick = () => { telaServicos.pg = Number(b.dataset.pg); telaServicos(); }));
+  conteudo.querySelectorAll('tr[data-i]').forEach((tr) => (tr.onclick = () => formServico(pg.itens[tr.dataset.i])));
 }
 
 // ---------------------------------------------------------------------------
