@@ -298,6 +298,7 @@ const COR = { get verde() { return cssVar('--verde'); }, get laranja() { return 
 // ---------------------------------------------------------------------------
 
 function sair() {
+  try { sessionStorage.removeItem(chaveAbas()); abas.lista = []; abas.ativa = null; } catch {}
   localStorage.removeItem('token');
   estado.token = null;
   $('#app').hidden = true;
@@ -6504,10 +6505,12 @@ function tituloDaAba(h) {
   const t = a?.textContent.trim();
   return t || { inicio: 'Início', nota: 'Nota', painel: 'Visão geral' }[nome] || nome.replace(/-/g, ' ').replace(/^./, (x) => x.toUpperCase());
 }
-function guardarAbas() { try { localStorage.setItem(chaveAbas(), JSON.stringify({ lista: abas.lista, ativa: abas.ativa })); } catch {} }
+// As abas valem só enquanto o programa está aberto: ficam em sessionStorage (somem ao fechar) e saem também no logout.
+function guardarAbas() { try { sessionStorage.setItem(chaveAbas(), JSON.stringify({ lista: abas.lista, ativa: abas.ativa })); } catch {} }
 function carregarAbas() {
   try {
-    const g = JSON.parse(localStorage.getItem(chaveAbas()) || 'null');
+    try { Object.keys(localStorage).filter((k) => k.startsWith('kontor-abas:')).forEach((k) => localStorage.removeItem(k)); } catch {} // restos de versões antigas
+    const g = JSON.parse(sessionStorage.getItem(chaveAbas()) || 'null');
     if (g && Array.isArray(g.lista)) {
       abas.lista = g.lista.filter((x) => x && typeof x.hash === 'string' && x.hash.startsWith('#/')).slice(0, ABAS_MAX);
       abas.ativa = abas.lista.some((x) => x.id === g.ativa) ? g.ativa : abas.lista[0]?.id ?? null;
