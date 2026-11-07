@@ -6789,8 +6789,8 @@ function fecharAba(id) {
 function pintarAbas() {
   const caixa = $('#abas-app'); if (!caixa) return;
   caixa.innerHTML = abas.lista.map((a) => `<div class="aba-app ${a.id === abas.ativa ? 'ativa' : ''}" data-aba="${a.id}" title="${esc(tituloDaAba(a.hash))}">
-      <button type="button" class="aba-ir">${esc(tituloDaAba(a.hash))}</button>${abas.lista.length > 1 ? `<button type="button" class="aba-fechar" data-fechar-aba="${a.id}" aria-label="Fechar aba">×</button>` : ''}</div>`).join('')
-    + '<button type="button" class="aba-nova" id="aba-nova" title="Nova aba (Início)" aria-label="Nova aba">+</button>';
+      <button type="button" class="aba-ir">${a.hash === '#/inicio' ? icone('inicio') : ''}${esc(tituloDaAba(a.hash))}</button>${abas.lista.length > 1 ? `<button type="button" class="aba-fechar" data-fechar-aba="${a.id}" aria-label="Fechar aba">×</button>` : ''}</div>`).join('')
+    + `<button type="button" class="aba-nova" id="aba-nova" title="Nova aba (Início)" aria-label="Nova aba">${icone('o-mais')}</button>`;
   caixa.querySelectorAll('[data-aba]').forEach((el) => {
     const aba = abas.lista.find((x) => x.id === Number(el.dataset.aba));
     el.querySelector('.aba-ir').onclick = () => irParaAba(aba);
