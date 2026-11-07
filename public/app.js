@@ -2311,23 +2311,23 @@ async function telaRelatorios(aba) {
   const fmtCel = (v, t) => (v == null || v === '' ? '' : t === 'moeda' ? brl(v) : t === 'data' ? dataBr(v) : esc(String(v)));
   const podeFiscal = ['visao', 'situacao'].some((m) => estado.usuario.modulos.includes(m));
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Relatórios</h1><p class="sutil">A nota e o boleto têm datas diferentes (emissão, vencimento, pagamento). Cada relatório diz qual data usa no filtro e mostra as outras nas colunas.</p></div></div>
+    ${cabecaTela('relatorios', 'Relatórios', 'A nota e o boleto têm datas diferentes (emissão, vencimento, pagamento). Cada relatório diz qual data usa no filtro e mostra as outras nas colunas.')}
     <nav class="abas" aria-label="Relatórios"><a href="#/relatorios" class="ativo">Relatórios</a><a href="#/relatorios/documentacao">Documentação</a></nav>
     <div class="rel-layout">
     <nav class="rel-grupos" aria-label="Tipos de relatório">${podeFiscal ? `<details class="grupo" open><summary>Fiscal dos clientes <span class="dica">2</span></summary>
       <a href="#" data-fis="pend">Pendências por cliente</a><a href="#" data-fis="sit">Situação fiscal do cliente</a></details>` : ''}${GRUPOS_REL.filter((g) => cat.some((c) => c.grupo === g)).map((g) => `<details class="grupo" ${cat.some((c) => c.grupo === g && c.id === est.rel) ? 'open' : ''}><summary>${esc(g)} <span class="dica">${cat.filter((c) => c.grupo === g).length}</span></summary>
       ${cat.filter((c) => c.grupo === g).map((c) => `<a href="#" data-rel="${c.id}" class="${c.id === est.rel ? 'ativo' : ''}">${esc(c.titulo)}</a>`).join('')}</details>`).join('')}</nav>
     <div class="rel-corpo">
-    <form id="form-rel" class="filtros grade">
+    <form id="form-rel" class="tl-filtros">
       <input type="hidden" name="rel" value="${esc(est.rel)}">
-      <div class="largo"><strong id="tit-rel"></strong><span class="dica" id="desc-rel" style="display:block"></span></div>
+      <div style="flex:1 1 100%"><strong id="tit-rel"></strong><span class="dica" id="desc-rel" style="display:block"></span></div>
       <label>De <input type="date" name="de" required value="${est.de}"></label>
       <label>Até <input type="date" name="ate" required value="${est.ate}"></label>
       <label>Cliente <select name="tomadorId"><option value="">Todos</option>${clientes.map((c) => `<option value="${c.id}" ${String(c.id) === String(est.tomadorId) ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></label>
       <label id="lbl-sit">Situação <select name="situacao"><option value="">Todas</option><option>Vencido</option><option>A vencer</option></select></label>
-      <div class="acoes"><button class="primario" type="submit">Gerar</button> <button type="button" id="rel-csv">Excel (CSV)</button> <button type="button" id="rel-pdf">PDF</button></div>
+      <span class="tl-acoes"><button type="button" class="tl-btn-borda" id="rel-csv">${icone('tl-exportar')} Excel (CSV)</button><button type="button" class="tl-btn-borda" id="rel-pdf">${icone('tl-exportar')} PDF</button><button class="tl-btn-ouro" type="submit">${icone('tl-filtro')} Gerar</button></span>
     </form>
-    <div id="res-rel"><div class="vazio">Escolha o relatório ao lado, ajuste o período e clique em Gerar.</div></div>
+    <div id="res-rel">${vazioTela('relatorios', 'Escolha um relatório', 'Selecione o relatório ao lado, ajuste o período e clique em Gerar.')}</div>
     </div></div>`;
   conteudo.querySelectorAll('[data-fis]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); conteudo.querySelectorAll('[data-rel], [data-fis]').forEach((x) => x.classList.toggle('ativo', x === a)); relatorioFiscal(a.dataset.fis); }));
   const f = $('#form-rel');
@@ -2337,7 +2337,7 @@ async function telaRelatorios(aba) {
   conteudo.querySelectorAll('[data-rel]').forEach((a) => (a.onclick = (ev) => {
     ev.preventDefault(); f.rel.value = a.dataset.rel; est.rel = a.dataset.rel;
     conteudo.querySelectorAll('[data-rel]').forEach((x) => x.classList.toggle('ativo', x === a));
-    ajustar(); $('#res-rel').innerHTML = '<div class="vazio">Ajuste o período e clique em Gerar.</div>';
+    ajustar(); $('#res-rel').innerHTML = vazioTela('relatorios', 'Pronto para gerar', 'Ajuste o período e clique em Gerar.');
   }));
   const qs = (formato) => { const a = atual(); return new URLSearchParams({ de: a.de, ate: a.ate, formato, ...(a.tomadorId && { tomadorId: a.tomadorId }), ...(a.situacao && { situacao: a.situacao }) }).toString(); };
   f.onsubmit = async (ev) => {
@@ -2346,10 +2346,10 @@ async function telaRelatorios(aba) {
     try {
       const r = await api('GET', `/api/empresas/${estado.empresaId}/relatorios/${est.rel}?${qs('json')}`);
       box.innerHTML = `<h2>${esc(r.titulo)}</h2><p class="sutil">${esc(r.subtitulo)} · ${r.linhas.filter((l) => !l._subtotal).length} registro(s)</p>
-        ${r.linhas.length ? `<div class="rolagem"><table class="tabela"><thead><tr>${r.colunas.map((c) => `<th class="${c.tipo === 'moeda' || c.tipo === 'inteiro' ? 'num' : ''}">${esc(c.nome)}</th>`).join('')}</tr></thead><tbody>
+        ${r.linhas.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr>${r.colunas.map((c) => `<th class="${c.tipo === 'moeda' || c.tipo === 'inteiro' ? 'num' : ''}">${esc(c.nome)}</th>`).join('')}</tr></thead><tbody>
           ${r.linhas.map((l) => `<tr${l._subtotal ? ' class="rel-subtotal"' : ''}>${r.colunas.map((c) => `<td class="${c.tipo === 'moeda' || c.tipo === 'inteiro' ? 'num' : ''}">${fmtCel(l[c.k], c.tipo)}</td>`).join('')}</tr>`).join('')}
           ${r.colunas.some((c) => c.soma) ? `<tr><td><strong>TOTAL</strong></td>${r.colunas.slice(1).map((c) => `<td class="num"><strong>${c.soma ? fmtCel(r.totais[c.k], c.tipo) : ''}</strong></td>`).join('')}</tr>` : ''}
-          </tbody></table></div>` : '<div class="vazio">Nenhum registro neste período.</div>'}`;
+          </tbody></table></div></div>` : vazioTela('relatorios', 'Nenhum registro neste período', 'Não há dados para o relatório e os filtros escolhidos. Tente ampliar o período.')}`;
     } catch (e) { box.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; }
   };
   $('#rel-csv').onclick = () => { Object.assign(est, atual()); baixar(`/api/empresas/${estado.empresaId}/relatorios/${est.rel}?${qs('csv')}`, `${est.rel}.csv`); };
