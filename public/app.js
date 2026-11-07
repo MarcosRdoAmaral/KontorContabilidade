@@ -631,15 +631,18 @@ async function telaEmitir(param) {
   }
 
   conteudo.innerHTML = `
-    <div class="topo"><div>
+    <div class="orc-topo em-topo"><span class="orc-ico grande">${icone('em-doc')}</span><div style="flex:1">
       <h1>${corrigindo ? `Corrigir e reenviar DPS nº ${corrigindo.n_dps}` : origem ? 'Emitir nota a partir de outra' : 'Emitir nota'}</h1>
-      <p class="sutil">${esc(e.razao_social)} — ${fmtDoc(e.documento)}</p>
-    </div></div>
+      <p class="sutil">Emissão de NFS-e • ${esc(e.razao_social)} — ${fmtDoc(e.documento)}</p>
+    </div>${e.modo_emissao === 'PORTAL' || e.nfse_procuracao ? '' : e.tem_certificado && e.cert_validade && new Date(e.cert_validade) >= new Date()
+      ? `<a class="em-cert" href="#/empresas" title="Ver o certificado">${icone('ok')} Certificado válido ›</a>`
+      : `<a class="em-cert ruim" href="#/empresas" title="Ver o certificado">${icone('alerta')} ${e.tem_certificado ? 'Certificado vencido' : 'Sem certificado'} ›</a>`}</div>
+    <nav class="em-passos" aria-label="Etapas da emissão"><button type="button" id="em-p1" class="ativo"><b>1</b>Tomador</button><i></i><button type="button" id="em-p2"><b>2</b>Serviço</button><i></i><button type="button" id="em-p3"><b>3</b>Valores e informações</button></nav>
     ${origem ? `<div class="banner">Copiado da ${origem.n_nfse ? `NFS-e nº ${origem.n_nfse}` : `DPS ${origem.serie}/${origem.n_dps}`} (${esc(origem.tomador_nome ?? 'sem tomador')}, ${brl(origem.valor_servico)}). Isto emite uma <strong>nota nova</strong>, com outro número: confira a competência, o valor e a descrição antes de emitir. <a href="#/nota/${origem.id}">Voltar para a nota</a></div>` : ''}
     ${e.ambiente === 2 ? '<div class="banner teste">Esta empresa está em produção restrita: as notas são de teste e não têm valor fiscal.</div>' : ''}
     ${e.modo_emissao === 'PORTAL' ? '<div class="banner teste">Esta empresa emite as notas pelo portal do Emissor Nacional (sem certificado). Aqui você gera o <strong>boleto</strong>; a nota é emitida no portal e importada em <a href="#/notas">Notas emitidas</a>.</div>' : !e.tem_certificado && !e.nfse_procuracao ? '<div class="banner teste">Cadastre o certificado A1 da empresa (ou ligue a NFS-e por procuração) antes de emitir.</div>' : ''}
     <form id="form-emitir">
-      <fieldset><legend>Tomador</legend>
+      <fieldset class="em-sec" id="sec-tomador"><legend class="em-leg"><span class="orc-ico">${icone('em-users')}</span><span><strong>01. Tomador do serviço</strong><small>Informe quem contratou o serviço.</small></span></legend>
         <div class="grade">
           <label class="largo">Quem contratou o serviço <span class="dica">(digite para buscar · F2 abre a consulta completa)</span>
             <select name="tomadorId">
@@ -648,7 +651,8 @@ async function telaEmitir(param) {
             </select>
           </label>
         </div>
-        <div class="acoes"><button type="button" id="novo-tomador">Cadastrar novo cliente</button></div>
+        <div id="tom-info" class="em-info" hidden></div>
+        <div class="acoes"><button type="button" id="novo-tomador" class="orc-ouro">${icone('em-valor').replace(/<svg.*<\/svg>/, '')}+ Novo cliente</button></div>
       </fieldset>
 
       <div id="serv-padrao" class="banner" hidden></div>
@@ -666,7 +670,7 @@ async function telaEmitir(param) {
         <p class="dica" id="comp-info"></p>
       </fieldset>
 
-      <fieldset><legend>Serviço</legend>
+      <fieldset class="em-sec" id="sec-servico"><legend class="em-leg"><span class="orc-ico">${icone('em-cfg')}</span><span><strong>02. Serviço prestado</strong><small>Configure o serviço e as informações fiscais.</small></span></legend>
         <div class="grade">
           <label class="largo">Serviço cadastrado
             <select name="servicoId">
@@ -688,7 +692,7 @@ async function telaEmitir(param) {
         </div>
       </fieldset>
 
-      <fieldset><legend>Tributação</legend>
+      <fieldset class="em-sec" id="sec-valores"><legend class="em-leg"><span class="orc-ico">${icone('em-valor')}</span><span><strong>03. Valores e informações</strong><small>Tributação, retenções e informações complementares.</small></span></legend>
         <div class="grade">
           <label>ISSQN
             <select name="tribISSQN">
@@ -743,7 +747,7 @@ async function telaEmitir(param) {
       <fieldset id="bloco-conferencia"><legend>Conferência da tributação</legend>
         <div class="rolagem" id="conferencia"></div>
       </fieldset>
-      <div class="acoes"><button class="primario" type="submit" id="btn-emitir">${corrigindo ? 'Reenviar à Sefin' : 'Emitir nota'}</button></div>
+      <div class="em-rodape"><span class="em-rasc" id="em-rasc">${icone('em-rasc')}<span id="em-rasc-txt">Rascunho salvo automaticamente</span></span><span class="em-botoes"><button type="button" id="em-salvar-rasc">${icone('em-salvar')} Salvar rascunho</button><button class="primario orc-salvar" type="submit" id="btn-emitir">${corrigindo ? 'Reenviar à Sefin' : 'Emitir nota'}</button></span></div>
     </form>`;
 
   const f = $('#form-emitir');
@@ -1040,6 +1044,53 @@ async function telaEmitir(param) {
     for (const k in pad) f.elements[k].value = pad[k];
     recalcular();
   };
+  // ---- tomador escolhido: mostra nome, documento e contato logo abaixo
+  const mostrarTom = () => {
+    const t = tomadores.find((x) => x.id === Number(f.tomadorId.value)), box = $('#tom-info');
+    box.hidden = !t;
+    if (t) box.innerHTML = `<span class="em-ok">${icone('ok')}</span><strong>${esc(t.nome)}</strong>${t.documento ? `<span>${t.tipo_doc === 'CPF' ? 'CPF' : 'CNPJ'}: ${fmtDoc(t.documento)}</span>` : ''}${t.email ? `<span>${esc(t.email)}</span>` : ''}${t.fone ? `<span>${esc(t.fone)}</span>` : ''}`;
+  };
+  f.tomadorId.addEventListener('change', mostrarTom); mostrarTom();
+  // ---- etapas no alto: clicar leva à seção; a etapa acompanha a rolagem
+  const passos = [['sec-tomador', 'em-p1'], ['sec-servico', 'em-p2'], ['sec-valores', 'em-p3']];
+  const marcarPasso = (sec) => { const i = passos.findIndex((x) => x[0] === sec); passos.forEach(([, b], k) => { const el = $('#' + b); if (el) { el.classList.toggle('ativo', k === i); el.classList.toggle('feito', k < i); } }); };
+  passos.forEach(([sec, b]) => { $('#' + b).onclick = () => { $('#' + sec).scrollIntoView({ behavior: 'smooth', block: 'start' }); marcarPasso(sec); }; });
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) marcarPasso(en.target.id); }), { rootMargin: '-15% 0px -65% 0px' });
+    passos.forEach(([sec]) => io.observe($('#' + sec)));
+  }
+  // ---- rascunho: o que foi digitado fica guardado neste computador e volta ao reabrir (não vale para correção, cópia ou orçamento)
+  const usaRasc = !corrigindo && !origem && !(typeof orc !== 'undefined' && orc);
+  const chaveRasc = `kontor-rascunho-nota:${estado.usuario?.id ?? ''}:${e.id}`;
+  const horaRasc = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const guardarRasc = (avisar) => {
+    if (!usaRasc) return;
+    try {
+      const v = {};
+      [...f.elements].forEach((x) => { if (x.name && x.type !== 'submit' && x.type !== 'button') v[x.name] = x.type === 'checkbox' ? x.checked : x.value; });
+      if (!v.tomadorId && !v.descricao && !v.valor) { localStorage.removeItem(chaveRasc); $('#em-rasc-txt').textContent = 'Rascunho salvo automaticamente'; return; }
+      const em = Date.now();
+      localStorage.setItem(chaveRasc, JSON.stringify({ v, em }));
+      $('#em-rasc-txt').textContent = `Rascunho salvo às ${horaRasc(em)}`;
+      if (avisar) aviso('Rascunho salvo.');
+    } catch { /* sem armazenamento: segue sem rascunho */ }
+  };
+  const limparRascunho = () => { try { localStorage.removeItem(chaveRasc); } catch { /* ok */ } };
+  if (usaRasc) {
+    try {
+      const r = JSON.parse(localStorage.getItem(chaveRasc) || 'null');
+      if (r?.v && !telaEmitir.prefTomador) {
+        for (const [k, val] of Object.entries(r.v)) { const el = f.elements[k]; if (!el || el.type === 'submit' || el.type === 'button') continue; if (el.type === 'checkbox') el.checked = !!val; else el.value = val; }
+        ['tomadorId', 'acao', 'tribISSQN', 'issRetido'].forEach((k) => f.elements[k]?.dispatchEvent(new Event('change')));
+        f.valor.dispatchEvent(new Event('input'));
+        mostrarTom();
+        $('#em-rasc-txt').textContent = `Rascunho restaurado (salvo às ${horaRasc(r.em)})`;
+      }
+    } catch { /* rascunho ilegível: ignora */ }
+    let tRasc; f.addEventListener('input', () => { clearTimeout(tRasc); tRasc = setTimeout(() => guardarRasc(false), 800); });
+    f.addEventListener('change', () => { clearTimeout(tRasc); tRasc = setTimeout(() => guardarRasc(false), 800); });
+  }
+  $('#em-salvar-rasc').onclick = () => { if (usaRasc) guardarRasc(true); else aviso('Este tipo de emissão não usa rascunho.'); };
   f.onsubmit = async (ev) => {
     ev.preventDefault();
     if (portal && !f.tomadorId.value) { $('#erro-emitir').textContent = 'Escolha o cliente para gerar o boleto.'; return; }
@@ -1079,6 +1130,7 @@ async function telaEmitir(param) {
       if (r.email?.status === 'ENVIADO') partes.push(`e-mail enviado para ${r.email.para}`);
       if (r.email?.status === 'ERRO') partes.push(`e-mail não enviado: ${r.email.erro}`);
       aviso(partes.join(' · ').replace(/^./, (c) => c.toUpperCase()) + '.');
+      limparRascunho();
       location.hash = r.nota ? `#/nota/${r.nota.id}` : '#/cobrancas';
     } catch (err) {
       $('#erro-emitir').textContent = mensagemErro(err);
@@ -6426,6 +6478,13 @@ const MENSAGENS_DIA = [
 // Ícones (traço fino, herdam a cor do tema), menu com ícones, sininho e usuário no topo
 // ---------------------------------------------------------------------------
 const ICONES = {
+  'em-doc': 'M7 3h7l5 5v6M14 3v5h5M7 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M8.5 12h6M8.5 16h3M17 22a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM15 17.5l1.5 1.5 2.5-3',
+  'em-users': 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.6 3-5.5 6.5-5.5s6 1.9 6.5 5.5M16 4.5a3.2 3.2 0 0 1 0 6.2M18 14.8c2 .6 3.2 2.2 3.5 5.2',
+  'em-cfg': 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 13.5l1.6 1.2-2 3.4-1.9-.6a7 7 0 0 1-1.6.9L15 20h-4l-.5-1.6a7 7 0 0 1-1.6-.9l-1.9.6-2-3.4 1.6-1.2a7 7 0 0 1 0-1.8L3 10.5l2-3.4 1.9.6a7 7 0 0 1 1.6-.9L9 5h4l.5 1.6a7 7 0 0 1 1.6.9l1.9-.6 2 3.4-1.6 1.2a7 7 0 0 1 0 1.8z',
+  'em-valor': 'M12 3v18M16.5 7.5c-.8-1-2.3-1.5-4.5-1.5-2.6 0-4 1.2-4 3s1.4 2.6 4 3 4 1.2 4 3-1.4 3-4 3c-2.2 0-3.7-.5-4.5-1.5',
+  'em-rasc': 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4',
+  'em-enviar': 'M21 3 3 10.5l7 2.5 2.5 7zM21 3 10 13',
+  'em-salvar': 'M5 4h12l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',
   inicio: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
   visao: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   painel: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',

@@ -920,3 +920,36 @@ input.invalido { border-color: #c0392b !important; box-shadow: 0 0 0 2px rgba(19
 .aba-app.ativa .aba-ir { color: var(--tinta); font-weight: 600; }
 .aba-nova { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; font-size: 1.2rem; line-height: 1; color: var(--tinta-2); }
 @media (max-width: 700px) { .aba-app { min-width: 90px; } }
+
+/* Emitir nota: cartões numerados, etapas no alto e rodapé fixo */
+.em-topo .em-cert { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 9px 16px; border-radius: 999px; border: 1px solid #2f8f5b; color: #4fd18a; background: rgba(47,143,91,.12); font-weight: 600; font-size: .9rem; text-decoration: none; white-space: nowrap; }
+.em-topo .em-cert.ruim { border-color: var(--vermelho); color: var(--vermelho); background: transparent; }
+.em-cert .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.em-passos { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; flex-wrap: wrap; }
+.em-passos i { flex: 1; min-width: 24px; height: 2px; background: var(--linha); }
+.em-passos button { display: inline-flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px 6px; color: var(--tinta-2); cursor: pointer; font-weight: 500; }
+.em-passos b { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--superficie-2); color: var(--tinta); border: 1px solid var(--linha); }
+.em-passos button.ativo { color: var(--tinta); font-weight: 700; }
+.em-passos button.ativo b { background: var(--laranja); border-color: var(--laranja); color: var(--sobre-acento); }
+.em-passos button.feito b { border-color: var(--laranja); color: var(--laranja); }
+#form-emitir > fieldset { background: var(--superficie); border: 1px solid var(--linha); border-radius: 16px; padding: 16px 20px 18px; margin: 0 0 16px; }
+#form-emitir > fieldset.em-sec { border-left: 4px solid var(--laranja); scroll-margin-top: 12px; }
+#form-emitir > fieldset > legend { padding: 0 8px; font-weight: 700; }
+#form-emitir > fieldset > legend.em-leg { display: flex; align-items: center; gap: 14px; width: 100%; float: left; padding: 0 0 14px; margin: 0; }
+#form-emitir > fieldset > legend.em-leg + * { clear: both; }
+.em-leg strong { display: block; font-size: 1.1rem; }
+.em-leg small { display: block; color: var(--tinta-2); font-weight: 400; font-size: .88rem; margin-top: 2px; }
+.em-leg .orc-ico { width: 44px; height: 44px; flex: none; }
+.em-info { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; padding: 10px 14px; background: var(--campo); border: 1px solid var(--borda-campo); border-radius: 12px; color: var(--tinta-2); }
+.em-info strong { color: var(--tinta); }
+.em-info span + span { border-left: 1px solid var(--linha); padding-left: 16px; }
+.em-ok { color: #4fd18a; display: inline-flex; }
+.em-ok .ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+#form-emitir .acoes #novo-tomador { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px; border: 1.5px solid var(--laranja); color: var(--laranja); background: transparent; font-weight: 600; cursor: pointer; }
+.em-rodape { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 4px; margin-top: 4px; background: linear-gradient(to top, var(--fundo, var(--superficie)) 70%, transparent); }
+.em-rasc { display: inline-flex; align-items: center; gap: 10px; color: var(--tinta-2); font-size: .9rem; }
+.em-rasc .ico, .em-botoes .ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.em-botoes { display: inline-flex; gap: 12px; flex-wrap: wrap; }
+.em-botoes button { display: inline-flex; align-items: center; gap: 10px; padding: 13px 24px; border-radius: 14px; font-weight: 600; cursor: pointer; }
+.em-botoes #em-salvar-rasc { background: transparent; border: 1.5px solid var(--borda-botao); color: var(--tinta); }
+.em-botoes #em-salvar-rasc:hover { border-color: var(--laranja); }
