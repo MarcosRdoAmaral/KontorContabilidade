@@ -1,6 +1,7 @@
 import { diaUtil } from './diautil.js';
 import { z } from 'zod';
 import { db } from '../db.js';
+import { aparelhosConectados, enviarAoCliente, pacoteGuia } from '../conexao/escritorio.js';
 import { ErroNegocio, certificadoDaEmpresa } from './emissao.js';
 import { Integra, lerConfig, semProcuracao, textoMsgs, type Transporte } from './integra-contador.js';
 import { assinarDctfweb } from '../nfse/assinatura.js';
@@ -117,6 +118,85 @@ export async function lerGuia(pdf: Buffer): Promise<{ valor: number | null; venc
   const valor = moeda(/valor\s+total(?:\s+do\s+documento)?\s*:?\s*(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/i.exec(t)?.[1]) ?? (valores.length ? Math.max(...valores) : null);
   const venc = /(?:pagar\s+(?:este\s+documento\s+)?at[ée]|data\s+de\s+vencimento|vencimento)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i.exec(t)?.[1];
   return { valor, vencimento: venc ? venc.split('/').reverse().join('-') : null };
+}
+
+/** Dígito de cada bloco da linha digitável de arrecadação (DAS, DARF): módulo 10 ou 11, conforme o 3º dígito. */
+function dvArrecadacao(bloco: string, mod11: boolean) {
+  let soma = 0;
+  [...bloco].reverse().forEach((c, i) => {
+    const d = Number(c);
+    if (mod11) soma += d * (2 + (i % 8));
+    else { const p = d * (i % 2 === 0 ? 2 : 1); soma += p > 9 ? p - 9 : p; }
+  });
+  if (mod11) { const r = soma % 11; return r < 2 ? 0 : 11 - r; }
+  return (10 - (soma % 10)) % 10;
+}
+export function validarLinhaArrecadacao(digitos: string) {
+  if (!/^8\d{47}$/.test(digitos)) return false;
+  const mod11 = digitos[2] === '8' || digitos[2] === '9';
+  for (let i = 0; i < 4; i++) {
+    const bloco = digitos.slice(i * 12, i * 12 + 11);
+    if (dvArrecadacao(bloco, mod11) !== Number(digitos[i * 12 + 11])) return false;
+  }
+  return true;
+}
+const formatarLinha = (d: string) => [0, 1, 2, 3].map((i) => `${d.slice(i * 12, i * 12 + 11)}-${d[i * 12 + 11]}`).join(' ');
+
+/**
+ * Código de barras (linha digitável de arrecadação, conferida pelos dígitos) e Pix copia e cola lidos do texto do PDF da guia.
+ * O Pix só aparece quando a guia traz o código em texto; o QR Code em imagem não é lido.
+ */
+/** CRC16-CCITT (polinômio 0x1021, início 0xFFFF), o do Pix copia e cola. */
+function crc16(txt: string) {
+  let crc = 0xffff;
+  for (const b of Buffer.from(txt, 'utf8')) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+/** Junta as linhas a partir de "000201" testando, em cada quebra, "sem nada" ou "um espaço" (até 10 quebras); o CRC decide. */
+function pixComQuebras(t: string): string | null {
+  for (let ini = t.indexOf('000201'); ini >= 0; ini = t.indexOf('000201', ini + 1)) {
+    const linhas = t.slice(ini, ini + 1200).split(/[ \t]*[\r\n]+[ \t]*/).slice(0, 11);
+    const k = linhas.length - 1;
+    for (let m = 0; m < 1 << k; m++) {
+      let s = linhas[0];
+      for (let i = 1; i <= k; i++) s += (m >> (i - 1)) & 1 ? ' ' + linhas[i] : linhas[i];
+      const pix = pixDoTexto(s);
+      if (pix) return pix;
+    }
+  }
+  return null;
+}
+/** Pix copia e cola (BR Code) achado no texto: lido campo a campo (id, tamanho, valor) e conferido pelo CRC. */
+function pixDoTexto(t: string): string | null {
+  for (let ini = t.indexOf('000201'); ini >= 0; ini = t.indexOf('000201', ini + 1)) {
+    let i = ini;
+    while (i + 4 <= t.length) {
+      const id = t.slice(i, i + 2), tam = Number(t.slice(i + 2, i + 4));
+      if (!/^\d{2}$/.test(id) || !/^\d{2}$/.test(t.slice(i + 2, i + 4)) || i + 4 + tam > t.length) break;
+      if (id === '63' && tam === 4) {
+        const codigo = t.slice(ini, i + 8);
+        if (crc16(codigo.slice(0, -4)) === codigo.slice(-4).toUpperCase() && /BR\.GOV\.BCB\.PIX/i.test(codigo)) return codigo;
+        break;
+      }
+      i += 4 + tam;
+    }
+  }
+  return null;
+}
+export async function dadosDePagamento(pdf: Buffer): Promise<{ linha: string | null; pix: string | null }> {
+  let t = '';
+  try { t = await textoDoPdf(pdf); } catch { return { linha: null, pix: null }; }
+  let linha: string | null = null;
+  for (const m of t.matchAll(/8\d{10}[\s.-]*\d(?:[\s.-]*\d{11}[\s.-]*\d){3}/g)) {
+    const d = m[0].replace(/\D/g, '');
+    if (validarLinhaArrecadacao(d)) { linha = formatarLinha(d); break; }
+  }
+  // o texto do PDF quebra o código em linhas: o CRC do Pix diz qual leitura é a certa
+  // (cada quebra pode ter cortado o código no meio ou ficado no lugar de um espaço, como no nome do recebedor)
+  return { linha, pix: pixComQuebras(t) };
 }
 
 /** Codificação declarada no XML (a DCTFWeb costuma vir em UTF-8). */
@@ -463,7 +543,7 @@ export function fechamentoDoCliente(escritorioId: number, empresaId: number, mes
   const por = Object.fromEntries(l.map(({ entrada_json, valores_json, ...x }) => [x.tipo, { ...x, tem_declaracao: !!x.tem_declaracao, tem_recibo: !!x.tem_recibo, tem_guia: !!x.tem_guia,
     entrada: entrada_json ? JSON.parse(entrada_json) : null, valores: valores_json ? JSON.parse(valores_json) : null }]));
   const envios = db.prepare('SELECT canal, destino, itens, enviado_em FROM envios_fechamento WHERE empresa_id = ? AND competencia = ? ORDER BY id DESC').all(empresaId, mes);
-  return { empresa_id: e.id, cliente: e.nome_fantasia || e.razao_social, documento: e.documento, email: e.email, fone: e.contato_fone, canal_envio: e.canal_envio, regime: e.regime,
+  return { empresa_id: e.id, cliente: e.nome_fantasia || e.razao_social, documento: e.documento, email: e.email, fone: e.contato_fone, canal_envio: e.canal_envio, app: aparelhosConectados(e.id), regime: e.regime,
     tem_funcionarios: !!e.tem_funcionarios, atividades: e.pgdas_atividades ? JSON.parse(e.pgdas_atividades) : [], PGDASD: por.PGDASD ?? null, DCTFWEB: por.DCTFWEB ?? null, envios,
     sem_movimento: !!dadosControle(empresaId, mes, 'FISCAL').sem_movimento, sem_folha: !!dadosControle(empresaId, mes, 'DP').sem_folha };
 }
@@ -516,11 +596,30 @@ export function mensagemFechamento(escritorioId: number, empresaId: number, mes:
 }
 
 /** Envia por e-mail o fechamento ao cliente (com as guias anexas) e registra o envio no Controle mensal. */
-export async function enviarFechamento(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, canal: 'EMAIL' | 'WHATSAPP', tipo?: TipoGuia | null) {
+export async function enviarFechamento(escritorioId: number, usuarioId: number, empresaId: number, mesBr: string, canal: 'EMAIL' | 'WHATSAPP' | 'APP', tipo?: TipoGuia | null) {
   const mes = MES.parse(mesBr);
   const m = mensagemFechamento(escritorioId, empresaId, mes, tipo);
   let destino: string | null = null;
-  if (canal === 'EMAIL') {
+  // clientes conectados (Kontor Empresas ou aplicativo do celular) recebem as guias também por lá, em qualquer canal
+  let aparelhos = 0, avisoApp: string | null = null;
+  // por e-mail ou WhatsApp, a guia vai ao aplicativo só uma vez por mês (reenviar pelo app é o botão "Enviar pelo aplicativo")
+  const jaFoiPeloApp = (t: string) => !!db.prepare(`SELECT 1 FROM envios_fechamento WHERE empresa_id = ? AND competencia = ? AND canal = 'APP' AND (',' || itens || ',') LIKE ?`).get(empresaId, mes, `%,${t},%`);
+  const paraApp = canal === 'APP' ? m.guias : m.guias.filter((g) => !jaFoiPeloApp(g.tipo));
+  if (aparelhosConectados(empresaId) && paraApp.length) {
+    const doc = (db.prepare('SELECT documento FROM empresas WHERE id = ?').get(empresaId) as any).documento as string;
+    try {
+      for (const g of paraApp) {
+        const a = arquivoFechamento(escritorioId, empresaId, mes, g.tipo, 'guia');
+        aparelhos = await enviarAoCliente(escritorioId, empresaId, 'GUIA', await pacoteGuia({ tipo: g.tipo === 'PGDASD' ? 'DAS' : 'DCTFWEB', titulo: `${g.nome} — ${rotuloMes(mes)}`, periodo: rotuloMes(mes), valor: g.valor, validade: g.venc, pdf: a.pdf }, doc, { pedido: null, competencia: mes }));
+      }
+      if (canal !== 'APP') db.prepare('INSERT INTO envios_fechamento (empresa_id, competencia, canal, destino, itens, usuario_id) VALUES (?,?,?,?,?,?)').run(empresaId, mes, 'APP', `aplicativo (${aparelhos} aparelho${aparelhos === 1 ? '' : 's'})`, paraApp.map((g) => g.tipo).join(','), usuarioId);
+    } catch (e) {
+      if (canal === 'APP') throw e;
+      avisoApp = `Não foi pelo aplicativo: ${(e as Error).message}`;
+    }
+  } else if (canal === 'APP') throw new ErroNegocio(m.guias.length ? 'Este cliente não está conectado pelo aplicativo nem pelo Kontor Empresas.' : 'Não há guia gerada para enviar.');
+  if (canal === 'APP') destino = `aplicativo (${aparelhos} aparelho${aparelhos === 1 ? '' : 's'})`;
+  else if (canal === 'EMAIL') {
     if (!m.email) throw new ErroNegocio('O cliente não tem e-mail no cadastro da Carteira.');
     const anexos = m.guias.map((g) => { const a = arquivoFechamento(escritorioId, empresaId, mes, g.tipo, 'guia'); return { filename: a.nome, content: a.pdf, contentType: 'application/pdf' }; });
     const ok = await enviarComModelo(escritorioId, m.chave, m.vars, m.email.split(/[,;\s]+/).filter(Boolean), { anexos });
@@ -538,5 +637,5 @@ export async function enviarFechamento(escritorioId: number, usuarioId: number, 
       ON CONFLICT(empresa_id, competencia, area) DO UPDATE SET dados_json = excluded.dados_json, usuario_id = excluded.usuario_id, atualizado_em = datetime('now')`).run(empresaId, mes, area, JSON.stringify(d), usuarioId);
   }
   if (canal === 'EMAIL' || canal === 'WHATSAPP') db.prepare('UPDATE empresas SET canal_envio = COALESCE(canal_envio, ?) WHERE id = ?').run(canal, empresaId);
-  return { enviadoPara: destino, guias: m.guias.length };
+  return { enviadoPara: destino, guias: m.guias.length, aparelhos, avisoApp };
 }

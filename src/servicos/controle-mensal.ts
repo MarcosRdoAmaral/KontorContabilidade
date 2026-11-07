@@ -27,6 +27,7 @@ export const LinhaControle = z.object({
 export function listarControle(escritorioId: number, competencia: string, area: Area, empresas: number[] | null = null) {
   const filtro = empresas ? `AND e.id IN (${empresas.map(() => '?').join(',') || 'NULL'})` : '';
   const linhas = db.prepare(`SELECT e.id AS empresa_id, COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento, e.regime, e.tem_funcionarios, e.canal_envio, e.registro_dp, e.email, e.contato_fone,
+      (SELECT COUNT(*) FROM conexao_aparelhos a WHERE a.empresa_id = e.id AND a.situacao = 'CONECTADO') AS app,
       c.dados_json, c.atualizado_em, u.nome AS usuario
     FROM empresas e LEFT JOIN controle_mensal c ON c.empresa_id = e.id AND c.competencia = ? AND c.area = ? LEFT JOIN usuarios u ON u.id = c.usuario_id
     WHERE e.escritorio_id = ? AND e.na_carteira = 1 AND (e.situacao = 'ATIVO' OR c.id IS NOT NULL) ${filtro}

@@ -8,7 +8,10 @@
 // Quem é quem:
 //  - escritório: registra-se uma vez (POST /escritorios) e recebe um token próprio;
 //  - convite: o escritório gera um código para o CNPJ de um cliente (vale 7 dias, uso único);
-//  - vínculo: o cliente digita o código no Kontor Empresas (POST /parear) e recebe o token do vínculo.
+//  - vínculo: o cliente digita o código no Kontor Empresas ou no aplicativo Kontor do celular (POST /parear) e recebe o token do vínculo.
+//    Uma empresa pode ter um Kontor Empresas (computador) e vários celulares conectados ao mesmo escritório.
+//  - notificações: o celular registra a assinatura Web Push; a cada envio do escritório o servidor manda um "toque"
+//    sem conteúdo (o aplicativo busca e decifra a mensagem sozinho). As chaves VAPID são geradas e guardadas no D1.
 // Tokens no formato "<id>.<segredo>"; o banco guarda só o SHA-256 do segredo.
 // ---------------------------------------------------------------------------
 
@@ -33,7 +36,15 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS mensagens (id INTEGER PRIMARY KEY, vinculo_id INTEGER NOT NULL, para TEXT NOT NULL CHECK (para IN ('E','V')), tipo TEXT NOT NULL, grupo TEXT NOT NULL, parte INTEGER NOT NULL, total INTEGER NOT NULL, corpo TEXT NOT NULL, tamanho INTEGER NOT NULL, criado_em INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS ix_mensagens_para ON mensagens(vinculo_id, para, id)`,
   `CREATE TABLE IF NOT EXISTS tentativas (chave TEXT PRIMARY KEY, n INTEGER NOT NULL, desde INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS ajustes (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)`,
 ];
+/** Colunas acrescentadas depois da primeira versão (o D1 não tem ADD COLUMN IF NOT EXISTS). */
+const COLUNAS = [
+  ['vinculos', 'tipo', "TEXT NOT NULL DEFAULT 'EMPRESAS'"],
+  ['vinculos', 'dispositivo', 'TEXT'],
+  ['vinculos', 'push', 'TEXT'],
+];
+const HOSTS_PUSH = /^(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com|android\.googleapis\.com)$/;
 
 class Falha extends Error {
   constructor(status, erro) { super(erro); this.status = status; }
@@ -41,22 +52,29 @@ class Falha extends Error {
 
 let schemaPronto = null;
 async function garantirSchema(db) {
-  schemaPronto ??= db.batch(SCHEMA.map((s) => db.prepare(s))).catch((e) => { schemaPronto = null; throw e; });
+  schemaPronto ??= (async () => {
+    await db.batch(SCHEMA.map((s) => db.prepare(s)));
+    for (const [tabela, coluna, def] of COLUNAS) {
+      const cols = (await db.prepare(`PRAGMA table_info(${tabela})`).all()).results.map((c) => c.name);
+      if (!cols.includes(coluna)) await db.prepare(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${def}`).run();
+    }
+  })().catch((e) => { schemaPronto = null; throw e; });
   await schemaPronto;
 }
 /** Só para os testes: o banco de teste muda a cada caso. */
 export function _reiniciar() { schemaPronto = null; }
 
-export async function conexao(request, env, agora = Date.now()) {
+export async function conexao(request, env, agora = Date.now(), execucao = null) {
   try {
     if (!env.DB) throw new Falha(503, 'Serviço de conexão indisponível.');
     await garantirSchema(env.DB);
     const url = new URL(request.url);
     const rota = url.pathname.slice(PREFIXO.length) || '/';
     const m = request.method;
-    const ctx = { request, env, db: env.DB, agora, url, ip: request.headers.get('CF-Connecting-IP') || 'local' };
+    const ctx = { request, env, db: env.DB, agora, url, ip: request.headers.get('CF-Connecting-IP') || 'local', depois: (p) => (execucao?.waitUntil ? execucao.waitUntil(p) : p) };
 
-    if (m === 'GET' && rota === '/saude') return json({ ok: true, versao: 1 });
+    if (m === 'GET' && rota === '/saude') return json({ ok: true, versao: 2 });
+    if (m === 'GET' && rota === '/push/chave') return json({ ok: true, chave: (await vapid(ctx.db)).publica });
     if (m === 'POST' && rota === '/escritorios') return await registrarEscritorio(ctx);
     if (m === 'POST' && rota === '/parear') return await parear(ctx);
 
@@ -66,6 +84,8 @@ export async function conexao(request, env, agora = Date.now()) {
     if (m === 'GET' && rota === '/vinculos') return await listarVinculos(ctx, quem);
     if (m === 'GET' && rota === '/vinculo') return await meuVinculo(ctx, quem);
     if (m === 'DELETE' && rota === '/vinculo') return await revogar(ctx, quem, null);
+    if (m === 'PUT' && rota === '/vinculo/push') return await assinarPush(ctx, quem);
+    if (m === 'DELETE' && rota === '/vinculo/push') return await assinarPush(ctx, quem, true);
     const del = rota.match(/^\/vinculos\/(\d+)$/);
     if (m === 'DELETE' && del) return await revogar(ctx, quem, Number(del[1]));
     if (m === 'POST' && rota === '/mensagens') return await enviar(ctx, quem);
@@ -131,10 +151,10 @@ async function criarConvite(ctx, quem) {
 
 async function listarVinculos(ctx, quem) {
   exigir(quem, 'E');
-  const { results } = await ctx.db.prepare(`SELECT v.id, v.cnpj, v.nome, v.chave, v.criado_em, v.visto_em, v.revogado_em, v.revogado_por,
+  const { results } = await ctx.db.prepare(`SELECT v.id, v.cnpj, v.nome, v.tipo, v.dispositivo, v.chave, v.criado_em, v.visto_em, v.revogado_em, v.revogado_por, (v.push IS NOT NULL) AS notificacoes,
       (SELECT COUNT(*) FROM mensagens m WHERE m.vinculo_id = v.id AND m.para = 'V') AS pendentes_cliente
     FROM vinculos v WHERE v.escritorio_id = ? ORDER BY v.id`).bind(quem.id).all();
-  return json({ ok: true, vinculos: results.map((v) => ({ ...v, criado_em: iso(v.criado_em), visto_em: iso(v.visto_em), revogado_em: iso(v.revogado_em) })) });
+  return json({ ok: true, vinculos: results.map((v) => ({ ...v, notificacoes: !!v.notificacoes, criado_em: iso(v.criado_em), visto_em: iso(v.visto_em), revogado_em: iso(v.revogado_em) })) });
 }
 
 // ---- cliente (Kontor Empresas) ----
@@ -147,6 +167,8 @@ async function parear(ctx) {
   const cnpj = documento(d.cnpj);
   const nome = d.nome == null ? null : texto(d.nome, 160);
   const chave = chavePublica(d.chave);
+  const tipo = d.tipo === 'APP' ? 'APP' : 'EMPRESAS';
+  const dispositivo = d.dispositivo == null ? null : texto(d.dispositivo, 60);
   const conv = await ctx.db.prepare('SELECT * FROM convites WHERE codigo = ?').bind(await sha256(codigo)).first();
   if (!conv || conv.usado_em) throw new Falha(404, 'Código de conexão não encontrado ou já usado. Peça um novo código ao escritório.');
   if (conv.expira_em < ctx.agora) throw new Falha(410, 'Este código de conexão venceu. Peça um novo código ao escritório.');
@@ -154,23 +176,23 @@ async function parear(ctx) {
   const esc = await ctx.db.prepare('SELECT id, nome, cnpj, chave FROM escritorios WHERE id = ?').bind(conv.escritorio_id).first();
   if (!esc) throw new Falha(404, 'Escritório não encontrado.');
   const { segredo, hash } = await novoSegredo();
-  // um vínculo ativo por escritório e CNPJ: conectar de novo substitui o anterior
-  const antigos = (await ctx.db.prepare('SELECT id FROM vinculos WHERE escritorio_id = ? AND cnpj = ? AND revogado_em IS NULL').bind(esc.id, cnpj).all()).results;
+  // um Kontor Empresas ativo por escritório e CNPJ (conectar de novo substitui o anterior); celulares podem ser vários
+  const antigos = tipo === 'APP' ? [] : (await ctx.db.prepare("SELECT id FROM vinculos WHERE escritorio_id = ? AND cnpj = ? AND tipo = 'EMPRESAS' AND revogado_em IS NULL").bind(esc.id, cnpj).all()).results;
   const ops = [ctx.db.prepare('UPDATE convites SET usado_em = ? WHERE codigo = ?').bind(ctx.agora, conv.codigo)];
   for (const a of antigos) {
     ops.push(ctx.db.prepare("UPDATE vinculos SET revogado_em = ?, revogado_por = 'NOVA_CONEXAO' WHERE id = ?").bind(ctx.agora, a.id));
     ops.push(ctx.db.prepare('DELETE FROM mensagens WHERE vinculo_id = ?').bind(a.id));
   }
-  ops.push(ctx.db.prepare('INSERT INTO vinculos (escritorio_id, cnpj, nome, segredo, chave, criado_em, visto_em) VALUES (?,?,?,?,?,?,?)').bind(esc.id, cnpj, nome ?? conv.nome, hash, chave, ctx.agora, ctx.agora));
+  ops.push(ctx.db.prepare('INSERT INTO vinculos (escritorio_id, cnpj, nome, segredo, chave, criado_em, visto_em, tipo, dispositivo) VALUES (?,?,?,?,?,?,?,?,?)').bind(esc.id, cnpj, nome ?? conv.nome, hash, chave, ctx.agora, ctx.agora, tipo, dispositivo));
   const res = await ctx.db.batch(ops);
   const id = res[res.length - 1].meta.last_row_id;
-  return json({ ok: true, vinculo: id, token: `V${id}.${segredo}`, escritorio: { nome: esc.nome, cnpj: esc.cnpj, chave: esc.chave } }, 201);
+  return json({ ok: true, vinculo: id, token: `V${id}.${segredo}`, cnpj, nome: nome ?? conv.nome, escritorio: { nome: esc.nome, cnpj: esc.cnpj, chave: esc.chave } }, 201);
 }
 
 async function meuVinculo(ctx, quem) {
   exigir(quem, 'V');
   const esc = await ctx.db.prepare('SELECT nome, cnpj, chave FROM escritorios WHERE id = ?').bind(quem.escritorio_id).first();
-  return json({ ok: true, vinculo: quem.id, cnpj: quem.cnpj, escritorio: esc });
+  return json({ ok: true, vinculo: quem.id, cnpj: quem.cnpj, nome: quem.nome, tipo: quem.tipo, dispositivo: quem.dispositivo, notificacoes: !!quem.push, escritorio: esc });
 }
 
 async function revogar(ctx, quem, id) {
@@ -181,7 +203,7 @@ async function revogar(ctx, quem, id) {
     if (!v) throw new Falha(404, 'Conexão não encontrada.');
   }
   await ctx.db.batch([
-    ctx.db.prepare('UPDATE vinculos SET revogado_em = COALESCE(revogado_em, ?), revogado_por = COALESCE(revogado_por, ?) WHERE id = ?').bind(ctx.agora, quem.tipo === 'V' ? 'CLIENTE' : 'ESCRITORIO', v.id),
+    ctx.db.prepare('UPDATE vinculos SET revogado_em = COALESCE(revogado_em, ?), revogado_por = COALESCE(revogado_por, ?), push = NULL WHERE id = ?').bind(ctx.agora, quem.tipo === 'V' ? 'CLIENTE' : 'ESCRITORIO', v.id),
     ctx.db.prepare('DELETE FROM mensagens WHERE vinculo_id = ?').bind(v.id),
   ]);
   return json({ ok: true });
@@ -214,6 +236,8 @@ async function enviar(ctx, quem) {
   if (ja) return json({ ok: true, id: ja.id, repetida: true });
   const r = await ctx.db.prepare('INSERT INTO mensagens (vinculo_id, para, tipo, grupo, parte, total, corpo, tamanho, criado_em) VALUES (?,?,?,?,?,?,?,?,?)')
     .bind(v.id, para, tipo, grupo, parte, total, corpo, corpo.length, ctx.agora).run();
+  // envio completo para um celular: avisa por notificação (sem conteúdo; o aplicativo busca e decifra)
+  if (para === 'V' && parte === total && v.push) ctx.depois(notificar(ctx, v).catch((e) => console.error('push:', e && e.message)));
   return json({ ok: true, id: r.meta.last_row_id }, 201);
 }
 
@@ -247,6 +271,53 @@ async function confirmar(ctx, quem) {
     ? await ctx.db.prepare(`DELETE FROM mensagens WHERE vinculo_id = ? AND para = 'V' AND id IN (${marcas})`).bind(quem.id, ...ids).run()
     : await ctx.db.prepare(`DELETE FROM mensagens WHERE para = 'E' AND id IN (${marcas}) AND vinculo_id IN (SELECT id FROM vinculos WHERE escritorio_id = ?)`).bind(...ids, quem.id).run();
   return json({ ok: true, apagadas: r.meta.changes ?? 0 });
+}
+
+// ---- notificações (Web Push, sem conteúdo) ----
+
+async function assinarPush(ctx, quem, remover = false) {
+  exigir(quem, 'V');
+  if (remover) {
+    await ctx.db.prepare('UPDATE vinculos SET push = NULL WHERE id = ?').bind(quem.id).run();
+    return json({ ok: true });
+  }
+  const d = await corpoJson(ctx.request, 4_000);
+  let u;
+  try { u = new URL(String(d.endpoint ?? '')); } catch { throw new Falha(422, 'Assinatura de notificação inválida.'); }
+  if (u.protocol !== 'https:' || !HOSTS_PUSH.test(u.hostname)) throw new Falha(422, 'Serviço de notificação não reconhecido.');
+  await ctx.db.prepare('UPDATE vinculos SET push = ? WHERE id = ?').bind(u.href, quem.id).run();
+  return json({ ok: true });
+}
+
+/** Par de chaves VAPID do servidor (gerado uma vez e guardado no D1). */
+let vapidCache = null;
+async function vapid(db) {
+  if (vapidCache) return vapidCache;
+  let linha = await db.prepare("SELECT valor FROM ajustes WHERE chave = 'vapid'").first();
+  if (!linha) {
+    const par = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const privada = await crypto.subtle.exportKey('jwk', par.privateKey);
+    const publica = b64u(new Uint8Array(await crypto.subtle.exportKey('raw', par.publicKey)));
+    await db.prepare("INSERT OR IGNORE INTO ajustes (chave, valor) VALUES ('vapid', ?)").bind(JSON.stringify({ privada, publica })).run();
+    linha = await db.prepare("SELECT valor FROM ajustes WHERE chave = 'vapid'").first();
+  }
+  const v = JSON.parse(linha.valor);
+  vapidCache = { publica: v.publica, privada: await crypto.subtle.importKey('jwk', v.privada, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']) };
+  return vapidCache;
+}
+/** Só para os testes. */
+export function _vapid(v) { vapidCache = v; }
+
+async function notificar(ctx, v) {
+  const alvo = new URL(v.push);
+  const chaves = await vapid(ctx.db);
+  const cab = b64u(new TextEncoder().encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const corpo = b64u(new TextEncoder().encode(JSON.stringify({ aud: alvo.origin, exp: Math.floor(ctx.agora / 1000) + 12 * 3600, sub: 'mailto:contato@kontorgestao.com.br' })));
+  const ass = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, chaves.privada, new TextEncoder().encode(`${cab}.${corpo}`)));
+  const r = await (ctx.env.FETCH_PUSH ?? fetch)(alvo.href, { method: 'POST', headers: { TTL: '172800', Urgency: 'high', Authorization: `vapid t=${cab}.${corpo}.${b64u(ass)}, k=${chaves.publica}`, 'Content-Length': '0' } });
+  // assinatura vencida ou removida pelo navegador: apaga
+  if (r.status === 404 || r.status === 410) await ctx.db.prepare('UPDATE vinculos SET push = NULL WHERE id = ? AND push = ?').bind(v.id, v.push).run();
+  return r.status;
 }
 
 // ---- autenticação e apoio ----

@@ -394,7 +394,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     });
     api.post('/api/escritorio/fechamento/:id/enviar', async (req) => {
       checar(req, id(req));
-      const b = z.object({ canal: z.enum(['EMAIL', 'WHATSAPP']), tipo: z.enum(['PGDASD', 'DCTFWEB']).nullish() }).parse(req.body);
+      const b = z.object({ canal: z.enum(['EMAIL', 'WHATSAPP', 'APP']), tipo: z.enum(['PGDASD', 'DCTFWEB']).nullish() }).parse(req.body);
       return enviarFechamento(u(req).escritorio_id, u(req).id, id(req), mesQ(req), b.canal, b.tipo);
     });
 
@@ -451,6 +451,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/conexao/clientes/:id', async (req) => { checar(req, id(req)); return statusConexao(u(req).escritorio_id, id(req)); });
     api.post('/api/escritorio/conexao/clientes/:id/convite', async (req) => { checar(req, id(req)); return convidar(u(req).escritorio_id, id(req)); });
     api.delete('/api/escritorio/conexao/clientes/:id', async (req) => { checar(req, id(req)); return desconectar(u(req).escritorio_id, id(req)); });
+    api.delete('/api/escritorio/conexao/clientes/:id/aparelhos/:vinculo', async (req) => { checar(req, id(req)); return desconectar(u(req).escritorio_id, id(req), id(req, 'vinculo')); });
     api.post('/api/escritorio/conexao/sincronizar', async (req) => sincronizar(u(req).escritorio_id));
     api.post('/api/escritorio/conexao/clientes/:id/guias/:guia/enviar', async (req) => {
       checar(req, id(req));

@@ -11,6 +11,7 @@ import { cifrarTexto, decifrarTexto } from '../cofre.js';
 import { ErroNegocio } from '../servicos/emissao.js';
 import { empresaDoEscritorio } from '../servicos/cadastro-unico.js';
 import { gerarGuia, type PedidoGuia } from '../servicos/guias.js';
+import { dadosDePagamento } from '../servicos/fechamento.js';
 import { FalhaApi, buscarEnvelopes, chamarApi, chaveSessao, enviarEnvelope, gerarChaves, impressao, type Envelope } from './nucleo.js';
 
 interface Config { escritorio_id: number; api_id: number; token: string; privada: string; publica: string; cnpj: string; nome: string; ultimo_sync: string | null; ultimo_erro: string | null }
@@ -47,48 +48,64 @@ function clienteDaCarteira(escritorioId: number, empresaId: number) {
 }
 
 const linhaCliente = (empresaId: number) => db.prepare('SELECT * FROM conexao_clientes WHERE empresa_id = ?').get(empresaId) as any;
+const aparelhosAtivos = (empresaId: number) => db.prepare("SELECT * FROM conexao_aparelhos WHERE empresa_id = ? AND situacao = 'CONECTADO' ORDER BY (tipo = 'EMPRESAS') DESC, vinculo").all(empresaId) as any[];
+/** Resumo do cliente: conectado se algum aparelho (Kontor Empresas ou celular) estiver conectado. */
+function atualizarResumo(empresaId: number) {
+  const n = aparelhosAtivos(empresaId).length;
+  const l = linhaCliente(empresaId);
+  if (!l) return;
+  const sit = n ? 'CONECTADO' : l.codigo && l.codigo_expira > new Date().toISOString() ? 'CONVITE' : db.prepare('SELECT 1 FROM conexao_aparelhos WHERE empresa_id = ?').get(empresaId) ? 'DESCONECTADO' : 'CONVITE';
+  db.prepare('UPDATE conexao_clientes SET situacao = ? WHERE empresa_id = ?').run(sit, empresaId);
+}
 
-/** Situação da conexão de um cliente, para a Carteira. */
+/** Situação da conexão de um cliente, para a Carteira: o código em aberto e cada aparelho conectado. */
 export function statusConexao(escritorioId: number, empresaId: number) {
   clienteDaCarteira(escritorioId, empresaId);
   const l = linhaCliente(empresaId);
   const c = cfg(escritorioId);
   const codigoValido = l?.codigo && l.codigo_expira > new Date().toISOString();
-  let chave: string | null = null;
-  if (l?.situacao === 'CONECTADO' && c) {
-    try { chave = impressao(chaveSessao(decifrarTexto(c.privada), l.chave_cliente, c.cnpj, l.cnpj)); } catch { chave = null; }
-  }
+  const privada = c ? decifrarTexto(c.privada) : null;
+  const aparelhos = (db.prepare('SELECT * FROM conexao_aparelhos WHERE empresa_id = ? ORDER BY (situacao = \'CONECTADO\') DESC, vinculo DESC LIMIT 30').all(empresaId) as any[]).map((a) => {
+    let cod: string | null = null;
+    if (a.situacao === 'CONECTADO' && privada && c) { try { cod = impressao(chaveSessao(privada, a.chave, c.cnpj, l?.cnpj ?? a.cnpj)); } catch { cod = null; } }
+    return { vinculo: a.vinculo, tipo: a.tipo as 'EMPRESAS' | 'APP', nome: a.nome, situacao: a.situacao, conectado_em: a.conectado_em, visto_em: a.visto_em, notificacoes: !!a.notificacoes,
+      desconectado_em: a.desconectado_em, motivo: a.motivo, impressao: cod };
+  });
+  const ativos = aparelhos.filter((a) => a.situacao === 'CONECTADO');
   return {
-    situacao: (l?.situacao ?? 'NAO_CONECTADO') as 'NAO_CONECTADO' | 'CONVITE' | 'CONECTADO' | 'DESCONECTADO',
+    situacao: (ativos.length ? 'CONECTADO' : l?.situacao === 'CONECTADO' ? 'DESCONECTADO' : l?.situacao ?? 'NAO_CONECTADO') as 'NAO_CONECTADO' | 'CONVITE' | 'CONECTADO' | 'DESCONECTADO',
     codigo: codigoValido ? decifrarTexto(l.codigo) : null, codigo_expira: codigoValido ? l.codigo_expira : null,
-    conectado_em: l?.conectado_em ?? null, visto_em: l?.visto_em ?? null, desconectado_em: l?.desconectado_em ?? null, motivo: l?.motivo ?? null,
-    impressao: chave, ultimo_sync: c?.ultimo_sync ?? null, ultimo_erro: c?.ultimo_erro ?? null,
+    aparelhos, conectados: ativos.length,
+    // compatibilidade com a tela da 1.51: dados do primeiro aparelho
+    conectado_em: ativos[0]?.conectado_em ?? null, visto_em: ativos[0]?.visto_em ?? null, impressao: ativos[0]?.impressao ?? null,
+    desconectado_em: aparelhos[0]?.desconectado_em ?? null, motivo: aparelhos[0]?.motivo ?? null,
+    ultimo_sync: c?.ultimo_sync ?? null, ultimo_erro: c?.ultimo_erro ?? null,
   };
 }
 
-/** Gera o código de conexão (vale 7 dias, uso único) para o cliente digitar no Kontor Empresas. */
+/** Gera o código de conexão (vale 7 dias, uso único) para o cliente digitar no Kontor Empresas ou no aplicativo do celular. */
 export async function convidar(escritorioId: number, empresaId: number) {
   const cli = clienteDaCarteira(escritorioId, empresaId);
   const c = await garantirRegistro(escritorioId);
   const r = await chamarApi<{ codigo: string; expira_em: string }>('POST', '/convites', { cnpj: cli.documento, nome: cli.nome }, token(c));
-  const atual = linhaCliente(empresaId);
-  if (atual) {
-    db.prepare(`UPDATE conexao_clientes SET codigo = ?, codigo_expira = ?, situacao = CASE WHEN situacao = 'CONECTADO' THEN situacao ELSE 'CONVITE' END WHERE empresa_id = ?`)
-      .run(cifrarTexto(r.codigo), r.expira_em, empresaId);
-  } else {
-    db.prepare(`INSERT INTO conexao_clientes (empresa_id, cnpj, situacao, codigo, codigo_expira) VALUES (?,?,'CONVITE',?,?)`).run(empresaId, cli.documento, cifrarTexto(r.codigo), r.expira_em);
-  }
+  db.prepare(`INSERT INTO conexao_clientes (empresa_id, cnpj, situacao, codigo, codigo_expira) VALUES (?,?,'CONVITE',?,?)
+    ON CONFLICT(empresa_id) DO UPDATE SET codigo = excluded.codigo, codigo_expira = excluded.codigo_expira`).run(empresaId, cli.documento, cifrarTexto(r.codigo), r.expira_em);
+  atualizarResumo(empresaId);
   return statusConexao(escritorioId, empresaId);
 }
 
-export async function desconectar(escritorioId: number, empresaId: number) {
+/** Desconecta um aparelho (ou, sem `vinculo`, todos os aparelhos do cliente). */
+export async function desconectar(escritorioId: number, empresaId: number, vinculo?: number) {
   clienteDaCarteira(escritorioId, empresaId);
-  const l = linhaCliente(empresaId);
   const c = cfg(escritorioId);
-  if (l?.vinculo && c) {
-    try { await chamarApi('DELETE', `/vinculos/${l.vinculo}`, undefined, token(c)); } catch (e) { if (!(e instanceof FalhaApi) || e.http !== 404) throw e; }
+  const alvos = aparelhosAtivos(empresaId).filter((a) => !vinculo || a.vinculo === vinculo);
+  if (vinculo && !alvos.length) throw new ErroNegocio('Aparelho não encontrado.', 404);
+  for (const a of alvos) {
+    if (c) { try { await chamarApi('DELETE', `/vinculos/${a.vinculo}`, undefined, token(c)); } catch (e) { if (!(e instanceof FalhaApi) || e.http !== 404) throw e; } }
+    db.prepare(`UPDATE conexao_aparelhos SET situacao = 'DESCONECTADO', desconectado_em = datetime('now'), motivo = 'Desconectado pelo escritório.' WHERE vinculo = ?`).run(a.vinculo);
   }
-  if (l) db.prepare(`UPDATE conexao_clientes SET situacao = 'DESCONECTADO', desconectado_em = datetime('now'), motivo = 'Desconectado pelo escritório.', codigo = NULL, codigo_expira = NULL WHERE empresa_id = ?`).run(empresaId);
+  if (!vinculo) db.prepare('UPDATE conexao_clientes SET codigo = NULL, codigo_expira = NULL WHERE empresa_id = ?').run(empresaId);
+  atualizarResumo(empresaId);
   return statusConexao(escritorioId, empresaId);
 }
 
@@ -111,12 +128,13 @@ const Fechamento = z.object({
 });
 
 function tratar(escritorioId: number, env: Envelope) {
-  const l = db.prepare('SELECT c.empresa_id FROM conexao_clientes c JOIN empresas e ON e.id = c.empresa_id WHERE c.vinculo = ? AND e.escritorio_id = ?').get(env.vinculo, escritorioId) as { empresa_id: number } | undefined;
+  const l = db.prepare('SELECT a.empresa_id, a.nome, a.tipo FROM conexao_aparelhos a JOIN empresas e ON e.id = a.empresa_id WHERE a.vinculo = ? AND e.escritorio_id = ?').get(env.vinculo, escritorioId) as { empresa_id: number; nome: string | null; tipo: string } | undefined;
   if (!l) return; // conexão desfeita neste computador: descarta
   if (env.tipo === 'PEDIDO_GUIA') {
     const p = Pedido.parse(env.dados);
     db.prepare(`INSERT OR IGNORE INTO solicitacoes_guia (empresa_id, origem_id, tipo, periodo, data_pagamento, descricao, observacao, solicitante, criado_em)
-      VALUES (?,?,?,?,?,?,?,?,?)`).run(l.empresa_id, p.id, p.tipo, p.periodo, p.data_pagamento ?? null, p.descricao ?? null, p.observacao ?? null, p.solicitante ?? null, env.recebido_em);
+      VALUES (?,?,?,?,?,?,?,?,?)`).run(l.empresa_id, p.id, p.tipo, p.periodo, p.data_pagamento ?? null, p.descricao ?? null, p.observacao ?? null,
+      [p.solicitante, l.tipo === 'APP' ? 'pelo celular' : null].filter(Boolean).join(', ') || null, env.recebido_em);
   } else if (env.tipo === 'PEDIDO_CANCELADO') {
     const p = z.object({ id: z.string().max(64) }).parse(env.dados);
     db.prepare(`UPDATE solicitacoes_guia SET situacao = 'CANCELADA', respondido_em = datetime('now') WHERE empresa_id = ? AND origem_id = ? AND situacao IN ('PENDENTE','PRONTA')`).run(l.empresa_id, p.id);
@@ -138,31 +156,37 @@ export async function sincronizar(escritorioId: number) {
   emAndamento.add(escritorioId);
   try {
     const tk = token(c);
-    const { vinculos } = await chamarApi<{ vinculos: { id: number; cnpj: string; chave: string; criado_em: string; visto_em: string | null; revogado_em: string | null; revogado_por: string | null }[] }>('GET', '/vinculos', undefined, tk);
+    const { vinculos } = await chamarApi<{ vinculos: { id: number; cnpj: string; tipo?: string; dispositivo?: string | null; chave: string; notificacoes?: boolean; criado_em: string; visto_em: string | null; revogado_em: string | null; revogado_por: string | null }[] }>('GET', '/vinculos', undefined, tk);
     const empresaDo = db.prepare('SELECT id FROM empresas WHERE escritorio_id = ? AND documento = ? AND eh_escritorio = 0 ORDER BY na_carteira DESC, id LIMIT 1');
+    const mexidas = new Set<number>();
     db.transaction(() => {
       for (const v of vinculos) {
         const emp = empresaDo.get(escritorioId, v.cnpj) as { id: number } | undefined;
         if (!emp) continue;
-        const l = linhaCliente(emp.id);
+        const a = db.prepare('SELECT * FROM conexao_aparelhos WHERE vinculo = ?').get(v.id) as any;
+        const tipo = v.tipo === 'APP' ? 'APP' : 'EMPRESAS';
+        const nome = tipo === 'APP' ? (v.dispositivo || 'Celular') : 'Kontor Gestão Empresas';
         if (!v.revogado_em) {
-          if (l?.vinculo === v.id) db.prepare('UPDATE conexao_clientes SET visto_em = ?, chave_cliente = ? WHERE empresa_id = ?').run(v.visto_em, v.chave, emp.id);
-          else if (!l || !l.vinculo || v.id > l.vinculo) {
-            db.prepare(`INSERT INTO conexao_clientes (empresa_id, cnpj, situacao, vinculo, chave_cliente, conectado_em, visto_em) VALUES (?,?,'CONECTADO',?,?,?,?)
-              ON CONFLICT(empresa_id) DO UPDATE SET situacao = 'CONECTADO', vinculo = excluded.vinculo, chave_cliente = excluded.chave_cliente, conectado_em = excluded.conectado_em,
-                visto_em = excluded.visto_em, codigo = NULL, codigo_expira = NULL, desconectado_em = NULL, motivo = NULL`)
-              .run(emp.id, v.cnpj, v.id, v.chave, v.criado_em, v.visto_em);
+          if (a) db.prepare('UPDATE conexao_aparelhos SET visto_em = ?, chave = ?, nome = ?, notificacoes = ? WHERE vinculo = ?').run(v.visto_em, v.chave, nome, v.notificacoes ? 1 : 0, v.id);
+          else {
+            db.prepare(`INSERT INTO conexao_aparelhos (vinculo, empresa_id, cnpj, tipo, nome, chave, situacao, conectado_em, visto_em, notificacoes) VALUES (?,?,?,?,?,?,'CONECTADO',?,?,?)`)
+              .run(v.id, emp.id, v.cnpj, tipo, nome, v.chave, v.criado_em, v.visto_em, v.notificacoes ? 1 : 0);
+            db.prepare(`INSERT INTO conexao_clientes (empresa_id, cnpj, situacao) VALUES (?,?,'CONECTADO') ON CONFLICT(empresa_id) DO UPDATE SET codigo = NULL, codigo_expira = NULL`).run(emp.id, v.cnpj);
           }
-        } else if (l?.vinculo === v.id && l.situacao === 'CONECTADO') {
-          const motivo = v.revogado_por === 'CLIENTE' ? 'O cliente desfez a conexão no Kontor Empresas.' : v.revogado_por === 'NOVA_CONEXAO' ? 'Substituída por uma nova conexão.' : 'Conexão desfeita pelo escritório.';
-          db.prepare(`UPDATE conexao_clientes SET situacao = 'DESCONECTADO', desconectado_em = ?, motivo = ? WHERE empresa_id = ?`).run(v.revogado_em, motivo, emp.id);
+          mexidas.add(emp.id);
+        } else if (a?.situacao === 'CONECTADO') {
+          const quem = tipo === 'APP' ? 'no celular' : 'no Kontor Empresas';
+          const motivo = v.revogado_por === 'CLIENTE' ? `O cliente desfez a conexão ${quem}.` : v.revogado_por === 'NOVA_CONEXAO' ? 'Substituída por uma nova conexão.' : 'Conexão desfeita pelo escritório.';
+          db.prepare(`UPDATE conexao_aparelhos SET situacao = 'DESCONECTADO', desconectado_em = ?, motivo = ? WHERE vinculo = ?`).run(v.revogado_em, motivo, v.id);
+          mexidas.add(emp.id);
         }
       }
     })();
+    for (const e of mexidas) atualizarResumo(e);
     const privada = decifrarTexto(c.privada);
     const chaveDe = (vinculo: number) => {
-      const l = db.prepare("SELECT c.cnpj, c.chave_cliente FROM conexao_clientes c JOIN empresas e ON e.id = c.empresa_id WHERE c.vinculo = ? AND e.escritorio_id = ? AND c.situacao = 'CONECTADO'").get(vinculo, escritorioId) as any;
-      return l?.chave_cliente ? chaveSessao(privada, l.chave_cliente, c.cnpj, l.cnpj) : null;
+      const a = db.prepare("SELECT a.cnpj, a.chave FROM conexao_aparelhos a JOIN empresas e ON e.id = a.empresa_id WHERE a.vinculo = ? AND e.escritorio_id = ? AND a.situacao = 'CONECTADO'").get(vinculo, escritorioId) as any;
+      return a?.chave ? chaveSessao(privada, a.chave, c.cnpj, a.cnpj) : null;
     };
     const r = await buscarEnvelopes(tk, chaveDe, (env) => tratar(escritorioId, env));
     db.prepare("UPDATE conexao_escritorio SET ultimo_sync = datetime('now'), ultimo_erro = ? WHERE escritorio_id = ?").run(r.erros.length ? r.erros.join(' ') : null, escritorioId);
@@ -179,7 +203,7 @@ export async function sincronizar(escritorioId: number) {
 /** Timer do servidor: sincroniza os escritórios que têm clientes conectados ou convidados. */
 export async function sincronizarTodos() {
   const lista = db.prepare(`SELECT DISTINCT ce.escritorio_id FROM conexao_escritorio ce JOIN empresas e ON e.escritorio_id = ce.escritorio_id
-    JOIN conexao_clientes c ON c.empresa_id = e.id WHERE c.situacao IN ('CONECTADO','CONVITE')`).all() as { escritorio_id: number }[];
+    JOIN conexao_clientes c ON c.empresa_id = e.id WHERE c.situacao IN ('CONECTADO','CONVITE') OR c.codigo IS NOT NULL`).all() as { escritorio_id: number }[];
   for (const x of lista) { try { await sincronizar(x.escritorio_id); } catch { /* erro fica em ultimo_erro */ } }
 }
 
@@ -239,27 +263,47 @@ export function anexarNaSolicitacao(escritorioId: number, usuarioId: number, id:
   return { id: Number(r.lastInsertRowid) };
 }
 
-function conexaoAtiva(escritorioId: number, empresaId: number) {
+/** Quantos aparelhos do cliente estão conectados (Kontor Empresas e celulares). */
+export const aparelhosConectados = (empresaId: number) => aparelhosAtivos(empresaId).length;
+
+/** Envia a mesma mensagem a cada aparelho conectado do cliente (cada um tem a sua chave). Devolve quantos receberam. */
+export async function enviarAoCliente(escritorioId: number, empresaId: number, tipo: string, dados: unknown) {
   const c = cfg(escritorioId);
-  const l = linhaCliente(empresaId);
-  if (!c || l?.situacao !== 'CONECTADO' || !l.vinculo) throw new ErroNegocio('Este cliente não está conectado pelo Kontor Empresas.');
-  return { c, l, chave: chaveSessao(decifrarTexto(c.privada), l.chave_cliente, c.cnpj, l.cnpj) };
+  const lista = aparelhosAtivos(empresaId);
+  if (!c || !lista.length) throw new ErroNegocio('Este cliente não está conectado pelo Kontor Empresas nem pelo aplicativo.');
+  const privada = decifrarTexto(c.privada);
+  let ok = 0;
+  const falhas: string[] = [];
+  for (const a of lista) {
+    try { await enviarEnvelope(token(c), chaveSessao(privada, a.chave, c.cnpj, a.cnpj), tipo, dados, a.vinculo); ok++; }
+    catch (e) {
+      if (e instanceof FalhaApi && e.http === 410) { db.prepare(`UPDATE conexao_aparelhos SET situacao = 'DESCONECTADO', desconectado_em = datetime('now'), motivo = ? WHERE vinculo = ?`).run(e.message, a.vinculo); continue; }
+      falhas.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  atualizarResumo(empresaId);
+  if (!ok) throw new ErroNegocio(falhas[0] ?? 'Nenhum aparelho do cliente está conectado.');
+  return ok;
 }
 
-/** Envia uma guia ao Kontor Empresas do cliente (com ou sem solicitação). */
+const arquivoGuia = (doc: string, tipo: string, periodo: string | null) => `${tipo}-${doc}-${String(periodo ?? '').replace(/\D+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+
+/** Dados de uma guia para o aplicativo/Kontor Empresas, com o código de barras e o Pix lidos do PDF (quando houver). */
+export async function pacoteGuia(g: { tipo: string; titulo: string; periodo: string | null; valor: number | null; validade: string | null; pdf: Buffer }, doc: string, extra: Record<string, unknown> = {}) {
+  const pag = await dadosDePagamento(g.pdf);
+  return { tipo: g.tipo, titulo: g.titulo, periodo: g.periodo, valor: g.valor, validade: g.validade, nome: arquivoGuia(doc, g.tipo, g.periodo), pdf: g.pdf.toString('base64'),
+    linha: pag.linha, pix: pag.pix, enviada_em: new Date().toISOString(), ...extra };
+}
+
+/** Envia uma guia ao cliente (Kontor Empresas e celulares), com ou sem solicitação. */
 export async function enviarGuiaAoCliente(escritorioId: number, usuarioId: number, empresaId: number, guiaId: number, mensagem?: string | null, solicitacaoId?: number) {
   const g = db.prepare('SELECT g.* FROM guias_recalculadas g JOIN empresas e ON e.id = g.empresa_id WHERE g.id = ? AND g.empresa_id = ? AND e.escritorio_id = ?').get(guiaId, empresaId, escritorioId) as any;
   if (!g) throw new ErroNegocio('Guia não encontrada.', 404);
   const s = solicitacaoId ? solicitacao(escritorioId, solicitacaoId) : null;
-  const { c, l, chave } = conexaoAtiva(escritorioId, empresaId);
-  const doc = l.cnpj as string;
-  await enviarEnvelope(token(c), chave, 'GUIA', {
-    pedido: s?.origem_id ?? null, tipo: g.tipo, titulo: g.titulo, periodo: g.periodo, valor: g.valor, validade: g.validade,
-    nome: `${g.tipo}-${doc}-${String(g.periodo ?? '').replace(/\D+/g, '-').replace(/^-|-$/g, '')}.pdf`,
-    pdf: Buffer.from(g.pdf).toString('base64'), mensagem: mensagem?.trim() || null, enviada_em: new Date().toISOString(),
-  }, l.vinculo);
+  const doc = (db.prepare('SELECT documento FROM empresas WHERE id = ?').get(empresaId) as any).documento as string;
+  const n = await enviarAoCliente(escritorioId, empresaId, 'GUIA', await pacoteGuia({ ...g, pdf: Buffer.from(g.pdf) }, doc, { pedido: s?.origem_id ?? null, mensagem: mensagem?.trim() || null }));
   if (s) db.prepare(`UPDATE solicitacoes_guia SET situacao = 'ENVIADA', guia_id = ?, resposta = ?, usuario_id = ?, respondido_em = datetime('now') WHERE id = ?`).run(guiaId, mensagem?.trim() || null, usuarioId, s.id);
-  return { ok: true };
+  return { ok: true, aparelhos: n };
 }
 
 export async function enviarSolicitacao(escritorioId: number, usuarioId: number, id: number, mensagem?: string | null) {
@@ -274,8 +318,7 @@ export async function recusarSolicitacao(escritorioId: number, usuarioId: number
   aberta(s);
   const msg = mensagem.trim();
   if (msg.length < 3) throw new ErroNegocio('Escreva ao cliente o motivo.');
-  const { c, l, chave } = conexaoAtiva(escritorioId, s.empresa_id);
-  await enviarEnvelope(token(c), chave, 'PEDIDO_RESPOSTA', { pedido: s.origem_id, situacao: 'RECUSADO', mensagem: msg }, l.vinculo);
+  await enviarAoCliente(escritorioId, s.empresa_id, 'PEDIDO_RESPOSTA', { pedido: s.origem_id, situacao: 'RECUSADO', mensagem: msg });
   db.prepare(`UPDATE solicitacoes_guia SET situacao = 'RECUSADA', resposta = ?, usuario_id = ?, respondido_em = datetime('now') WHERE id = ?`).run(msg, usuarioId, id);
   return { ok: true };
 }

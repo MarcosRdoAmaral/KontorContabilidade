@@ -1245,3 +1245,8 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
 .cx-selo .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #dialogo h2 .ico { width: 22px; height: 22px; vertical-align: -4px; fill: none; stroke: var(--laranja); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .banner.sucesso { background: var(--verde-fundo); color: var(--verde); border: 1px solid var(--verde); }
+.cx-aps { list-style: none; margin: 6px 0 12px; padding: 0; display: grid; gap: 8px; }
+.cx-ap { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 12px; background: var(--superficie-2); }
+.cx-ap > span:nth-child(2) { flex: 1; min-width: 0; }
+.cx-ap-ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--laranja-fundo); color: var(--laranja); }
+.cx-ap-ic .ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

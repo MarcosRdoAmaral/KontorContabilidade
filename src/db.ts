@@ -1421,6 +1421,23 @@ const migracoes: string[] = [
     grupo TEXT NOT NULL, parte INTEGER NOT NULL, total INTEGER NOT NULL, tipo TEXT NOT NULL, vinculo INTEGER NOT NULL,
     corpo TEXT NOT NULL, criado_em TEXT NOT NULL, PRIMARY KEY (grupo, parte)
   );`,
+  // 54: aplicativo do celular — cada cliente pode ter o Kontor Empresas e vários celulares conectados (um vínculo por aparelho)
+  `CREATE TABLE conexao_aparelhos (
+    vinculo INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    cnpj TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('EMPRESAS','APP')),
+    nome TEXT,
+    chave TEXT NOT NULL,
+    situacao TEXT NOT NULL CHECK (situacao IN ('CONECTADO','DESCONECTADO')),
+    conectado_em TEXT, visto_em TEXT, desconectado_em TEXT, motivo TEXT,
+    notificacoes INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX ix_aparelhos_empresa ON conexao_aparelhos(empresa_id, situacao);
+  INSERT INTO conexao_aparelhos (vinculo, empresa_id, cnpj, tipo, nome, chave, situacao, conectado_em, visto_em, desconectado_em, motivo)
+    SELECT vinculo, empresa_id, cnpj, 'EMPRESAS', 'Kontor Gestão Empresas', chave_cliente, CASE WHEN situacao = 'CONECTADO' THEN 'CONECTADO' ELSE 'DESCONECTADO' END,
+      conectado_em, visto_em, desconectado_em, motivo
+    FROM conexao_clientes WHERE vinculo IS NOT NULL AND chave_cliente IS NOT NULL;`,
 ];
 
 export function migrar(): void {

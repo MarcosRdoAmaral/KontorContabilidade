@@ -4398,7 +4398,7 @@ async function telaCarteira() {
     const pg = paginar(vis, telaCarteira.pg ?? 1, 15); telaCarteira.pg = pg.pagina;
     $('#lista-cli').innerHTML = pg.itens.length ? pg.itens.map((c) => `<tr class="${c.situacao === 'ENCERRADO' ? 'inativo' : ''}">
       <td class="c">${c.eh_escritorio ? '' : `<input type="checkbox" data-sel="${c.id}" ${sel.has(c.id) ? 'checked' : ''} aria-label="Selecionar">`}</td>
-      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong>${c.conexao === 'CONECTADO' ? ` <span class="cx-selo" title="Conectado pelo Kontor Gestão Empresas">${icone('nuvem')}</span>` : ''}${c.nome_fantasia ? `<br><span class="dica">${esc(c.razao_social)}</span>` : ''}</td>
+      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong>${c.conexao === 'CONECTADO' ? ` <span class="cx-selo" title="Conectado pelo aplicativo ou pelo Kontor Gestão Empresas">${icone('nuvem')}</span>` : ''}${c.nome_fantasia ? `<br><span class="dica">${esc(c.razao_social)}</span>` : ''}</td>
       <td style="white-space:nowrap">${fmtDoc(c.documento)}</td>
       <td>${esc(tab.regimes[c.regime] ?? '—')}${c.regime && !c.regime_informado ? '<br><span class="dica">pelo cadastro de emissão</span>' : ''}</td>
       <td>${esc(c.responsavel ?? '—')}</td>
@@ -4473,7 +4473,7 @@ function trazerDeClientes(fora, tab) {
 function maisAcoesCliente(c) {
   const itens = [
     pode('carteira') && !c.eh_escritorio && ['fat:', 'Faturamento (nota, boleto e serviços padrão)'],
-    pode('carteira') && !c.eh_escritorio && ['cx:', c.conexao === 'CONECTADO' ? 'Kontor Empresas (conectado)' : 'Conectar ao Kontor Empresas'],
+    pode('carteira') && !c.eh_escritorio && ['cx:', c.conexao === 'CONECTADO' ? 'Aplicativo e Kontor Empresas (conectado)' : 'Conectar ao aplicativo ou ao Kontor Empresas'],
     pode('honorarios') && !c.eh_escritorio && ['#/honorarios', 'Contrato e honorários'],
     pode('certificados') && ['#/certificados', 'Certificados'],
     pode('captura') && ['#/captura', 'Captura de documentos'],
@@ -5593,28 +5593,32 @@ async function conexaoDoCliente(c) {
   const nome = c.nome_fantasia || c.razao_social;
   const pintar = async (st) => {
     st ??= await api('GET', `/api/escritorio/conexao/clientes/${c.id}`);
-    const passos = `<ol class="vg-passos"><li>No Kontor Gestão Empresas, o cliente abre <strong>Configurações › Contabilidade</strong> e clica em <strong>Conectar ao escritório</strong>.</li><li>Seleciona a empresa ${esc(fmtDoc(c.documento))} e digita o código abaixo.</li><li>Pronto: pedidos de guia e fechamentos passam a chegar em <a href="#/solicitacoes" data-fechar>Solicitações dos clientes</a>.</li></ol>`;
-    const corpo = st.situacao === 'CONECTADO'
-      ? `<div class="banner sucesso">Conectado desde ${dhBr(st.conectado_em)}${st.visto_em ? ` · última atividade do cliente ${dhBr(st.visto_em)}` : ''}.</div>
-         <p class="dica">Código de segurança da conexão: <strong>${esc(st.impressao ?? '—')}</strong> (o cliente vê o mesmo código no Kontor Empresas). Tudo que passa pela conexão vai cifrado de ponta a ponta.</p>
-         ${st.codigo ? `<p class="dica">Há um código novo em aberto (${esc(st.codigo)}, até ${dhBr(st.codigo_expira)}): usado, ele substitui esta conexão.</p>` : ''}`
-      : st.codigo
-        ? `<p>Passe este código ao cliente (vale até ${dhBr(st.codigo_expira)} e só pode ser usado uma vez):</p>
-           <div class="cnpj-copia"><span>${esc(st.codigo)}</span><button type="button" id="cx-copiar">Copiar código</button></div>${passos}`
-        : `${st.situacao === 'DESCONECTADO' ? `<div class="banner teste">Desconectado${st.desconectado_em ? ` em ${dhBr(st.desconectado_em)}` : ''}. ${esc(st.motivo ?? '')}</div>` : ''}
-           <p>Conecte o Kontor Gestão Empresas do cliente ao escritório: ele pede guias atualizadas e manda o fechamento do mês direto para cá, sem e-mail.</p>${passos}`;
-    abrirDialogo(`<h2>${icone('nuvem')} Kontor Empresas — ${esc(nome)}</h2>${corpo}
+    const ativos = st.aparelhos.filter((a) => a.situacao === 'CONECTADO');
+    const antigos = st.aparelhos.filter((a) => a.situacao !== 'CONECTADO').slice(0, 3);
+    const passos = `<ol class="vg-passos">
+      <li><strong>No celular:</strong> o cliente abre <strong>kontorgestao.com.br/app</strong>, toca em <em>Conectar empresa</em>, informa o CNPJ ${esc(fmtDoc(c.documento))} e o código. Depois, <em>Adicionar à tela inicial</em> deixa o ícone do aplicativo no celular.</li>
+      <li><strong>No Kontor Gestão Empresas (computador):</strong> Configurações › Contabilidade › código de conexão.</li></ol>
+      <p class="dica">Cada aparelho usa um código. Para conectar mais um celular (sócio, financeiro), gere outro código.</p>`;
+    const linhaAp = (a) => `<li class="cx-ap"><span class="cx-ap-ic">${icone(a.tipo === 'APP' ? 'celular' : 'nuvem')}</span>
+      <span><strong>${esc(a.nome ?? (a.tipo === 'APP' ? 'Celular' : 'Kontor Gestão Empresas'))}</strong>${a.tipo === 'APP' ? ` <span class="dica">${a.notificacoes ? 'notificações ligadas' : 'notificações desligadas'}</span>` : ''}<br>
+        <span class="dica">${a.situacao === 'CONECTADO' ? `desde ${dhBr(a.conectado_em)}${a.visto_em ? ` · última atividade ${dhBr(a.visto_em)}` : ''} · código de segurança <strong>${esc(a.impressao ?? '—')}</strong>` : `desconectado${a.desconectado_em ? ` em ${dhBr(a.desconectado_em)}` : ''}. ${esc(a.motivo ?? '')}`}</span></span>
+      ${a.situacao === 'CONECTADO' ? `<button type="button" class="perigo" data-desc="${a.vinculo}">Desconectar</button>` : ''}</li>`;
+    abrirDialogo(`<h2>${icone('nuvem')} Aplicativo e Kontor Empresas — ${esc(nome)}</h2>
+      ${ativos.length ? `<h3>Conectados (${ativos.length})</h3><ul class="cx-aps">${ativos.map(linhaAp).join('')}</ul>` : '<p>O cliente recebe as guias do mês no celular, pede guia atualizada e (com o Kontor Gestão Empresas) manda o fechamento do mês direto para cá.</p>'}
+      ${st.codigo ? `<h3>Código para conectar</h3><p>Vale até ${dhBr(st.codigo_expira)} e só pode ser usado uma vez:</p>
+        <div class="cnpj-copia"><span>${esc(st.codigo)}</span><button type="button" id="cx-copiar">Copiar código</button></div>${passos}` : ativos.length ? '' : passos}
+      ${antigos.length ? `<details><summary class="dica">Aparelhos desconectados</summary><ul class="cx-aps">${antigos.map(linhaAp).join('')}</ul></details>` : ''}
       ${st.ultimo_erro ? `<p class="dica cor-ambar">Última sincronização: ${esc(st.ultimo_erro)}</p>` : ''}<p class="erro" id="cx-erro"></p>
       <div class="acoes"><button type="button" data-fechar>Fechar</button>
-        ${st.situacao === 'CONECTADO' ? '<button type="button" class="perigo" id="cx-desc">Desconectar</button>' : ''}
-        <button type="button" class="${st.situacao === 'CONECTADO' ? '' : 'primario'}" id="cx-gerar">${st.codigo ? 'Gerar outro código' : st.situacao === 'CONECTADO' ? 'Gerar código para reconectar' : 'Gerar código de conexão'}</button></div>`, (d) => {
+        <button type="button" class="${st.codigo ? '' : 'primario'}" id="cx-gerar">${st.codigo ? 'Gerar outro código' : ativos.length ? 'Conectar mais um aparelho' : 'Gerar código de conexão'}</button></div>`, (d) => {
       const erro = (e) => ($('#cx-erro').textContent = mensagemErro(e));
       $('#cx-copiar') && ($('#cx-copiar').onclick = async () => { try { await navigator.clipboard.writeText(st.codigo); aviso('Código copiado.'); } catch { aviso(st.codigo); } });
       $('#cx-gerar').onclick = async (ev) => { ev.currentTarget.disabled = true; try { await pintar(await api('POST', `/api/escritorio/conexao/clientes/${c.id}/convite`)); } catch (e) { erro(e); ev.currentTarget.disabled = false; } };
-      $('#cx-desc') && ($('#cx-desc').onclick = async () => {
-        if (!confirm(`Desconectar ${nome}? Ele deixa de mandar pedidos e fechamentos até conectar de novo.`)) return;
-        try { await pintar(await api('DELETE', `/api/escritorio/conexao/clientes/${c.id}`)); if (location.hash.startsWith('#/carteira')) telaCarteira(); } catch (e) { erro(e); }
-      });
+      d.querySelectorAll('[data-desc]').forEach((b) => (b.onclick = async () => {
+        const a = st.aparelhos.find((x) => x.vinculo === Number(b.dataset.desc));
+        if (!confirm(`Desconectar "${a?.nome ?? 'aparelho'}" de ${nome}? Ele deixa de receber guias até conectar de novo.`)) return;
+        try { await pintar(await api('DELETE', `/api/escritorio/conexao/clientes/${c.id}/aparelhos/${b.dataset.desc}`)); if (location.hash.startsWith('#/carteira')) telaCarteira(); } catch (e) { erro(e); }
+      }));
     });
   };
   try { await pintar(); } catch (e) { aviso(mensagemErro(e)); }
@@ -6131,8 +6135,9 @@ async function abrirFechamento(empresaId, mes, aoFim, foco = 'PGDASD') {
     </fieldset>` : ''}
     <fieldset class="sub"><legend>Enviar ao cliente</legend>
       <div class="cartao" style="white-space:pre-wrap">${d.mensagem.map(esc).join('\n')}</div>
-      <p class="dica">${d.email ? `E-mail: ${esc(d.email)}` : 'Sem e-mail no cadastro.'}${d.fone ? ` · WhatsApp: ${esc(d.fone)}` : ''}${d.envios.length ? ` · último envio ${dhBr(d.envios[0].enviado_em)} (${d.envios[0].canal === 'EMAIL' ? 'e-mail' : 'WhatsApp'})` : ''}</p>
-      <div class="acoes"><button type="button" id="fc-email" ${d.email ? '' : 'disabled'}>Enviar por e-mail (com a guia)</button><button type="button" id="fc-whats" ${d.fone ? '' : 'disabled'} title="Abre o WhatsApp com a mensagem e baixa as guias para anexar">WhatsApp</button></div>
+      <p class="dica">${d.email ? `E-mail: ${esc(d.email)}` : 'Sem e-mail no cadastro.'}${d.fone ? ` · WhatsApp: ${esc(d.fone)}` : ''}${d.app ? ` · <span class="cor-verde">aplicativo: ${d.app} aparelho(s) conectado(s)</span>` : ''}${d.envios.length ? ` · último envio ${dhBr(d.envios[0].enviado_em)} (${({ EMAIL: 'e-mail', WHATSAPP: 'WhatsApp', APP: 'aplicativo' })[d.envios[0].canal] ?? d.envios[0].canal})` : ''}</p>
+      ${d.app ? '<p class="dica">Cliente conectado: ao enviar por e-mail ou WhatsApp, a guia também chega no aplicativo (uma vez por mês). Para mandar de novo só pelo aplicativo, use o botão abaixo.</p>' : ''}
+      <div class="acoes"><button type="button" id="fc-email" ${d.email ? '' : 'disabled'}>Enviar por e-mail (com a guia)</button><button type="button" id="fc-whats" ${d.fone ? '' : 'disabled'} title="Abre o WhatsApp com a mensagem e baixa as guias para anexar">WhatsApp</button>${d.app ? '<button type="button" id="fc-app">Enviar pelo aplicativo</button>' : ''}</div>
     </fieldset>
     <p class="erro" id="fc-erro"></p>
     <div class="acoes"><button data-fechar>Fechar</button></div></div>`, (dlg) => {
@@ -6166,15 +6171,20 @@ async function abrirFechamento(empresaId, mes, aoFim, foco = 'PGDASD') {
     };
     dlg.querySelector('#fc-email').onclick = async (ev) => {
       ev.target.disabled = true;
-      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'EMAIL', tipo: foco }); aviso(`${foco === 'PGDASD' ? 'DAS' : 'DARF'} enviado para ${r.enviadoPara}.`); recarregar(); }
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'EMAIL', tipo: foco }); aviso(`${foco === 'PGDASD' ? 'DAS' : 'DARF'} enviado para ${r.enviadoPara}${r.aparelhos ? ` e para o aplicativo (${r.aparelhos} aparelho(s))` : ''}.${r.avisoApp ? ` ${r.avisoApp}` : ''}`); recarregar(); }
       catch (e) { ev.target.disabled = false; erro(e); }
     };
+    dlg.querySelector('#fc-app') && (dlg.querySelector('#fc-app').onclick = async (ev) => {
+      ev.target.disabled = true;
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'APP', tipo: foco }); aviso(`${foco === 'PGDASD' ? 'DAS' : 'DARF'} enviado pelo ${r.enviadoPara}.`); recarregar(); }
+      catch (e) { ev.target.disabled = false; erro(e); }
+    });
     dlg.querySelector('#fc-whats').onclick = async () => {
       const fone = String(d.fone ?? '').replace(/\D/g, '');
       window.open(`https://wa.me/${fone.length <= 11 ? '55' + fone : fone}?text=${encodeURIComponent(d.mensagem.join('\n'))}`, '_blank');
       if (foco === 'PGDASD' && pg?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=PGDASD&qual=guia`, `DAS-${d.documento}-${mes}.pdf`);
       if (foco === 'DCTFWEB' && dc?.tem_guia) baixar(`/api/escritorio/fechamento/${empresaId}/arquivo?mes=${mes}&tipo=DCTFWEB&qual=guia`, `DARF-DCTFWeb-${d.documento}-${mes}.pdf`);
-      try { await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'WHATSAPP', tipo: foco }); aviso('Mensagem aberta no WhatsApp e a guia baixada para anexar. Envio registrado.'); } catch (e) { erro(e); }
+      try { const r = await api('POST', `/api/escritorio/fechamento/${empresaId}/enviar`, { mes, canal: 'WHATSAPP', tipo: foco }); aviso(`Mensagem aberta no WhatsApp e a guia baixada para anexar. Envio registrado.${r.aparelhos ? ` A guia também foi para o aplicativo (${r.aparelhos} aparelho(s)).` : ''}${r.avisoApp ? ` ${r.avisoApp}` : ''}`); } catch (e) { erro(e); }
     };
   });
 }
@@ -6943,6 +6953,7 @@ const ICONES = {
   senhas: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3M12 15v2',
   honorarios: 'M14 3H6v18h12V7zM14 3v4h4M9 12h6M9 16h6',
   captura: 'M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.6 8 4 4 0 0 1 17 18M12 12v8M9 15l3-3 3 3',
+  celular: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2',
   solicitacoes: 'M4 13h4l2 3h4l2-3h4M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM12 3v7M9.5 7.5 12 10l2.5-2.5',
   emitir: 'M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14h6',
   agenda: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 13v3l2 1',
