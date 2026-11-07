@@ -97,6 +97,13 @@ const REGRAS: Regra[] = [
   { m: 'PUT', r: /^\/api\/escritorio\/situacao-fiscal\/agenda$/, mod: 'adm' },
   { r: /^\/api\/escritorio\/situacao-fiscal(\/consultar|\/agenda|\/\d+(\/pdf)?|\/guias\/\d+|\/avisar\/\d+|\/aviso\/\d+|\/marcar-aviso)?$|^\/api\/escritorio\/guias\/\d+\/pdf$|^\/api\/escritorio\/fgts\/(resultados|\d+(\/documentos(\/\d+)?)?)$/, mod: ['situacao'] },
   { r: /^\/api\/escritorio\/integra\/(previa|conferir)$/, mod: ['obrigacoes'] },
+  // conexão com o Kontor Gestão Empresas: conectar pela Carteira; pedidos de guia com quem gera guias; fechamentos com a Captura
+  { r: /^\/api\/escritorio\/conexao\/clientes\/\d+$/, m: 'GET', mod: ['carteira', 'situacao', 'controle'] },
+  { r: /^\/api\/escritorio\/conexao\/clientes\/\d+(\/convite)?$/, mod: ['carteira'] },
+  { m: 'POST', r: /^\/api\/escritorio\/conexao\/sincronizar$/, mod: ['carteira', 'situacao', 'controle', 'captura'] },
+  { m: 'POST', r: /^\/api\/escritorio\/conexao\/clientes\/\d+\/guias\/\d+\/enviar$/, mod: ['situacao', 'controle'] },
+  { r: /^\/api\/escritorio\/solicitacoes(\/\d+\/(gerar|anexar|enviar|recusar))?$/, mod: ['situacao', 'controle'] },
+  { m: 'GET', r: /^\/api\/escritorio\/recebidos(\/\d+\/zip)?$/, mod: ['captura', 'controle'] },
   { r: /^\/api\/me(\/empresa|\/senha|\/avatar)?$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/inicio$/, mod: 'livre' }, // os lembretes já saem filtrados pelos módulos do usuário
   { m: 'GET', r: /^\/api\/licenca$/, mod: 'livre' },

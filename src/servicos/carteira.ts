@@ -128,7 +128,8 @@ export function listarCarteira(escritorioId: number, empresas: number[] | null =
       (SELECT MIN(t.vencimento) FROM tarefas t WHERE t.empresa_id = e.id AND t.vencimento >= ? AND t.status IN ('PENDENTE','ANDAMENTO')) AS proximo_vencimento,
       (SELECT c.valor FROM contratos c WHERE c.empresa_id = e.id AND c.status = 'ASSINADO' ORDER BY c.inicio DESC LIMIT 1) AS honorario,
       (SELECT c.status FROM contratos c WHERE c.empresa_id = e.id AND c.status != 'ENCERRADO' ORDER BY c.id DESC LIMIT 1) AS contrato_status,
-      (SELECT MIN(validade) FROM certificados ce WHERE ce.empresa_id = e.id AND ce.renovado = 0) AS outro_cert_validade
+      (SELECT MIN(validade) FROM certificados ce WHERE ce.empresa_id = e.id AND ce.renovado = 0) AS outro_cert_validade,
+      (SELECT cx.situacao FROM conexao_clientes cx WHERE cx.empresa_id = e.id) AS conexao
     FROM empresas e LEFT JOIN usuarios u ON u.id = e.responsavel_id
     WHERE e.escritorio_id = ? AND e.na_carteira = 1 ${filtro} ORDER BY (e.situacao = 'ENCERRADO'), COALESCE(e.nome_fantasia, e.razao_social)`).all(hoje, hoje, escritorioId, ...(empresas ?? [])) as any[];
   return linhas.map((c) => {

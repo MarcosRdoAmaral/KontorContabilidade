@@ -1358,6 +1358,69 @@ const migracoes: string[] = [
   -- as cobranças que já existem ganham um evento inicial com a situação atual
   INSERT INTO eventos_cobranca (cobranca_id, tipo, para, dados, criado_em)
     SELECT id, 'SITUACAO_INICIAL', status, json_object('valor', valor, 'vencimento', vencimento), criado_em FROM cobrancas;`,
+  // 53: conexão com o Kontor Gestão Empresas — registro do escritório na API, clientes conectados, pedidos de guia e fechamentos recebidos
+  `CREATE TABLE conexao_escritorio (
+    escritorio_id INTEGER PRIMARY KEY REFERENCES escritorios(id),
+    api_id INTEGER NOT NULL,
+    token TEXT NOT NULL,          -- cifrado pelo cofre
+    privada TEXT NOT NULL,        -- chave privada X25519, cifrada pelo cofre
+    publica TEXT NOT NULL,
+    cnpj TEXT NOT NULL,
+    nome TEXT NOT NULL,
+    registrado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    ultimo_sync TEXT,
+    ultimo_erro TEXT
+  );
+  CREATE TABLE conexao_clientes (
+    empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
+    cnpj TEXT NOT NULL,
+    situacao TEXT NOT NULL CHECK (situacao IN ('CONVITE','CONECTADO','DESCONECTADO')),
+    vinculo INTEGER,
+    chave_cliente TEXT,
+    codigo TEXT,                  -- cifrado pelo cofre
+    codigo_expira TEXT,
+    conectado_em TEXT,
+    visto_em TEXT,
+    desconectado_em TEXT,
+    motivo TEXT
+  );
+  CREATE INDEX ix_conexao_vinculo ON conexao_clientes(vinculo);
+  CREATE TABLE solicitacoes_guia (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    origem_id TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('DAS','DCTFWEB','DARF')),
+    periodo TEXT NOT NULL,
+    data_pagamento TEXT,
+    descricao TEXT,
+    observacao TEXT,
+    solicitante TEXT,
+    situacao TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (situacao IN ('PENDENTE','PRONTA','ENVIADA','RECUSADA','CANCELADA')),
+    guia_id INTEGER REFERENCES guias_recalculadas(id) ON DELETE SET NULL,
+    resposta TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    criado_em TEXT NOT NULL,
+    respondido_em TEXT,
+    UNIQUE (empresa_id, origem_id)
+  );
+  CREATE TABLE fechamentos_recebidos (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    grupo TEXT NOT NULL UNIQUE,
+    de TEXT NOT NULL, ate TEXT NOT NULL,
+    nome TEXT NOT NULL,
+    arquivos TEXT NOT NULL DEFAULT '[]',
+    tamanho INTEGER NOT NULL,
+    zip BLOB NOT NULL,
+    enviado_por TEXT,
+    recebido_em TEXT NOT NULL,
+    baixado_em TEXT
+  );
+  CREATE INDEX ix_fech_recebidos ON fechamentos_recebidos(empresa_id, recebido_em);
+  CREATE TABLE IF NOT EXISTS conexao_partes (
+    grupo TEXT NOT NULL, parte INTEGER NOT NULL, total INTEGER NOT NULL, tipo TEXT NOT NULL, vinculo INTEGER NOT NULL,
+    corpo TEXT NOT NULL, criado_em TEXT NOT NULL, PRIMARY KEY (grupo, parte)
+  );`,
 ];
 
 export function migrar(): void {

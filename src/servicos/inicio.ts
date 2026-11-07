@@ -60,6 +60,14 @@ export function lembretesDoDia(escritorioId: number, modulos: string[], empresas
         AND r.competencia = (SELECT MAX(competencia) FROM pgdas_receitas x WHERE x.empresa_id = r.empresa_id) ${filtro}`, escritorioId, hoje.slice(0, 4));
     if (sub) l.push({ nivel: 'ATENCAO', texto: `${plural(sub, 'cliente do Simples está', 'clientes do Simples estão')} perto ou acima do sublimite.`, link: '#/monitor' });
   }
+  if (pode('situacao') || pode('controle')) {
+    const sol = n(`SELECT COUNT(*) AS n FROM solicitacoes_guia s JOIN empresas e ON e.id = s.empresa_id WHERE e.escritorio_id = ? AND s.situacao IN ('PENDENTE','PRONTA') ${filtro}`, escritorioId);
+    if (sol) l.push({ nivel: 'ATENCAO', texto: `${plural(sol, 'pedido de guia atualizada', 'pedidos de guia atualizada')} do Kontor Empresas ${sol === 1 ? 'aguarda' : 'aguardam'} resposta.`, link: '#/solicitacoes' });
+  }
+  if (pode('captura') || pode('controle')) {
+    const rec = n(`SELECT COUNT(*) AS n FROM fechamentos_recebidos f JOIN empresas e ON e.id = f.empresa_id WHERE e.escritorio_id = ? AND f.baixado_em IS NULL AND f.recebido_em >= ? ${filtro}`, escritorioId, somaDias(hoje, -30));
+    if (rec) l.push({ nivel: 'PENDENTE', texto: `${plural(rec, 'fechamento recebido', 'fechamentos recebidos')} do Kontor Empresas ainda não ${rec === 1 ? 'foi baixado' : 'foram baixados'}.`, link: '#/solicitacoes/recebidos' });
+  }
   const ordem = { ATENCAO: 0, PENDENTE: 1, INFO: 2 };
   return l.sort((a, b) => ordem[a.nivel] - ordem[b.nivel]);
 }

@@ -1,3 +1,4 @@
+import { sincronizarTodos } from './conexao/escritorio.js';
 import { envioDpAutomatico } from './servicos/envio-dp.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -89,6 +90,12 @@ export async function criarApp() {
   if (process.env.ENVIO_DP_AUTOMATICO !== '0') {
     const timerDp = setInterval(() => { envioDpAutomatico().catch((e) => app.log.error(e)); }, 5 * 60e3);
     timerDp.unref();
+  }
+  // Conexão com o Kontor Gestão Empresas: a cada 2 min traz pedidos de guia e fechamentos dos clientes conectados
+  if (process.env.CONEXAO_AUTOMATICA !== '0') {
+    const timerCx = setInterval(() => { sincronizarTodos().catch((e) => app.log.error(e)); }, 2 * 60e3);
+    timerCx.unref();
+    setTimeout(() => { sincronizarTodos().catch((e) => app.log.error(e)); }, 20e3).unref();
   }
   // Resumo diário de prazos por e-mail (Configurações > Avisos)
   if (process.env.AVISOS_AUTOMATICOS !== '0') {

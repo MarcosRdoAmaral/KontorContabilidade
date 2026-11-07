@@ -23,6 +23,7 @@ import { Acesso, acessoDoCliente, listarAcessos, revelarAcesso, salvarAcesso } f
 import { analisarControle, importarControle } from './servicos/importar-controle.js';
 import { DocumentoFgts, ResultadoFgts, detalheFgts, documentoFgts, salvarDocumentoFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
+import { DadosDarf, anexarNaSolicitacao, convidar, desconectar, enviarGuiaAoCliente, enviarSolicitacao, gerarDaSolicitacao, listarRecebidos, listarSolicitacoes, recusarSolicitacao, sincronizar, statusConexao, zipRecebido } from './conexao/escritorio.js';
 import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
@@ -445,5 +446,52 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/avisos', async (req) => ({ ...configAvisos(u(req).escritorio_id), previa: montarResumo(u(req).escritorio_id) }));
     api.put('/api/escritorio/avisos', async (req) => { salvarAvisos(u(req).escritorio_id, ConfigAvisos.parse(req.body)); return { ok: true }; });
     api.post('/api/escritorio/avisos/enviar', async (req) => enviarResumo(u(req).escritorio_id, true));
+
+    // ---- conexão com o Kontor Gestão Empresas do cliente ----
+    api.get('/api/escritorio/conexao/clientes/:id', async (req) => { checar(req, id(req)); return statusConexao(u(req).escritorio_id, id(req)); });
+    api.post('/api/escritorio/conexao/clientes/:id/convite', async (req) => { checar(req, id(req)); return convidar(u(req).escritorio_id, id(req)); });
+    api.delete('/api/escritorio/conexao/clientes/:id', async (req) => { checar(req, id(req)); return desconectar(u(req).escritorio_id, id(req)); });
+    api.post('/api/escritorio/conexao/sincronizar', async (req) => sincronizar(u(req).escritorio_id));
+    api.post('/api/escritorio/conexao/clientes/:id/guias/:guia/enviar', async (req) => {
+      checar(req, id(req));
+      const b = z.object({ mensagem: z.string().max(1000).nullish() }).parse(req.body ?? {});
+      return enviarGuiaAoCliente(u(req).escritorio_id, u(req).id, id(req), id(req, 'guia'), b.mensagem);
+    });
+    const daSolicitacao = (req: FastifyRequest) => {
+      const s = db.prepare('SELECT empresa_id FROM solicitacoes_guia WHERE id = ?').get(id(req)) as { empresa_id: number } | undefined;
+      if (!s) throw new ErroNegocio('Solicitação não encontrada.', 404);
+      checar(req, s.empresa_id);
+    };
+    api.get('/api/escritorio/solicitacoes', async (req) => listarSolicitacoes(u(req).escritorio_id, empresasDoUsuario(u(req))));
+    api.post('/api/escritorio/solicitacoes/:id/gerar', async (req) => {
+      daSolicitacao(req);
+      const b = req.body && Object.keys(req.body as object).length ? DadosDarf.parse(req.body) : undefined;
+      return gerarDaSolicitacao(u(req).escritorio_id, u(req).id, id(req), b);
+    });
+    api.post('/api/escritorio/solicitacoes/:id/anexar', { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
+      daSolicitacao(req);
+      const b = z.object({ pdf: z.string().min(10), valor: z.number().positive().nullish(), validade: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(), titulo: z.string().max(160).nullish() }).parse(req.body);
+      return anexarNaSolicitacao(u(req).escritorio_id, u(req).id, id(req), b);
+    });
+    api.post('/api/escritorio/solicitacoes/:id/enviar', async (req) => {
+      daSolicitacao(req);
+      return enviarSolicitacao(u(req).escritorio_id, u(req).id, id(req), z.object({ mensagem: z.string().max(1000).nullish() }).parse(req.body ?? {}).mensagem);
+    });
+    api.post('/api/escritorio/solicitacoes/:id/recusar', async (req) => {
+      daSolicitacao(req);
+      return recusarSolicitacao(u(req).escritorio_id, u(req).id, id(req), z.object({ mensagem: z.string().max(1000) }).parse(req.body).mensagem);
+    });
+    api.get('/api/escritorio/recebidos', async (req) => {
+      const e = Number((req.query as any)?.empresa) || undefined;
+      if (e) checar(req, e);
+      return listarRecebidos(u(req).escritorio_id, empresasDoUsuario(u(req)), e);
+    });
+    api.get('/api/escritorio/recebidos/:id/zip', async (req, reply) => {
+      const f = db.prepare('SELECT empresa_id FROM fechamentos_recebidos WHERE id = ?').get(id(req)) as { empresa_id: number } | undefined;
+      if (!f) throw new ErroNegocio('Fechamento não encontrado.', 404);
+      checar(req, f.empresa_id);
+      const z2 = zipRecebido(u(req).escritorio_id, id(req));
+      return reply.type('application/zip').header('Content-Disposition', `attachment; filename="${z2.nome}"`).send(z2.zip);
+    });
   });
 }

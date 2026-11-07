@@ -133,9 +133,3 @@ export async function buscarEnvelopes(token: string, chaveDe: (vinculo: number) 
   db.prepare("DELETE FROM conexao_partes WHERE criado_em < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')").run();
   return { recebidos, erros };
 }
-
-/** Tabela das partes recebidas (vai na migração de cada sistema). */
-export const SQL_PARTES = `CREATE TABLE IF NOT EXISTS conexao_partes (
-    grupo TEXT NOT NULL, parte INTEGER NOT NULL, total INTEGER NOT NULL, tipo TEXT NOT NULL, vinculo INTEGER NOT NULL,
-    corpo TEXT NOT NULL, criado_em TEXT NOT NULL, PRIMARY KEY (grupo, parte)
-  );`;

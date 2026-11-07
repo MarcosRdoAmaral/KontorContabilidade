@@ -502,11 +502,12 @@ function primeiraTelaDoMenu() {
 function telaPermitida(nome) {
   const modulo = { radar: 'radar', monitor: 'visao', resumo: 'captura', controle: 'controle', senhas: 'senhas', situacao: 'situacao', visao: 'visao', carteira: 'carteira', obrigacoes: 'obrigacoes', certificados: 'certificados', honorarios: 'honorarios', captura: 'captura', painel: 'painel', emitir: 'emitir', notas: 'notas', nota: 'notas', cobrancas: 'cobrancas', banco: 'empresas', despesas: 'despesas', compras: 'compras', entradas: 'compras', 'compra-nova': 'compras', 'nfe-sefaz': 'compras', tributacao: 'tributacao', extrato: 'despesas', cartao: 'despesas', agenda: 'emitir', relatorios: 'relatorios', tomadores: 'tomadores', servicos: 'servicos', empresas: 'empresas' }[nome];
   if (nome === 'monitor' || nome === 'situacao') return estado.usuario.modulos.includes('visao') || estado.usuario.modulos.includes('situacao');
+  if (nome === 'solicitacoes') return ['situacao', 'controle', 'captura'].some((m) => estado.usuario.modulos.includes(m));
   return nome === 'config' || nome === 'inicio' || (modulo && estado.usuario.modulos.includes(modulo));
 }
 
 const rotas = {
-  inicio: telaInicio, radar: telaRadar, monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura,
+  inicio: telaInicio, radar: telaRadar, monitor: telaMonitor, resumo: telaResumoXml, controle: telaControle, senhas: telaSenhas, situacao: telaSituacao, visao: telaEscritorio, carteira: telaCarteira, obrigacoes: telaObrigacoes, certificados: telaCertificados, honorarios: telaHonorarios, captura: telaCaptura, solicitacoes: telaSolicitacoes,
   painel: telaPainel, emitir: telaEmitir, notas: telaNotas, nota: telaNota,
   cobrancas: telaCobrancas, banco: telaBanco, despesas: telaDespesas, compras: telaCompras, entradas: telaCompras, 'compra-nova': telaCompraManual, 'nfe-sefaz': telaNfeSefaz, tributacao: telaTributacao, extrato: telaExtrato, cartao: telaCartao, agenda: telaAgenda, relatorios: telaRelatorios, tomadores: telaTomadores, servicos: telaServicos, empresas: telaEmpresas, config: telaConfig,
 };
@@ -528,7 +529,7 @@ function rotear() {
   const naoContratado = (estado.usuario.naoContratados ?? []).find((m) => m.id === nome);
   if (naoContratado) return telaNaoContratado(naoContratado);
   if (!manual && !telaPermitida(nome)) { conteudo.innerHTML = '<div class="vazio"><p>Seu usuário não tem acesso a esta funcionalidade.</p></div>'; return; }
-  const precisaEmpresa = !manual && !['inicio', 'painel', 'empresas', 'nota', 'config', 'visao', 'monitor', 'resumo', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas'].includes(nome);
+  const precisaEmpresa = !manual && !['inicio', 'painel', 'empresas', 'nota', 'config', 'visao', 'monitor', 'resumo', 'carteira', 'obrigacoes', 'certificados', 'honorarios', 'captura', 'situacao', 'controle', 'senhas', 'solicitacoes'].includes(nome);
   if (precisaEmpresa && !empresa()) {
     conteudo.innerHTML = `<div class="vazio"><p>Cadastre o primeiro cliente na carteira para começar.</p>
       ${estado.usuario.papel !== 'cliente' ? '<a href="#/carteira">Ir para a Carteira de clientes</a>' : ''}</div>`;
@@ -4397,7 +4398,7 @@ async function telaCarteira() {
     const pg = paginar(vis, telaCarteira.pg ?? 1, 15); telaCarteira.pg = pg.pagina;
     $('#lista-cli').innerHTML = pg.itens.length ? pg.itens.map((c) => `<tr class="${c.situacao === 'ENCERRADO' ? 'inativo' : ''}">
       <td class="c">${c.eh_escritorio ? '' : `<input type="checkbox" data-sel="${c.id}" ${sel.has(c.id) ? 'checked' : ''} aria-label="Selecionar">`}</td>
-      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong>${c.nome_fantasia ? `<br><span class="dica">${esc(c.razao_social)}</span>` : ''}</td>
+      <td><strong>${esc(c.nome_fantasia || c.razao_social)}</strong>${c.conexao === 'CONECTADO' ? ` <span class="cx-selo" title="Conectado pelo Kontor Gestão Empresas">${icone('nuvem')}</span>` : ''}${c.nome_fantasia ? `<br><span class="dica">${esc(c.razao_social)}</span>` : ''}</td>
       <td style="white-space:nowrap">${fmtDoc(c.documento)}</td>
       <td>${esc(tab.regimes[c.regime] ?? '—')}${c.regime && !c.regime_informado ? '<br><span class="dica">pelo cadastro de emissão</span>' : ''}</td>
       <td>${esc(c.responsavel ?? '—')}</td>
@@ -4472,6 +4473,7 @@ function trazerDeClientes(fora, tab) {
 function maisAcoesCliente(c) {
   const itens = [
     pode('carteira') && !c.eh_escritorio && ['fat:', 'Faturamento (nota, boleto e serviços padrão)'],
+    pode('carteira') && !c.eh_escritorio && ['cx:', c.conexao === 'CONECTADO' ? 'Kontor Empresas (conectado)' : 'Conectar ao Kontor Empresas'],
     pode('honorarios') && !c.eh_escritorio && ['#/honorarios', 'Contrato e honorários'],
     pode('certificados') && ['#/certificados', 'Certificados'],
     pode('captura') && ['#/captura', 'Captura de documentos'],
@@ -4487,6 +4489,7 @@ function maisAcoesCliente(c) {
       d.close();
       const h = b.dataset.ir;
       if (h === 'fat:') faturamentoDoCliente(c.id);
+      else if (h === 'cx:') conexaoDoCliente(c);
       else if (h.startsWith('emp:')) irParaEmpresa(c.id, h.slice(4)); else location.hash = h;
     }));
   });
@@ -5401,6 +5404,220 @@ async function telaCaptura() {
   }));
   conteudo.querySelectorAll('[data-pac]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/captura/${b.dataset.pac}/pacote?mes=${mes}`, `documentos_${mes}.zip`)));
   conteudo.querySelectorAll('[data-notas]').forEach((b) => (b.onclick = () => notasCapturadas(lista.find((l) => l.id === Number(b.dataset.notas)), mes)));
+}
+
+// ---------------------------------------------------------------------------
+// Conexão com o Kontor Gestão Empresas: pedidos de guia e fechamentos enviados pelos clientes conectados
+// ---------------------------------------------------------------------------
+const SOLICITACAO = { PENDENTE: ['Aguardando', 'PZ-HOJE'], PRONTA: ['Guia pronta', 'PZ-BREVE'], ENVIADA: ['Enviada', 'PZ-ENTREGUE'], RECUSADA: ['Recusada', 'PZ-ATRASADA'], CANCELADA: ['Cancelada pelo cliente', 'PZ-DISPENSADA'] };
+const TIPO_GUIA = { DAS: 'DAS do Simples', DCTFWEB: 'Guia da DCTFWeb', DARF: 'DARF' };
+const lerPdf = (f) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
+
+async function telaSolicitacoes(aba) {
+  aba = aba === 'recebidos' ? 'recebidos' : 'pedidos';
+  conteudo.innerHTML = `
+    ${cabecaTela('solicitacoes', 'Solicitações dos clientes', 'Pedidos de guia atualizada e fechamentos do mês enviados pelos clientes conectados ao Kontor Gestão Empresas. Para conectar um cliente, use o menu ⋮ dele na Carteira.',
+      `<button type="button" class="orc-ouro" id="sol-sinc">${icone('refazer')} Buscar agora</button>`)}
+    <nav class="abas"><a href="#/solicitacoes" class="${aba === 'pedidos' ? 'ativo' : ''}">Pedidos de guia</a><a href="#/solicitacoes/recebidos" class="${aba === 'recebidos' ? 'ativo' : ''}">Fechamentos recebidos</a></nav>
+    <div id="sol-corpo"></div>`;
+  $('#sol-sinc').onclick = async (ev) => {
+    const b = ev.currentTarget; b.disabled = true;
+    try { const r = await api('POST', '/api/escritorio/conexao/sincronizar'); aviso(r.erros?.length ? r.erros.join(' ') : r.recebidos ? `${r.recebidos} novidade(s) recebida(s).` : 'Nada novo dos clientes.'); telaSolicitacoes(aba); }
+    catch (e) { aviso(mensagemErro(e)); b.disabled = false; }
+  };
+  buscaTopoCarteira('Buscar clientes...');
+  return aba === 'recebidos' ? abaRecebidos() : abaPedidosGuia();
+}
+
+async function abaPedidosGuia() {
+  const lista = await api('GET', '/api/escritorio/solicitacoes');
+  const f = abaPedidosGuia.f ??= { q: '', sit: 'ABERTAS' };
+  const abertas = lista.filter((s) => ['PENDENTE', 'PRONTA'].includes(s.situacao));
+  const corpo = $('#sol-corpo');
+  corpo.innerHTML = `
+    ${cartoesKpi([
+      { ic: 'tl-alerta', tom: abertas.length ? 'vermelho' : 'verde', rotulo: 'Aguardando resposta', valor: abertas.length, sub: abertas.length ? 'gere ou anexe a guia e envie' : 'nenhum pedido em aberto', filtro: 'ABERTAS' },
+      { ic: 'tl-check', tom: 'verde', rotulo: 'Guias enviadas', valor: lista.filter((s) => s.situacao === 'ENVIADA').length, sub: 'pelo Kontor Empresas', filtro: 'ENVIADA' },
+      { ic: 'tl-relogio', tom: 'azul', rotulo: 'Recusadas ou canceladas', valor: lista.filter((s) => ['RECUSADA', 'CANCELADA'].includes(s.situacao)).length, sub: 'com o motivo registrado', filtro: 'FECHADAS' },
+    ])}
+    <section class="tl-tabela solta">
+      <div class="tl-cab-lista"><h2>${icone('tl-doc')} Pedidos de guia atualizada</h2>
+        <label class="tl-busca">${icone('busca')}<input type="search" id="sol-q" value="${esc(f.q)}" placeholder="Buscar por cliente..." aria-label="Buscar por cliente"></label>
+        <label>Situação <select id="sol-sit"><option value="ABERTAS">Em aberto</option><option value="ENVIADA">Enviadas</option><option value="FECHADAS">Recusadas e canceladas</option><option value="">Todas</option></select></label></div>
+      <div class="rolagem"><table><thead><tr><th>Recebido em</th><th>Cliente</th><th>Guia pedida</th><th>Pagar em</th><th>Pedido por</th><th>Situação</th><th class="c">Ações</th></tr></thead><tbody id="sol-lista"></tbody></table></div>
+      <div id="sol-pag"></div>
+    </section>
+    ${lista.length ? '' : dicaTela('Como funciona', 'O cliente conectado pede a guia no Kontor Gestão Empresas (menu Guias da contabilidade). O pedido aparece aqui; você gera a guia pelo Integra Contador, ou anexa o PDF, e envia. A guia chega no Kontor Empresas do cliente com valor, validade e PDF.')}`;
+  $('#sol-sit').value = f.sit;
+  const pintar = () => {
+    const q = norm(f.q);
+    const vis = lista.filter((s) => (!f.sit || (f.sit === 'ABERTAS' ? ['PENDENTE', 'PRONTA'].includes(s.situacao) : f.sit === 'FECHADAS' ? ['RECUSADA', 'CANCELADA'].includes(s.situacao) : s.situacao === f.sit))
+      && (!q || norm(s.cliente).includes(q) || s.documento.includes(f.q.replace(/\D/g, '') || '§')));
+    const pg = paginar(vis, abaPedidosGuia.pg ?? 1, 15); abaPedidosGuia.pg = pg.pagina;
+    $('#sol-lista').innerHTML = pg.itens.length ? pg.itens.map((s) => {
+      const aberto = ['PENDENTE', 'PRONTA'].includes(s.situacao);
+      const menu = aberto ? [[`data-gerar="${s.id}"`, s.guia_id ? 'Gerar a guia de novo' : 'Gerar a guia'], [`data-anexar="${s.id}"`, s.guia_id ? 'Anexar outro PDF' : 'Anexar PDF da guia'], [`data-recusar="${s.id}"`, 'Recusar o pedido']] : [];
+      return `<tr><td>${dhBr(s.criado_em)}</td>
+        <td><strong>${esc(s.cliente)}</strong><br><span class="dica">${fmtDoc(s.documento)}</span></td>
+        <td><strong>${esc(TIPO_GUIA[s.tipo])}</strong> <span class="dica">PA ${esc(s.periodo)}</span>${s.descricao ? `<br><span class="dica">${esc(s.descricao)}</span>` : ''}
+          ${s.guia_id ? `<br><a href="javascript:void(0)" data-pdf="${s.guia_id}">${esc(s.guia_titulo ?? 'Ver guia')}</a>${s.guia_valor != null ? ` · ${brl(s.guia_valor)}` : ''}${s.guia_validade ? ` <span class="dica">válida até ${dataBr(s.guia_validade)}</span>` : ''}` : ''}</td>
+        <td>${s.data_pagamento ? dataBr(s.data_pagamento) : '<span class="dica">—</span>'}</td>
+        <td>${esc(s.solicitante ?? '—')}${s.observacao ? `<br><span class="dica">“${esc(s.observacao)}”</span>` : ''}</td>
+        <td>${selo(SOLICITACAO[s.situacao])}${s.resposta ? `<br><span class="dica">${esc(s.resposta)}</span>` : ''}${s.respondido_em && !aberto ? `<br><span class="dica">${dhBr(s.respondido_em)}${s.respondido_por ? ` · ${esc(s.respondido_por)}` : ''}</span>` : ''}</td>
+        <td class="c"><span class="tl-ac tl-ac-texto">${s.situacao === 'PENDENTE' ? `<button type="button" data-gerar="${s.id}">${icone('refazer')} Gerar guia</button>` : s.situacao === 'PRONTA' ? `<button type="button" class="tl-btn-ouro" data-enviar="${s.id}">${icone('aviao')} Enviar</button>` : ''}${menuLinhaTl(menu)}</span></td></tr>`;
+    }).join('') : `<tr><td colspan="7"><div class="vazio" style="border:0">${lista.length ? 'Nenhum pedido com esses filtros.' : 'Nenhum pedido de guia ainda.'}</div></td></tr>`;
+    $('#sol-pag').innerHTML = vis.length ? pg.html : '';
+    $('#sol-pag').querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => { abaPedidosGuia.pg = Number(b.dataset.pg); pintar(); }));
+    ligarMenusLinha();
+    const achar = (b, k) => lista.find((s) => s.id === Number(b.dataset[k]));
+    corpo.querySelectorAll('[data-pdf]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/guias/${b.dataset.pdf}/pdf`, 'guia.pdf', true)));
+    corpo.querySelectorAll('[data-gerar]').forEach((b) => (b.onclick = () => gerarGuiaPedido(achar(b, 'gerar'))));
+    corpo.querySelectorAll('[data-anexar]').forEach((b) => (b.onclick = () => anexarGuiaPedido(achar(b, 'anexar'))));
+    corpo.querySelectorAll('[data-enviar]').forEach((b) => (b.onclick = () => enviarGuiaPedido(achar(b, 'enviar'))));
+    corpo.querySelectorAll('[data-recusar]').forEach((b) => (b.onclick = () => recusarPedido(achar(b, 'recusar'))));
+  };
+  $('#sol-q').oninput = (ev) => { f.q = ev.target.value; abaPedidosGuia.pg = 1; pintar(); };
+  $('#sol-sit').onchange = (ev) => { f.sit = ev.target.value; abaPedidosGuia.pg = 1; pintar(); };
+  corpo.querySelectorAll('.kp[data-kp]').forEach((k) => (k.onclick = () => { f.sit = k.dataset.kp; $('#sol-sit').value = f.sit; abaPedidosGuia.pg = 1; pintar(); }));
+  pintar();
+}
+
+const resumoPedido = (s) => `<dl class="dados"><dt>Cliente</dt><dd>${esc(s.cliente)}</dd><dt>Guia</dt><dd>${esc(TIPO_GUIA[s.tipo])} — PA ${esc(s.periodo)}${s.descricao ? ` · ${esc(s.descricao)}` : ''}</dd>
+  <dt>Pagar em</dt><dd>${s.data_pagamento ? dataBr(s.data_pagamento) : 'não informado'}</dd>${s.observacao ? `<dt>Observação</dt><dd>${esc(s.observacao)}</dd>` : ''}</dl>`;
+
+function gerarGuiaPedido(s) {
+  const darf = s.tipo === 'DARF';
+  abrirDialogo(`<h2>Gerar ${esc(TIPO_GUIA[s.tipo])}</h2>${resumoPedido(s)}
+    <form id="fg">
+      ${darf ? `<div class="grade"><label>Código da receita <input name="receita" required placeholder="0000-00"></label><label>Descrição <input name="descricao" value="${esc(s.descricao ?? '')}"></label>
+        <label>Vencimento original <input type="date" name="vencimento" required></label><label>Valor do principal (R$) <input name="valor" required inputmode="decimal"></label>
+        <label>Pagar em <input type="date" name="data" value="${esc(s.data_pagamento ?? '')}"></label><label>Número de referência <input name="referencia"></label></div>` : ''}
+      <p class="dica">A guia é calculada pelo Integra Contador${s.tipo === 'DCTFWEB' ? ', com multa e juros até a data de pagamento pedida (ou hoje)' : s.tipo === 'DAS' ? ', com o valor em cobrança do período' : ''}. Cada guia é uma chamada cobrada pelo SERPRO. Depois de gerar, confira o PDF e clique em Enviar.</p>
+      <p class="erro" id="fg-erro"></p>
+      <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="primario">Gerar guia</button></div></form>`, (d) => {
+    $('#fg').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target));
+      const bt = ev.submitter; bt.disabled = true; bt.textContent = 'Gerando…';
+      try {
+        const corpo = darf ? { receita: fd.receita, descricao: fd.descricao || null, vencimento: fd.vencimento, valor: Number(String(fd.valor).replace(/\./g, '').replace(',', '.')), data: fd.data || null, referencia: fd.referencia || null } : {};
+        const g = await api('POST', `/api/escritorio/solicitacoes/${s.id}/gerar`, corpo);
+        d.close(); aviso(`Guia gerada${g.valor != null ? `: ${brl(g.valor)}` : ''}. Confira e clique em Enviar.`); telaSolicitacoes();
+      } catch (e) { $('#fg-erro').textContent = mensagemErro(e); bt.disabled = false; bt.textContent = 'Gerar guia'; }
+    };
+  });
+}
+
+function anexarGuiaPedido(s) {
+  abrirDialogo(`<h2>Anexar a guia em PDF</h2>${resumoPedido(s)}
+    <form id="fa"><label>Arquivo PDF <input type="file" name="arq" accept="application/pdf,.pdf" required></label>
+      <div class="grade"><label>Valor (R$) <input name="valor" inputmode="decimal"></label><label>Pagar até <input type="date" name="validade" value="${esc(s.data_pagamento ?? '')}"></label></div>
+      <p class="erro" id="fa-erro"></p>
+      <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="primario">Anexar</button></div></form>`, (d) => {
+    $('#fa').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const arq = ev.target.arq.files[0]; if (!arq) return;
+      const v = ev.target.valor.value.trim();
+      try {
+        await api('POST', `/api/escritorio/solicitacoes/${s.id}/anexar`, { pdf: await lerPdf(arq), valor: v ? Number(v.replace(/\./g, '').replace(',', '.')) : null, validade: ev.target.validade.value || null });
+        d.close(); aviso('Guia anexada. Confira e clique em Enviar.'); telaSolicitacoes();
+      } catch (e) { $('#fa-erro').textContent = mensagemErro(e); }
+    };
+  });
+}
+
+function enviarGuiaPedido(s) {
+  abrirDialogo(`<h2>Enviar a guia ao cliente</h2>${resumoPedido(s)}
+    <p>${esc(s.guia_titulo ?? 'Guia')}${s.guia_valor != null ? ` · <strong>${brl(s.guia_valor)}</strong>` : ''}${s.guia_validade ? ` · válida até ${dataBr(s.guia_validade)}` : ''} <a href="javascript:void(0)" id="eg-pdf">ver PDF</a></p>
+    <form id="eg"><label>Mensagem ao cliente (opcional) <textarea name="mensagem" rows="3" maxlength="1000"></textarea></label>
+      <p class="dica">A guia chega no Kontor Gestão Empresas do cliente, em Guias da contabilidade.</p>
+      <p class="erro" id="eg-erro"></p>
+      <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="primario">Enviar</button></div></form>`, (d) => {
+    $('#eg-pdf').onclick = () => baixar(`/api/escritorio/guias/${s.guia_id}/pdf`, 'guia.pdf', true);
+    $('#eg').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const bt = ev.submitter; bt.disabled = true;
+      try { await api('POST', `/api/escritorio/solicitacoes/${s.id}/enviar`, { mensagem: ev.target.mensagem.value || null }); d.close(); aviso('Guia enviada ao cliente.'); telaSolicitacoes(); }
+      catch (e) { $('#eg-erro').textContent = mensagemErro(e); bt.disabled = false; }
+    };
+  });
+}
+
+function recusarPedido(s) {
+  abrirDialogo(`<h2>Recusar o pedido</h2>${resumoPedido(s)}
+    <form id="rp"><label>Motivo (o cliente vê esta mensagem) <textarea name="mensagem" rows="3" maxlength="1000" required placeholder="Ex.: esta competência já foi paga; a guia do mês é enviada no dia 15."></textarea></label>
+      <p class="erro" id="rp-erro"></p>
+      <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="perigo">Recusar</button></div></form>`, (d) => {
+    $('#rp').onsubmit = async (ev) => {
+      ev.preventDefault();
+      try { await api('POST', `/api/escritorio/solicitacoes/${s.id}/recusar`, { mensagem: ev.target.mensagem.value }); d.close(); aviso('Pedido recusado; o cliente recebe o motivo.'); telaSolicitacoes(); }
+      catch (e) { $('#rp-erro').textContent = mensagemErro(e); }
+    };
+  });
+}
+
+async function abaRecebidos() {
+  const lista = await api('GET', '/api/escritorio/recebidos');
+  const f = abaRecebidos.f ??= { q: '' };
+  const corpo = $('#sol-corpo');
+  const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  corpo.innerHTML = `
+    ${cartoesKpi([
+      { ic: 'nuvem', tom: 'laranja', rotulo: 'Fechamentos recebidos', valor: lista.length, sub: 'enviados pelo Kontor Empresas' },
+      { ic: 'tl-baixar', tom: lista.some((x) => !x.baixado_em) ? 'vermelho' : 'verde', rotulo: 'Ainda não baixados', valor: lista.filter((x) => !x.baixado_em).length, sub: 'pacotes novos' },
+    ])}
+    <section class="tl-tabela solta">
+      <div class="tl-cab-lista"><h2>${icone('tl-lista')} Pacotes do mês</h2>
+        <label class="tl-busca">${icone('busca')}<input type="search" id="rec-q" value="${esc(f.q)}" placeholder="Buscar por cliente..." aria-label="Buscar por cliente"></label></div>
+      <div class="rolagem"><table><thead><tr><th>Recebido em</th><th>Cliente</th><th>Período</th><th>Conteúdo</th><th>Enviado por</th><th class="c">Ações</th></tr></thead><tbody id="rec-lista"></tbody></table></div>
+    </section>
+    ${dicaTela('O que vem no pacote', 'O fechamento que o cliente monta no Kontor Gestão Empresas: XML e PDF das notas emitidas no período e o extrato da movimentação em OFX, pronto para importar no sistema contábil.')}`;
+  const pintar = () => {
+    const q = norm(f.q);
+    const vis = lista.filter((x) => !q || norm(x.cliente).includes(q));
+    $('#rec-lista').innerHTML = vis.length ? vis.map((x) => `<tr><td>${dhBr(x.recebido_em)}${x.baixado_em ? '' : ' <span class="selo PZ-BREVE">Novo</span>'}</td>
+      <td><strong>${esc(x.cliente)}</strong><br><span class="dica">${fmtDoc(x.documento)}</span></td>
+      <td>${dataBr(x.de)} a ${dataBr(x.ate)}</td>
+      <td>${[x.xml && `${x.xml} XML`, x.pdf && `${x.pdf} PDF`, x.ofx && `${x.ofx} OFX`].filter(Boolean).join(' · ') || `${x.arquivos} arquivo(s)`}<br><span class="dica">${kb(x.tamanho)}</span></td>
+      <td>${esc(x.enviado_por ?? '—')}</td>
+      <td class="c"><span class="tl-ac"><button type="button" data-zip="${x.id}" title="Baixar o pacote (ZIP)" aria-label="Baixar o pacote (ZIP)">${icone('tl-baixar')}</button></span></td></tr>`).join('')
+      : `<tr><td colspan="6"><div class="vazio" style="border:0">${lista.length ? 'Nenhum pacote para esse cliente.' : 'Nenhum fechamento recebido ainda. Os clientes conectados mandam pelo Kontor Gestão Empresas (Fechamento para a contabilidade).'}</div></td></tr>`;
+    corpo.querySelectorAll('[data-zip]').forEach((b) => (b.onclick = async () => { await baixar(`/api/escritorio/recebidos/${b.dataset.zip}/zip`, 'fechamento.zip'); const x = lista.find((y) => y.id === Number(b.dataset.zip)); if (x && !x.baixado_em) { x.baixado_em = 'agora'; pintar(); } }));
+  };
+  $('#rec-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
+  pintar();
+}
+
+/** Carteira > ⋮ do cliente > Kontor Empresas: gera o código de conexão e mostra a situação. */
+async function conexaoDoCliente(c) {
+  const nome = c.nome_fantasia || c.razao_social;
+  const pintar = async (st) => {
+    st ??= await api('GET', `/api/escritorio/conexao/clientes/${c.id}`);
+    const passos = `<ol class="vg-passos"><li>No Kontor Gestão Empresas, o cliente abre <strong>Configurações › Contabilidade</strong> e clica em <strong>Conectar ao escritório</strong>.</li><li>Seleciona a empresa ${esc(fmtDoc(c.documento))} e digita o código abaixo.</li><li>Pronto: pedidos de guia e fechamentos passam a chegar em <a href="#/solicitacoes" data-fechar>Solicitações dos clientes</a>.</li></ol>`;
+    const corpo = st.situacao === 'CONECTADO'
+      ? `<div class="banner sucesso">Conectado desde ${dhBr(st.conectado_em)}${st.visto_em ? ` · última atividade do cliente ${dhBr(st.visto_em)}` : ''}.</div>
+         <p class="dica">Código de segurança da conexão: <strong>${esc(st.impressao ?? '—')}</strong> (o cliente vê o mesmo código no Kontor Empresas). Tudo que passa pela conexão vai cifrado de ponta a ponta.</p>
+         ${st.codigo ? `<p class="dica">Há um código novo em aberto (${esc(st.codigo)}, até ${dhBr(st.codigo_expira)}): usado, ele substitui esta conexão.</p>` : ''}`
+      : st.codigo
+        ? `<p>Passe este código ao cliente (vale até ${dhBr(st.codigo_expira)} e só pode ser usado uma vez):</p>
+           <div class="cnpj-copia"><span>${esc(st.codigo)}</span><button type="button" id="cx-copiar">Copiar código</button></div>${passos}`
+        : `${st.situacao === 'DESCONECTADO' ? `<div class="banner teste">Desconectado${st.desconectado_em ? ` em ${dhBr(st.desconectado_em)}` : ''}. ${esc(st.motivo ?? '')}</div>` : ''}
+           <p>Conecte o Kontor Gestão Empresas do cliente ao escritório: ele pede guias atualizadas e manda o fechamento do mês direto para cá, sem e-mail.</p>${passos}`;
+    abrirDialogo(`<h2>${icone('nuvem')} Kontor Empresas — ${esc(nome)}</h2>${corpo}
+      ${st.ultimo_erro ? `<p class="dica cor-ambar">Última sincronização: ${esc(st.ultimo_erro)}</p>` : ''}<p class="erro" id="cx-erro"></p>
+      <div class="acoes"><button type="button" data-fechar>Fechar</button>
+        ${st.situacao === 'CONECTADO' ? '<button type="button" class="perigo" id="cx-desc">Desconectar</button>' : ''}
+        <button type="button" class="${st.situacao === 'CONECTADO' ? '' : 'primario'}" id="cx-gerar">${st.codigo ? 'Gerar outro código' : st.situacao === 'CONECTADO' ? 'Gerar código para reconectar' : 'Gerar código de conexão'}</button></div>`, (d) => {
+      const erro = (e) => ($('#cx-erro').textContent = mensagemErro(e));
+      $('#cx-copiar') && ($('#cx-copiar').onclick = async () => { try { await navigator.clipboard.writeText(st.codigo); aviso('Código copiado.'); } catch { aviso(st.codigo); } });
+      $('#cx-gerar').onclick = async (ev) => { ev.currentTarget.disabled = true; try { await pintar(await api('POST', `/api/escritorio/conexao/clientes/${c.id}/convite`)); } catch (e) { erro(e); ev.currentTarget.disabled = false; } };
+      $('#cx-desc') && ($('#cx-desc').onclick = async () => {
+        if (!confirm(`Desconectar ${nome}? Ele deixa de mandar pedidos e fechamentos até conectar de novo.`)) return;
+        try { await pintar(await api('DELETE', `/api/escritorio/conexao/clientes/${c.id}`)); if (location.hash.startsWith('#/carteira')) telaCarteira(); } catch (e) { erro(e); }
+      });
+    });
+  };
+  try { await pintar(); } catch (e) { aviso(mensagemErro(e)); }
 }
 
 async function notasCapturadas(cli, mes) {
@@ -6726,6 +6943,7 @@ const ICONES = {
   senhas: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3M12 15v2',
   honorarios: 'M14 3H6v18h12V7zM14 3v4h4M9 12h6M9 16h6',
   captura: 'M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.6 8 4 4 0 0 1 17 18M12 12v8M9 15l3-3 3 3',
+  solicitacoes: 'M4 13h4l2 3h4l2-3h4M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM12 3v7M9.5 7.5 12 10l2.5-2.5',
   emitir: 'M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14h6',
   agenda: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 13v3l2 1',
   notas: 'M15 3H8v14h11V7zM15 3v4h4M5 7v14h11',

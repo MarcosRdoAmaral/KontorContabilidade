@@ -1241,3 +1241,7 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
 .tl-ac button:disabled { opacity: .4; cursor: not-allowed; }
 .tl-topo .mon-atual { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .tl-topo .mon-atual .dica { line-height: 1.3; }
+.cx-selo { display: inline-flex; vertical-align: middle; color: var(--verde); }
+.cx-selo .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#dialogo h2 .ico { width: 22px; height: 22px; vertical-align: -4px; fill: none; stroke: var(--laranja); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.banner.sucesso { background: var(--verde-fundo); color: var(--verde); border: 1px solid var(--verde); }
