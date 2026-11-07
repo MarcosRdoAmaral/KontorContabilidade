@@ -1840,21 +1840,26 @@ async function telaCompras() {
   if (!est.ate) { const [a, m] = mesAtual().split('-').map(Number); est.ate = `${mesAtual()}-${String(new Date(a, m, 0).getDate()).padStart(2, '0')}`; }
   const { base, tiposEntrada, opcTipo, opcCat } = await dadosDeEntrada();
   const d = await api('GET', `${base}/compras?de=${est.de}&ate=${est.ate}${est.q ? '&q=' + encodeURIComponent(est.q) : ''}`);
+  const pg = paginar(d.compras, est.pg || 1);
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Compras</h1><p class="sutil">Lance as notas de entrada e consulte o que já foi lançado. Importe o XML da NF-e (cada nota abre com o resumo e o parcelamento para conferir) ou lance a compra manualmente. Para buscar as notas emitidas contra o CNPJ, use <a href="#/nfe-sefaz">Buscar NF-e (SEFAZ)</a>.</p></div>
-      <div><button class="primario" id="imp-xml">Importar XML da NF-e</button><input type="file" id="arq-xml" accept=".xml,text/xml,application/xml" multiple hidden>
-        <button id="nova-compra">Lançar compra manual</button></div></div>
-    <form id="busca-comp" class="grade" style="align-items:end">
-      <label class="largo">Buscar <input type="search" name="q" value="${esc(est.q)}" placeholder="Fornecedor, nº da nota, CNPJ ou chave de acesso"></label>
+    ${cabecaTela('compras', 'Compras', 'Lance as notas de entrada e consulte o que já foi lançado. Cada XML de NF-e abre com o resumo e o parcelamento para você conferir. Para buscar as notas emitidas contra o seu CNPJ, use <a href="#/nfe-sefaz">Buscar NF-e (SEFAZ)</a>.',
+      `<button class="tl-btn-ouro" id="imp-xml">${icone('tl-xml')} Importar XML da NF-e</button><input type="file" id="arq-xml" accept=".xml,text/xml,application/xml" multiple hidden>
+       <button class="tl-btn-borda" id="nova-compra">${icone('o-mais')} Lançar compra manual</button>`)}
+    ${cartoesKpi([
+      { ic: 'tl-doc', tom: 'laranja', valor: d.compras.length, rotulo: 'Notas no período' },
+      { ic: 'tl-moedas', tom: 'verde', valor: compacto(d.total), rotulo: 'Valor total das compras' },
+      { ic: 'o-predio', tom: 'neutro', valor: d.fornecedores.length ? esc(d.fornecedores[0].nome) : '—', rotulo: d.fornecedores.length ? `Maior fornecedor · ${brl(d.fornecedores[0].total)}` : 'Maior fornecedor' },
+    ])}
+    <form class="tl-filtros" id="busca-comp">
       <label>De <input type="date" name="de" value="${est.de}"></label><label>Até <input type="date" name="ate" value="${est.ate}"></label>
-      <div><button class="primario" type="submit">Buscar</button></div></form>
-    <div class="resumo">
-      <div class="cartao"><div class="sutil">Total no período</div><div class="valor">${compacto(d.total)}</div><div class="dica">${d.compras.length} nota(s)</div></div>
-      <div class="cartao"><div class="sutil">Maiores fornecedores</div>${d.fornecedores.length ? d.fornecedores.map((f) => `<div class="dica">${esc(f.nome)} · <strong>${brl(f.total)}</strong></div>`).join('') : '<div class="dica">—</div>'}</div>
-    </div>
-    ${d.compras.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Emissão</th><th>Fornecedor</th><th>NF</th><th class="num">Itens</th><th class="num">Total</th><th>Despesas</th><th></th></tr></thead><tbody>${d.compras.map(linhaCompra).join('')}</tbody></table></div>`
-      : '<div class="vazio">Nenhuma nota encontrada neste período e busca.</div>'}`;
-  $('#busca-comp').onsubmit = (e) => { e.preventDefault(); const f = e.target; Object.assign(est, { q: f.q.value.trim(), de: f.de.value || '0000-01-01', ate: f.ate.value || '9999-12-31' }); telaCompras(); };
+      <label class="busca">Buscar <input type="search" name="q" value="${esc(est.q)}" placeholder="Fornecedor, nº da nota, CNPJ ou chave de acesso"></label>
+      <span class="tl-acoes"><button type="button" id="comp-limpar">${icone('tl-limpar')} Limpar</button><button type="submit" class="tl-btn-ouro">${icone('o-busca')} Buscar</button></span></form>
+    ${d.compras.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Emissão</th><th>Fornecedor</th><th>NF</th><th class="num">Itens</th><th class="num">Total</th><th>Despesas</th><th></th></tr></thead><tbody>${pg.itens.map(linhaCompra).join('')}</tbody></table></div>${pg.html}</div>`
+      : vazioTela('compras', 'Nenhuma nota encontrada', 'Não há compras lançadas neste período e busca. Importe o XML de uma NF-e ou lance uma compra manualmente.')}
+    ${dicaTela('Dica', 'Importe vários XMLs de uma vez: cada nota abre para conferência antes de entrar.')}`;
+  conteudo.querySelectorAll('.tl-pag [data-pg]').forEach((b) => (b.onclick = () => { est.pg = Number(b.dataset.pg); telaCompras(); }));
+  $('#comp-limpar').onclick = () => { Object.assign(est, { q: '', de: mesAtual() + '-01', ate: '', pg: 1 }); telaCompras(); };
+  $('#busca-comp').onsubmit = (e) => { e.preventDefault(); const f = e.target; Object.assign(est, { q: f.q.value.trim(), de: f.de.value || '0000-01-01', ate: f.ate.value || '9999-12-31', pg: 1 }); telaCompras(); };
   conteudo.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detalheCompra(Number(b.dataset.ver), telaCompras); }));
   conteudo.querySelectorAll('tr[data-c]').forEach((tr) => (tr.onclick = () => detalheCompra(Number(tr.dataset.c), telaCompras)));
   $('#nova-compra').onclick = () => { location.hash = '#/compra-nova'; };
