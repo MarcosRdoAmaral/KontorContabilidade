@@ -1656,7 +1656,7 @@ async function telaTributacao(aba) {
   if (aba === 'tipos') aba = 'perfis';
   if (!abas.some((a) => a[0] === aba)) aba = 'perfis';
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Tributação</h1><p class="sutil">Cadastre os impostos uma vez, monte cada tributação (alíquotas, retenções e dados da nota) e vincule serviços e compras a ela.</p></div></div>
+    ${cabecaTela('tributacao', 'Tributação', 'Cadastre os impostos uma vez, monte cada tributação (alíquotas, retenções e dados da nota) e vincule serviços e compras a ela.')}
     <nav class="abas" aria-label="Tributação">${abas.map(([k, n]) => `<a href="#/tributacao/${k}" class="${k === aba ? 'ativo' : ''}">${n}</a>`).join('')}</nav>
     <div id="trib-corpo"></div>`;
   await { perfis: abaPerfis, impostos: abaImpostos }[aba]();
@@ -1673,14 +1673,19 @@ async function abaPerfis() {
   const nomeImp = Object.fromEntries(impostos.map((i) => [i.codigo, i.nome]));
   const pct = (n) => String(n ?? 0).replace('.', ',') + '%';
   $('#trib-corpo').innerHTML = `
-    <div class="topo"><div><h2 style="margin-top:0">Tributações</h2><p class="sutil">Uma tributação é um conjunto de impostos com alíquota, redução de base, retenção e vigência. As alíquotas mudam ao longo da transição do IBS/CBS: cadastre uma linha por período.</p></div>
-      <div><button class="primario" id="novo-perfil">Nova tributação</button> <button id="gerar-serv" title="Cria uma tributação a partir das retenções já cadastradas em cada serviço">Criar a partir dos serviços</button></div></div>
+    ${cartoesKpi([
+      { ic: 'tributacao', tom: 'laranja', valor: perfis.length, rotulo: 'Tributações cadastradas' },
+      { ic: 'tl-check', tom: 'verde', valor: perfis.filter((p) => p.usos).length, rotulo: 'Em uso (com vínculos)' },
+      { ic: 'tl-relogio', tom: 'neutro', valor: perfis.filter((p) => !p.usos).length, rotulo: 'Sem uso' },
+    ])}
+    <div class="tl-filtros"><div style="flex:1 1 320px"><p class="sutil" style="margin:0">Uma tributação é um conjunto de impostos com alíquota, redução de base, retenção e vigência. As alíquotas mudam ao longo da transição do IBS/CBS: cadastre uma linha por período.</p></div>
+      <div class="sefaz-acoes"><button class="tl-btn-ouro" id="novo-perfil">Nova tributação</button> <button class="tl-btn-borda" id="gerar-serv" title="Cria uma tributação a partir das retenções já cadastradas em cada serviço">Criar a partir dos serviços</button></div></div>
     ${perfis.length ? perfis.map((p, i) => `<div class="cartao"><div class="topo" style="margin:0"><h3 style="margin:0">${esc(p.nome)} <span class="dica">${p.sentido === 'ENTRADA' ? 'Compras' : 'Serviços'}${p.padrao ? ' · padrão' : ''} · ${p.usos ? p.usos + ' vínculo(s)' : 'sem uso'}</span></h3><div><button data-ed="${i}">Editar</button>${podeExcluirRegistros() ? ` <button data-ex="${p.id}">Excluir</button>` : ''}</div></div>
       ${p.descricao ? `<p class="sutil">${esc(p.descricao)}</p>` : ''}
       <table class="tabela"><thead><tr><th>Imposto</th><th class="num">Alíquota</th><th class="num">Redução da base</th><th>Retido</th><th>CST / cClassTrib</th><th>Vigência</th></tr></thead><tbody>
       ${p.itens.map((it) => `<tr><td>${esc(nomeImp[it.imposto_codigo] ?? it.imposto_codigo)}</td><td class="num">${pct(it.aliquota)}</td><td class="num">${it.reducao_base ? pct(it.reducao_base) : '—'}</td><td>${it.retido ? 'Sim' : '—'}</td><td>${esc([it.cst, it.c_class_trib].filter(Boolean).join(' / ') || '—')}</td>
         <td>${it.vigencia_ini || it.vigencia_fim ? `${it.vigencia_ini ? dataBr(it.vigencia_ini) : 'sempre'} → ${it.vigencia_fim ? dataBr(it.vigencia_fim) : 'sem fim'}` : 'sempre'}</td></tr>`).join('') || '<tr><td colspan="6" class="dica">Sem impostos.</td></tr>'}
-      </tbody></table></div>`).join('') : '<div class="vazio">Nenhuma tributação. Crie a primeira (ex.: "Serviço — ISS 5%") ou use "Criar a partir dos serviços".</div>'}`;
+      </tbody></table></div>`).join('') : vazioTela('tributacao', 'Nenhuma tributação cadastrada', 'Crie a primeira (ex.: "Serviço — ISS 5%") ou use "Criar a partir dos serviços".')}`;
   const form = (p) => {
     p ??= { itens: [{ imposto_codigo: 'ISS', aliquota: 0, reducao_base: 0, retido: false }], sentido: 'SAIDA', destino: 'RECEITA' };
     const linha = (it) => `<tr class="it">
