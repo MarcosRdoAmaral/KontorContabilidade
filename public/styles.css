@@ -1025,3 +1025,5 @@ a.kp:hover { border-color: var(--laranja); }
 .sefaz .banner.perigo { background: var(--vermelho-fundo); color: var(--vermelho); border: 1px solid currentColor; margin: 12px 0; }
 .sefaz > .acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
 .sefaz .sefaz-topo { margin: 12px 0; }
+
+.tl-sub { font-size: 1.1rem; margin: 22px 0 10px; }

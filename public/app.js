@@ -2599,13 +2599,14 @@ async function telaDespesas() {
   const porCat = Object.entries(d.despesas.reduce((a, x) => ({ ...a, [x.categoria]: (a[x.categoria] ?? 0) + x.valor }), {})).sort((a, b) => b[1] - a[1]);
   const bal = fin?.balanco.at(-1);
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Despesas e balanço</h1><p class="sutil">Receitas = boletos pagos no mês (mais entradas do extrato classificadas como “Outras receitas”). Despesas = o que você lançar aqui + as saídas classificadas em Extrato e conciliação.</p></div>
-      <label>Mês <input type="month" id="mes-desp" value="${mes}"></label></div>
-    ${bal ? `<div class="resumo">
-      <div class="cartao"><div class="sutil">Receitas</div><div class="valor" style="color:${COR.verde}">${compacto(bal.receitas)}</div></div>
-      <div class="cartao"><div class="sutil">Despesas</div><div class="valor" style="color:${COR.vermelho}">${compacto(bal.despesas)}</div><div class="dica">${d.despesas.length} lançamento(s)</div></div>
-      <div class="cartao"><div class="sutil">Resultado</div><div class="valor" style="color:${bal.resultado < 0 ? COR.vermelho : COR.verde}">${compacto(bal.resultado)}</div><div class="dica">${bal.receitas ? 'margem de ' + Math.round(bal.resultado / bal.receitas * 100) + '%' : 'sem receitas no mês'}</div></div>
-    </div>
+    ${cabecaTela('despesas', 'Despesas e balanço', 'Receitas = boletos pagos no mês (mais entradas do extrato classificadas como “Outras receitas”). Despesas = o que você lançar aqui + as saídas classificadas em Extrato e conciliação.',
+      `<div class="tl-mes"><span class="orc-ico">${icone('calendario')}</span><label>Mês <input type="month" id="mes-desp" value="${mes}"></label></div>
+       <button class="tl-btn-borda" id="cats">Categorias</button><button class="tl-btn-ouro" id="nova-desp">${icone('o-mais')} Lançar despesa</button>`)}
+    ${bal ? `${cartoesKpi([
+      { ic: 'tl-moedas', tom: 'verde', valor: compacto(bal.receitas), rotulo: 'Receitas do mês' },
+      { ic: 'tl-doc', tom: 'vermelho', valor: compacto(bal.despesas), rotulo: `Despesas · ${d.despesas.length} lançamento(s)` },
+      { ic: 'tl-check', tom: bal.resultado < 0 ? 'vermelho' : 'verde', valor: compacto(bal.resultado), rotulo: `Resultado · ${bal.receitas ? 'margem de ' + Math.round(bal.resultado / bal.receitas * 100) + '%' : 'sem receitas no mês'}` },
+    ])}
     <div class="duas-colunas">
       <div class="cartao"><h2 style="margin-top:0">Últimos 6 meses</h2>
         ${graficoBarras(fin.balanco.map((x) => x.mes), [{ cor: COR.verde, valores: fin.balanco.map((x) => x.receitas) }, { cor: COR.vermelho, valores: fin.balanco.map((x) => x.despesas) }], 5)}
@@ -2614,12 +2615,11 @@ async function telaDespesas() {
         <table class="tabela"><thead><tr><th>Mês</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Resultado</th></tr></thead><tbody>
         ${[...fin.balanco].reverse().map((x) => `<tr><td>${nomeMes(x.mes)}</td><td class="num">${brl(x.receitas)}</td><td class="num">${brl(x.despesas)}</td><td class="num" style="color:${x.resultado < 0 ? COR.vermelho : COR.verde}">${brl(x.resultado)}</td></tr>`).join('')}</tbody></table></div>
     </div>` : ''}
-    <div class="topo"><h2>Lançamentos de ${nomeMes(mes)} <span class="sutil">· ${brl(total)}</span></h2>
-      <div><button id="cats">Categorias</button> <button class="primario" id="nova-desp">Lançar despesa</button></div></div>
-    ${d.despesas.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Pago com</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+    <h2 class="tl-sub">Lançamentos de ${nomeMes(mes)} <span class="sutil">· ${brl(total)}</span></h2>
+    ${d.despesas.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Pago com</th><th class="num">Valor</th><th></th></tr></thead><tbody>
       ${d.despesas.map((x) => `<tr><td>${dataBr(x.data)}</td><td>${esc(x.categoria)}</td><td>${esc(x.descricao ?? '')}</td><td>${x.forma_pagamento ? FORMAS_PGTO[x.forma_pagamento] : '<span class="dica">—</span>'}${x.origem === 'MANUAL' && x.extrato_lancamento_id ? ' <span class="dica">· conciliada com o extrato</span>' : ''}${x.origem === 'EXTRATO' ? ' <span class="dica">· extrato</span>' : x.origem === 'CARTAO' ? ' <span class="dica">· fatura</span>' : ''}</td><td class="num">${brl(x.valor)}</td>
-        <td class="acoes-linha">${x.origem === 'EXTRATO' ? '<a href="#/extrato" class="dica">ver no extrato</a>' : x.origem === 'CARTAO' ? '<a href="#/cartao" class="dica">ver na fatura</a>' : `<button data-ed="${x.id}">Editar</button> ${podeExcluirRegistros() ? `<button data-ex="${x.id}">Excluir</button>` : ''}`}</td></tr>`).join('')}</tbody></table></div>
-      ${porCat.length > 1 ? `<p class="sutil">Por categoria: ${porCat.map(([c, v]) => `${esc(c)} ${brl(v)}`).join(' · ')}</p>` : ''}` : '<div class="vazio">Nenhuma despesa lançada neste mês.</div>'}`;
+        <td class="acoes-linha">${x.origem === 'EXTRATO' ? '<a href="#/extrato" class="dica">ver no extrato</a>' : x.origem === 'CARTAO' ? '<a href="#/cartao" class="dica">ver na fatura</a>' : `<button data-ed="${x.id}">Editar</button> ${podeExcluirRegistros() ? `<button data-ex="${x.id}">Excluir</button>` : ''}`}</td></tr>`).join('')}</tbody></table></div></div>
+      ${porCat.length > 1 ? `<p class="sutil">Por categoria: ${porCat.map(([c, v]) => `${esc(c)} ${brl(v)}`).join(' · ')}</p>` : ''}` : vazioTela('despesas', 'Nenhuma despesa neste mês', 'Lance as despesas da empresa para acompanhar o resultado do mês.', `<button class="tl-btn-ouro" id="vz-desp">${icone('o-mais')} Lançar despesa</button>`)}`;
   $('#mes-desp').onchange = (ev) => { telaDespesas.mes = ev.target.value || mesAtual(); telaDespesas(); };
   const formDespesa = (x) => abrirDialogo(`
     <form id="form-desp"><h2>${x ? 'Editar despesa' : 'Lançar despesa'}</h2>
@@ -2644,6 +2644,7 @@ async function telaDespesas() {
     };
   });
   $('#nova-desp').onclick = () => formDespesa(null);
+  $('#vz-desp')?.addEventListener('click', () => formDespesa(null));
   conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formDespesa(d.despesas.find((x) => x.id === Number(b.dataset.ed)))));
   conteudo.querySelectorAll('[data-ex]').forEach((b) => (b.onclick = () => abrirDialogo(`
     <form id="form-ex"><h2>Excluir despesa?</h2><p>Esta ação não pode ser desfeita.</p>
