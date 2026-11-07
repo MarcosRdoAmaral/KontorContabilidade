@@ -3586,14 +3586,20 @@ async function telaEmpresas() {
   await carregarEmpresas();
   const lista = estado.empresas;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Empresas</h1><p class="sutil">Empresas que usam e gerenciam o sistema (o escritório e quem emite por ele), cada uma com seu certificado A1. Os clientes da contabilidade ficam em Escritório &gt; Carteira de clientes.</p></div>
-      <button class="primario" id="novo">Cadastrar empresa</button></div>
-    ${lista.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Empresa</th><th>Documento</th><th>Regime</th><th>Ambiente</th><th>Certificado</th><th></th></tr></thead><tbody>
+    ${cabecaTela('empresas', 'Empresas', `Empresas que usam e gerenciam o sistema (o escritório e quem emite por ele), cada uma com seu certificado A1. Os clientes da contabilidade ficam em Escritório &gt; Carteira de clientes.`, `<button class="tl-btn-ouro" id="novo">${icone('o-mais')} Cadastrar empresa</button>`)}
+    ${cartoesKpi([
+      { ic: 'empresas', tom: 'laranja', valor: lista.length, rotulo: 'Empresas cadastradas' },
+      { ic: 'tl-check', tom: 'verde', valor: lista.filter((e) => e.ambiente === 1).length, rotulo: 'Emitindo em produção' },
+      { ic: 'tl-relogio', tom: 'neutro', valor: lista.filter((e) => e.ambiente !== 1).length, rotulo: 'Em ambiente de testes' },
+      { ic: 'tl-alerta', tom: lista.some((e) => e.modo_emissao !== 'PORTAL' && !e.tem_certificado) ? 'vermelho' : 'verde', valor: lista.filter((e) => e.modo_emissao !== 'PORTAL' && !e.tem_certificado).length, rotulo: 'Sem certificado enviado' },
+    ])}
+    ${lista.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Empresa</th><th>Documento</th><th>Regime</th><th>Ambiente</th><th>Certificado</th><th></th></tr></thead><tbody>
       ${lista.map((e, i) => `<tr class="${e.ativo === 0 ? 'inativo' : ''}"><td>${esc(e.razao_social)}${e.eh_escritorio ? ' <span class="selo-carteira">Escritório</span>' : ''}${e.na_carteira ? ' <span class="selo-carteira">Também cliente</span>' : ''}${e.ativo === 0 ? ' <span class="selo-conferir">Inativa</span>' : ''}</td><td>${fmtDoc(e.documento)}</td><td>${['', 'Não optante', 'MEI', 'Simples ME/EPP'][e.op_simp_nac]}</td>
         <td>${e.ambiente === 1 ? 'Produção' : 'Testes'}</td><td>${e.modo_emissao === 'PORTAL' ? 'Portal (CNPJ e senha)' : e.nfse_procuracao && !e.tem_certificado ? 'Procuração (certificado do escritório)' : e.tem_certificado ? `até ${dataBr(e.cert_validade)}${e.nfse_procuracao ? '<br><span class="dica">NFS-e por procuração</span>' : ''}` : '<span class="pendente-txt">Falta enviar</span>'}</td>
         <td><button data-editar="${i}">Editar</button> ${e.modo_emissao === 'PORTAL' ? '' : `<button data-cert="${i}">Certificado</button>`} <button data-logo="${i}">${e.tem_logo ? 'Logo ✓' : 'Logo'}</button> <button data-banco="${i}">Dados bancários</button>${estado.usuario.papel === 'admin' || estado.usuario.tipo === 'adm' ? ` <button data-ativo="${i}">${e.ativo === 0 ? 'Reativar' : 'Inativar'}</button>` : ''}${estado.usuario.mestre ? ` <button class="perigo" data-excluir="${i}">Excluir</button>` : ''}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Cadastre a empresa do escritório (marque "Esta é a empresa do escritório").</div>'}`;
+    </tbody></table></div></div>` : vazioTela('empresas', 'Nenhuma empresa cadastrada', 'Cadastre a empresa do escritório (marque "Esta é a empresa do escritório").', `<button class="tl-btn-ouro" id="vz-emp">${icone('o-mais')} Cadastrar empresa</button>`)}`;
   $('#novo').onclick = () => formEmpresa();
+  $('#vz-emp')?.addEventListener('click', () => formEmpresa());
   conteudo.querySelectorAll('[data-editar]').forEach((b) => (b.onclick = () => formEmpresa(lista[b.dataset.editar])));
   conteudo.querySelectorAll('[data-cert]').forEach((b) => (b.onclick = () => formCertificado(lista[b.dataset.cert])));
   conteudo.querySelectorAll('[data-logo]').forEach((b) => (b.onclick = () => formLogo(lista[b.dataset.logo])));
