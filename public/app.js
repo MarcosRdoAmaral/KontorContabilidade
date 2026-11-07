@@ -2002,7 +2002,8 @@ async function telaCompraManual() {
 /** Busca das NF-e emitidas contra o CNPJ direto na SEFAZ; a importação passa pela conferência nota a nota. */
 async function telaNfeSefaz() {
   const opc = await dadosDeEntrada();
-  conteudo.innerHTML = `<div class="topo"><div><h1>Buscar NF-e (SEFAZ)</h1><p class="sutil">Notas fiscais emitidas contra o CNPJ desta empresa, direto do Ambiente Nacional. Ao importar, cada nota abre com o resumo e o parcelamento para você conferir. As notas importadas ficam em <a href="#/compras">Notas de compra</a>.</p></div></div>
+  conteudo.innerHTML = `${cabecaTela('tl-doc', 'Buscar NF-e (SEFAZ)', 'Notas fiscais emitidas contra o CNPJ desta empresa, direto do Ambiente Nacional. Ao importar, cada nota abre com o resumo e o parcelamento para você conferir.')}
+    ${dicaTela('Para onde vão as notas?', 'As notas importadas ficam em Compras. Ao buscar, o sistema registra a <strong>Ciência da Operação</strong> de cada nota nova, que libera o XML completo na SEFAZ.', '<a href="#/compras">Ir para Compras →</a>')}
     <div id="painel-sefaz"></div>`;
   painelSefaz(opc.base, opc);
 }
@@ -2024,7 +2025,7 @@ async function painelSefaz(base, opc) {
   try { d = await api('GET', `${url}${painelSefaz.todas ? '?todas=1' : ''}`); } catch (e) { el.innerHTML = `<p class="dica erro">${esc(mensagemErro(e))}</p>`; return; }
   if (!$('#painel-sefaz')) return; // usuário trocou de tela
   if (!d.temCertificado) {
-    el.innerHTML = `<div class="cartao sefaz"><h2>Notas na SEFAZ</h2><p class="dica">Para o sistema buscar sozinho as NF-e emitidas contra o CNPJ desta empresa, cadastre o certificado digital A1 em <a href="#/empresas">Empresas</a>.</p></div>`;
+    el.innerHTML = vazioTela('tl-doc', 'Certificado digital necessário', 'Para o sistema buscar sozinho as NF-e emitidas contra o CNPJ desta empresa, cadastre o certificado digital A1 em Empresas.', '<a class="tl-btn-ouro" href="#/empresas">Ir para Empresas</a>');
     return;
   }
   const situacao = !d.iniciada
@@ -2042,16 +2043,23 @@ async function painelSefaz(base, opc) {
       <td class="num">${n.valor != null ? brl(n.valor) : '—'}</td>
       <td><span class="carimbo ${n.status}" ${n.ciencia_erro ? `title="${esc(n.ciencia_erro)}"` : ''}>${SIT_SEFAZ[n.status]}</span>${n.status === 'CIENCIA_RECUSADA' ? `<br><span class="dica">${esc(n.ciencia_erro)}</span>` : ''}</td>
       <td class="acoes-linha">${n.status === 'PRONTA' ? `<button class="primario" data-imp="${n.chave}">Importar</button>` : ''}${n.compra_id ? `<button data-abrir="${n.compra_id}">Abrir compra</button>` : ''}${n.tem_xml ? `<button data-xml="${n.chave}">XML</button>` : ''}${n.status === 'CIENCIA_RECUSADA' ? `<button data-ciencia="${n.chave}">Reenviar ciência</button>` : ''}${!n.compra_id ? `<button data-ocultar="${n.chave}" data-v="${n.oculta ? 0 : 1}" title="${n.oculta ? 'Voltar a mostrar' : 'Esconder esta nota (ex.: não é compra da empresa)'}">${n.oculta ? 'Mostrar' : 'Ocultar'}</button>` : ''}</td></tr>`;
-  el.innerHTML = `<div class="cartao sefaz">
-    <div class="sefaz-topo"><div><h2>Notas na SEFAZ</h2><p class="dica">${situacao}</p></div>
-      <div class="sefaz-acoes"><button class="primario" id="sefaz-buscar">Buscar agora</button><button id="sefaz-chave">Buscar pela chave</button>
+  const nPorStatus = (st) => d.notas.filter((n) => n.status === st).length;
+  el.innerHTML = `<div class="sefaz">
+    ${cartoesKpi([
+      { ic: 'tl-check', tom: 'verde', valor: selecionaveis.length, rotulo: 'Prontas para importar' },
+      { ic: 'tl-relogio', tom: 'laranja', valor: d.contagem.aguardando ?? 0, rotulo: 'Aguardando XML' },
+      { ic: 'tl-doc', tom: 'neutro', valor: nPorStatus('IMPORTADA'), rotulo: 'Já importadas' },
+      { ic: 'tl-alerta', tom: (nPorStatus('CIENCIA_RECUSADA') + (d.contagem.canceladasImportadas ?? 0)) ? 'vermelho' : 'neutro', valor: nPorStatus('CIENCIA_RECUSADA') + (d.contagem.canceladasImportadas ?? 0), rotulo: 'Pedem atenção' },
+    ])}
+    <div class="sefaz-topo tl-filtros"><div><p class="dica">${situacao}</p></div>
+      <div class="sefaz-acoes"><button class="tl-btn-ouro" id="sefaz-buscar">${icone('o-busca')} Buscar agora</button><button class="tl-btn-borda" id="sefaz-chave">Buscar pela chave</button>
         <label class="check"><input type="checkbox" id="sefaz-auto" ${d.automatica ? 'checked' : ''}> Buscar automaticamente</label>
         ${adm ? '<button id="sefaz-conexao" title="Cadeia de certificados ICP-Brasil">Conexão com a SEFAZ</button>' : ''}</div></div>
     ${erroRecente ? `<div class="banner perigo">Erro na última busca (${dataHoraBr(erroRecente.quando)}): ${esc(erroRecente.mensagem)}</div>` : ''}
     ${d.contagem.canceladasImportadas ? `<div class="banner perigo"><strong>Atenção:</strong> ${d.contagem.canceladasImportadas} nota(s) já importada(s) em Compras foi(ram) <strong>cancelada(s) pelo fornecedor</strong>. Confira a compra e as despesas lançadas.</div>` : ''}
-    ${d.notas.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>${selecionaveis.length ? '<input type="checkbox" id="sel-todas-sefaz" aria-label="Selecionar todas">' : ''}</th><th>Emissão</th><th>Fornecedor</th><th>NF</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
-      <tbody>${d.notas.map(linha).join('')}</tbody></table></div>`
-      : `<p class="dica">${d.iniciada ? 'Nenhuma nota pendente de importação.' : ''}</p>`}
+    ${d.notas.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>${selecionaveis.length ? '<input type="checkbox" id="sel-todas-sefaz" aria-label="Selecionar todas">' : ''}</th><th>Emissão</th><th>Fornecedor</th><th>NF</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+      <tbody>${d.notas.map(linha).join('')}</tbody></table></div></div>`
+      : vazioTela('tl-doc', d.iniciada ? 'Nenhuma nota pendente de importação' : 'Realize uma busca para visualizar as notas', d.iniciada ? 'Quando o fornecedor emitir uma nota contra o seu CNPJ, ela aparece aqui depois da próxima busca.' : 'Clique em "Pesquisar NF-e" para buscar as notas emitidas contra o CNPJ desta empresa.', `<button class="tl-btn-ouro" id="vz-buscar">${icone('o-busca')} Pesquisar NF-e</button>`)}
     <div class="acoes">${selecionaveis.length ? `<button class="primario" id="sefaz-importar" disabled>Importar selecionadas</button>` : ''}
       <button id="sefaz-todas">${painelSefaz.todas ? 'Mostrar só as pendentes' : 'Mostrar também importadas e ocultas'}</button>
       ${d.contagem.aguardando ? `<span class="dica">${d.contagem.aguardando} nota(s) aguardando o XML completo: ele chega numa próxima busca (a SEFAZ libera depois da ciência).</span>` : ''}</div>
@@ -2081,6 +2089,7 @@ async function painelSefaz(base, opc) {
     try { await api('PUT', `${url}/config`, { automatica: e.target.checked }); aviso(e.target.checked ? 'Busca automática ligada: o sistema consulta a SEFAZ sozinho, respeitando o intervalo de 1 hora.' : 'Busca automática desligada.'); }
     catch (err) { e.target.checked = !e.target.checked; aviso(mensagemErro(err)); }
   };
+  $('#vz-buscar')?.addEventListener('click', () => $('#sefaz-buscar').click());
   $('#sefaz-conexao')?.addEventListener('click', () => dialogoConexaoSefaz(recarregar));
   $('#sefaz-buscar').onclick = async (e) => {
     const b = e.target; b.disabled = true; b.textContent = 'Buscando…';
