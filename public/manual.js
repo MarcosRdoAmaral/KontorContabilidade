@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.50.0';
+export const MANUAL_VERSAO = '1.51.0';
 
 export const MANUAL = [
   {
@@ -220,6 +220,27 @@ export const MANUAL = [
       <h3>Buscar e acompanhar</h3>
       <p><em>Buscar agora</em> consulta todos os clientes que já podem: SEFAZ e Ambiente Nacional pedem 1 hora entre consultas quando não há notas novas. <em>Ligar busca automática</em> faz isso sozinho enquanto o programa estiver aberto. O botão <em>Notas</em> mostra as notas de venda e de serviço do mês, com o XML de cada uma; <em>Compras</em> abre as NF-e de compra do cliente.</p>
       <p><em>Pacote do mês</em> gera um ZIP com os XML de compras, vendas e serviços (prestados e tomados) e planilhas de conferência.</p>`,
+  },
+  {
+    id: 'solicitacoes', titulo: 'Solicitações dos clientes (Kontor Empresas)', resumo: 'Conectar o cliente, responder pedidos de guia e receber o fechamento do mês.',
+    corpo: `
+      <p>O cliente que usa o <strong>Kontor Gestão Empresas</strong> pode ser conectado ao escritório. Conectado, ele pede guias atualizadas e manda o fechamento do mês direto para cá, sem e-mail.</p>
+      <h3>Conectar um cliente</h3>
+      <ol><li>Na <em>Carteira de clientes</em>, abra o menu ⋮ do cliente e escolha <em>Conectar ao Kontor Empresas</em>. Na primeira vez, a empresa marcada como escritório em Cadastros &gt; Empresas é registrada no serviço de conexão.</li>
+        <li>Clique em <em>Gerar código de conexão</em> e passe o código ao cliente (vale 7 dias e só pode ser usado uma vez).</li>
+        <li>No Kontor Empresas, o cliente abre <em>Configurações › Contabilidade</em>, seleciona a empresa do mesmo CNPJ e digita o código.</li></ol>
+      <p>Cliente conectado aparece com um ícone de nuvem na Carteira. O mesmo menu mostra a conexão, o <strong>código de segurança</strong> (igual nos dois sistemas) e o botão <em>Desconectar</em>.</p>
+      <h3>Pedidos de guia</h3>
+      <p>Em <em>Escritório › Solicitações dos clientes</em> chegam os pedidos de DAS, guia da DCTFWeb ou DARF, com o período, a data em que o cliente quer pagar e a observação dele. Para cada pedido:</p>
+      <ul><li><strong>Gerar guia</strong>: calcula pelo Integra Contador, como o recálculo da Situação fiscal (DAS: valor em cobrança; DCTFWeb: com multa e juros até a data de pagamento pedida; DARF: informe código da receita, vencimento e valor do principal). Cada guia é uma chamada cobrada pelo SERPRO.</li>
+        <li><strong>Anexar PDF</strong>: para a guia emitida em outro lugar (e-CAC, prefeitura).</li>
+        <li><strong>Enviar</strong>: depois de conferir o PDF; pode ir com uma mensagem. A guia chega no Kontor Empresas do cliente com valor, validade e PDF.</li>
+        <li><strong>Recusar</strong>: com o motivo, que o cliente vê.</li></ul>
+      <p>Pedidos em aberto aparecem no sininho do topo. O sistema busca as novidades a cada 2 minutos enquanto estiver aberto; o botão <em>Buscar agora</em> busca na hora.</p>
+      <h3>Fechamentos recebidos</h3>
+      <p>Na aba <em>Fechamentos recebidos</em> ficam os pacotes do mês que o cliente envia pelo Kontor Empresas (XML e PDF das notas, extrato em OFX e planilhas). Baixe o ZIP pelo botão da linha.</p>
+      <h3>Segurança</h3>
+      <p>Tudo que passa pela conexão vai <strong>cifrado de ponta a ponta</strong>: o serviço de conexão (kontorgestao.com.br) só repassa e não consegue ler. Cada mensagem é apagada do serviço assim que é entregue (ou depois de 30 dias, se o outro lado não buscar).</p>`,
   },
   {
     id: 'integra-contador', titulo: 'Conferir na Receita (Integra Contador)', resumo: 'PGDAS-D, DCTFWeb e DEFIS conferidos direto na Receita Federal.',
