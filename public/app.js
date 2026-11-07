@@ -3223,23 +3223,36 @@ async function telaTomadores() {
   const lista = await api('GET', `/api/empresas/${estado.empresaId}/tomadores`);
   const aConferir = lista.filter((t) => t.conferir).length;
   const filtro = aConferir ? (telaTomadores.filtro ?? 'todos') : 'todos';
-  const vis = filtro === 'conferir' ? lista.filter((t) => t.conferir) : lista;
+  const q = (telaTomadores.q ?? '').trim().toLowerCase(), qd = q.replace(/\D/g, '');
+  const vis0 = filtro === 'conferir' ? lista.filter((t) => t.conferir) : lista;
+  const vis = q ? vis0.filter((t) => (t.nome ?? '').toLowerCase().includes(q) || (t.email ?? '').toLowerCase().includes(q) || (qd && String(t.documento ?? '').includes(qd))) : vis0;
+  const pg = paginar(vis, telaTomadores.pg || 1);
   const doEscritorio = !!empresa().eh_escritorio && pode('carteira');
   const avulsos = lista.filter((t) => !t.carteira_empresa_id).length;
   conteudo.innerHTML = `
-    <div class="topo"><div><h1>Clientes (tomadores)</h1><p class="sutil">Clientes de ${esc(empresa().razao_social)}.</p></div>
-      <div><button id="imp-planilha">Importar planilha</button> ${doEscritorio ? '<button id="novo">Cliente avulso</button> <button class="primario" id="novo-cart">Novo cliente na Carteira</button>' : '<button class="primario" id="novo">Cadastrar cliente</button>'}</div></div>
+    ${cabecaTela('tomadores', 'Clientes (tomadores)', `Cadastre e gerencie os clientes de ${esc(empresa().razao_social)}, de forma simples e organizada.`,
+      `<button class="tl-btn-borda" id="imp-planilha">Importar planilha</button> ${doEscritorio ? '<button class="tl-btn-borda" id="novo">Cliente avulso</button> <button class="tl-btn-ouro" id="novo-cart">Novo cliente na Carteira</button>' : '<button class="tl-btn-ouro" id="novo">Cadastrar cliente</button>'}`)}
+    ${cartoesKpi([
+      { ic: 'tomadores', tom: 'laranja', valor: lista.length, rotulo: 'Total de clientes' },
+      { ic: 'tl-alerta', tom: aConferir ? 'laranja' : 'verde', valor: aConferir, rotulo: aConferir ? 'Falta conferir o cadastro' : 'Cadastros conferidos' },
+      { ic: 'o-email', tom: 'neutro', valor: lista.filter((t) => !t.email).length, rotulo: 'Sem e-mail cadastrado' },
+    ])}
+    <form class="tl-filtros" id="form-busca-cli"><label class="busca">Buscar <input name="q" value="${esc(telaTomadores.q ?? '')}" placeholder="Buscar por nome, documento ou e-mail…"></label>
+      <span class="tl-acoes"><button type="button" id="cli-limpar">${icone('tl-limpar')} Limpar</button><button type="submit" class="tl-btn-ouro">${icone('o-busca')} Buscar</button></span></form>
     ${doEscritorio ? `<div class="banner">Esta é a empresa do escritório: os clientes da <a href="#/carteira">Carteira</a> aparecem aqui sozinhos, prontos para faturar (marca <span class="selo-carteira">Carteira</span>). Cadastre novos clientes pela Carteira; use “Cliente avulso” só para quem não é cliente da contabilidade.${avulsos ? ` <a href="#" id="trazer-cart">Levar ${avulsos} cliente(s) daqui para a Carteira</a>.` : ''}</div>` : ''}
     ${aConferir ? `<nav class="abas" id="filtros-cli"><a href="#" data-f="todos" class="${filtro === 'todos' ? 'ativo' : ''}">Todos (${lista.length})</a><a href="#" data-f="conferir" class="${filtro === 'conferir' ? 'ativo' : ''}">Falta conferir (${aConferir})</a></nav>` : ''}
-    ${vis.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Nome</th><th>Documento</th><th>E-mail</th><th>Faturamento</th><th>Desconto</th></tr></thead><tbody>
-      ${vis.map((t, i) => `<tr class="clicavel" data-i="${i}"><td>${esc(t.nome)}${t.carteira_empresa_id ? ' <span class="selo-carteira" title="Cadastro vem da Carteira de clientes">Carteira</span>' : ''}${t.conferir ? ` <span class="selo-conferir" title="${esc(t.conferir_motivo ?? '')}">Conferir</span>` : ''}</td><td>${fmtDoc(t.documento)}</td><td>${esc(t.email ?? '')}</td><td>${NOME_MODO[t.modo_faturamento] ?? 'Nota'}</td><td>${t.desconto_valor ? brl(t.desconto_valor) : '<span class="dica">—</span>'}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhum tomador cadastrado.</div>'}`;
+    ${vis.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Nome</th><th>Documento</th><th>E-mail</th><th>Faturamento</th><th>Desconto</th></tr></thead><tbody>
+      ${pg.itens.map((t, i) => `<tr class="clicavel" data-i="${i}"><td>${esc(t.nome)}${t.carteira_empresa_id ? ' <span class="selo-carteira" title="Cadastro vem da Carteira de clientes">Carteira</span>' : ''}${t.conferir ? ` <span class="selo-conferir" title="${esc(t.conferir_motivo ?? '')}">Conferir</span>` : ''}</td><td>${fmtDoc(t.documento)}</td><td>${esc(t.email ?? '')}</td><td>${NOME_MODO[t.modo_faturamento] ?? 'Nota'}</td><td>${t.desconto_valor ? brl(t.desconto_valor) : '<span class="dica">—</span>'}</td></tr>`).join('')}
+    </tbody></table></div>${pg.html}</div>` : q ? vazioTela('tomadores', 'Nenhum cliente encontrado', 'Nenhum cadastro bate com a busca. Tente outro nome, documento ou e-mail.') : vazioTela('tomadores', 'Nenhum cliente cadastrado', 'Cadastre o primeiro cliente ou importe uma planilha com os CNPJs.')}`;
   $('#novo').onclick = () => formTomador(null, telaTomadores);
   if ($('#novo-cart')) $('#novo-cart').onclick = () => { telaCarteira.abrirNovo = true; location.hash = '#/carteira'; };
   if ($('#trazer-cart')) $('#trazer-cart').onclick = (ev) => { ev.preventDefault(); telaCarteira.abrirTrazer = true; location.hash = '#/carteira'; };
   $('#imp-planilha').onclick = () => importarPlanilhaClientes();
-  conteudo.querySelectorAll('#filtros-cli a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); telaTomadores.filtro = a.dataset.f; telaTomadores(); }));
-  conteudo.querySelectorAll('tr[data-i]').forEach((tr) => (tr.onclick = () => formTomador(vis[tr.dataset.i], telaTomadores)));
+  $('#form-busca-cli').onsubmit = (ev) => { ev.preventDefault(); telaTomadores.q = ev.target.q.value; telaTomadores.pg = 1; telaTomadores(); };
+  $('#cli-limpar').onclick = () => { telaTomadores.q = ''; telaTomadores.pg = 1; telaTomadores(); };
+  conteudo.querySelectorAll('.tl-pag [data-pg]').forEach((b) => (b.onclick = () => { telaTomadores.pg = Number(b.dataset.pg); telaTomadores(); }));
+  conteudo.querySelectorAll('#filtros-cli a').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); telaTomadores.filtro = a.dataset.f; telaTomadores.pg = 1; telaTomadores(); }));
+  conteudo.querySelectorAll('tr[data-i]').forEach((tr) => (tr.onclick = () => formTomador(pg.itens[tr.dataset.i], telaTomadores)));
 }
 
 /** Importa clientes de uma planilha (xlsx/csv) com CNPJ e, se houver, o nome; o sistema consulta cada CNPJ e deixa o cadastro marcado para conferir. */
