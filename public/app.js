@@ -1230,6 +1230,7 @@ async function telaCobrancas() {
       c.forma === 'PIX' && podeEditar && ativo(c) && c.pix_copia_cola ? `<button data-pix="${c.id}">Trocar o Pix</button>` : '',
       ativo(c) && c.vencimento < hoje ? `<button data-carta="${c.id}">Carta de cobrança (PDF)</button>` : '',
       podeEditar ? `<button data-reemitir="${c.id}">Reemitir</button>` : '',
+      `<button data-historico="${c.id}">Histórico</button>`,
       podeEditar && ativo(c) ? `<button data-pago="${c.id}">Marcar pago</button><button data-cancelar="${c.id}">Cancelar</button>` : '',
     ].join('');
     return `<div class="cob-acoes">${principais}${mais ? `<details class="cob-mais"><summary title="Mais ações">⋯</summary><div class="cob-menu">${mais}</div></details>` : ''}</div>`;
@@ -1465,6 +1466,20 @@ async function telaCobrancas() {
     });
   };
 
+  // ---- Histórico: situações, alterações, remessas, ocorrências do banco e pagamentos ----
+  conteudo.querySelectorAll('[data-historico]').forEach((b) => (b.onclick = async () => {
+    const c = lista.find((x) => x.id === Number(b.dataset.historico));
+    try {
+      const h = await api('GET', `/api/cobrancas/${c.id}/historico`);
+      const ORIGEM = { TELA: 'Kontor', REMESSA: 'Remessa', RETORNO: 'Retorno do banco', BANCO_API: 'Banco', SISTEMA: 'Sistema', MANUAL: 'Kontor', CORA: 'Banco', EXTRATO: 'Extrato' };
+      abrirDialogo(`<h2>Histórico da cobrança</h2><p class="sutil">${esc(c.tomador_nome ?? '')} · ${brl(c.valor)} · vencimento ${dataBr(c.vencimento)}</p>
+        ${h.length ? `<div class="rolagem" style="max-height:60vh"><table class="tabela"><thead><tr><th>Quando</th><th>O que aconteceu</th><th>Origem</th></tr></thead><tbody>
+          ${h.slice().reverse().map((e) => `<tr><td style="white-space:nowrap">${esc(dhBr(e.quando))}</td><td>${esc(e.texto)}</td><td>${esc(ORIGEM[e.origem] ?? e.origem)}${e.usuario ? ` · ${esc(e.usuario)}` : ''}</td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="vazio">Sem registros ainda.</p>'}
+        <div class="acoes"><button type="button" class="primario" data-fechar>Fechar</button></div>`);
+    } catch (e) { aviso(mensagemErro(e)); }
+  }));
+
   // ---- Reemitir: nova cobrança com os mesmos dados e outro vencimento ----
   conteudo.querySelectorAll('[data-reemitir]').forEach((b) => (b.onclick = async () => {
     const c = lista.find((x) => x.id === Number(b.dataset.reemitir));
@@ -1512,7 +1527,8 @@ async function telaCobrancas() {
     arq.onchange = async () => {
       const f = arq.files[0]; if (!f) return;
       try {
-        const r = await api('POST', `/api/empresas/${estado.empresaId}/retorno`, { conteudo: await f.text() });
+        const r = await api('POST', `/api/empresas/${estado.empresaId}/retorno`, { conteudo: await f.text(), nome: f.name });
+        arq.value = '';
         const partes = [r.pagos && `${r.pagos} pago(s)`, r.registrados && `${r.registrados} registrado(s)`, r.rejeitados && `${r.rejeitados} rejeitado(s)`, r.baixados && `${r.baixados} baixado(s)`].filter(Boolean);
         aviso(`Retorno processado: ${partes.join(', ') || 'sem alterações'}.${r.naoEncontrados.length ? ` ${r.naoEncontrados.length} título(s) não encontrados.` : ''}`);
         telaCobrancas();

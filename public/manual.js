@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.47.20';
+export const MANUAL_VERSAO = '1.48.0';
 
 export const MANUAL = [
   {
@@ -394,6 +394,9 @@ export const MANUAL = [
         <li>Gere a <strong>remessa</strong> (arquivo CNAB) e envie no internet banking do banco, na área de cobrança.</li>
         <li>Depois do pagamento, baixe o <strong>arquivo de retorno</strong> no mesmo menu e importe aqui para dar baixa automática.</li>
       </ol>
+      <p>O mesmo arquivo de retorno não é importado duas vezes: se for importado de novo, o sistema avisa e não altera nada. Cada pagamento entra uma única vez.</p>
+      <h3>Histórico da cobrança</h3>
+      <p>No menu ⋯ de cada cobrança, <strong>Histórico</strong> mostra tudo o que aconteceu com ela, do mais recente ao mais antigo: criação, mudanças de situação, valor e vencimento, remessas, ocorrências do banco (com o código e o texto originais), pagamentos e quem pediu cada ação. As cobranças antigas começam o histórico com a situação em que estavam ao atualizar.</p>
       <h3>Outras ações</h3>
       <ul>
         <li><strong>Boleto:</strong> abre o PDF para imprimir ou enviar. <strong>WhatsApp</strong> abre a mensagem pronta.</li>
