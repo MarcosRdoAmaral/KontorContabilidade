@@ -550,18 +550,16 @@ async function telaPainel() {
   const fin = empresa() ? await api('GET', `/api/empresas/${estado.empresaId}/painel?mes=${mes}`).catch(() => null) : null;
   const k = fin?.kpis;
   conteudo.innerHTML = `
-    <div class="topo">
-      <div><h1>Visão geral do faturamento</h1><p class="sutil">Cobranças e recebimentos de ${esc(empresa()?.nome_fantasia || empresa()?.razao_social || 'sua empresa')} e notas de todas as empresas.</p></div>
-      <label>Mês <input type="month" id="mes" value="${mes}"></label>
-    </div>
+    ${cabecaTela('painel', 'Visão geral do faturamento', `Cobranças e recebimentos de ${esc(empresa()?.nome_fantasia || empresa()?.razao_social || 'sua empresa')} e notas de todas as empresas.`,
+      `<div class="tl-mes"><span class="orc-ico">${icone('calendario')}</span><label>Mês <input type="month" id="mes" value="${mes}"></label></div>`)}
     ${fin ? `
-    <div class="resumo">
-      <div class="cartao"><div class="sutil">Faturado</div><div class="valor">${compacto(k.faturado)}</div><div class="dica">${k.qtd} cobrança(s) com vencimento no mês</div></div>
-      <div class="cartao"><div class="sutil">Recebido</div><div class="valor" style="color:${COR.verde}">${compacto(k.recebido)}</div><div class="dica">${k.pctRecebido}% do faturado</div></div>
-      <div class="cartao"><div class="sutil">A receber</div><div class="valor">${compacto(k.aReceber)}</div><div class="dica">${k.qtdAReceber} em dia</div></div>
-      <div class="cartao"><div class="sutil">Em atraso</div><div class="valor" style="color:${k.qtdAtraso ? COR.vermelho : 'inherit'}">${compacto(k.emAtraso)}</div><div class="dica">${k.qtdAtraso} cobrança(s) · inadimplência ${k.inadimplencia}%</div></div>
-      <div class="cartao"><div class="sutil">Falta emitir</div><div class="valor">${fin.faltamEmitir.qtd}</div><div class="dica">de ${fin.faltamEmitir.total} cliente(s) em ${nomeMes(mes)}</div></div>
-    </div>
+    ${cartoesKpi([
+      { ic: 'tl-doc', tom: 'laranja', valor: compacto(k.faturado), rotulo: `Faturado · ${k.qtd} cobrança(s) com vencimento no mês` },
+      { ic: 'tl-check', tom: 'verde', valor: compacto(k.recebido), rotulo: `Recebido · ${k.pctRecebido}% do faturado` },
+      { ic: 'tl-relogio', tom: 'neutro', valor: compacto(k.aReceber), rotulo: `A receber · ${k.qtdAReceber} em dia` },
+      { ic: 'tl-alerta', tom: k.qtdAtraso ? 'vermelho' : 'neutro', valor: compacto(k.emAtraso), rotulo: `Em atraso · ${k.qtdAtraso} cobrança(s) · inadimplência ${k.inadimplencia}%` },
+      { ic: 'agenda', tom: fin.faltamEmitir.qtd ? 'laranja' : 'verde', valor: fin.faltamEmitir.qtd, rotulo: `Falta emitir · de ${fin.faltamEmitir.total} cliente(s) em ${nomeMes(mes)}` },
+    ])}
     <div class="cartao" style="margin-top:16px"><h2 style="margin-top:0">Dicas para o seu caixa</h2>
       <ul class="dicas">${fin.dicas.map((d) => `<li>${esc(d)}</li>`).join('')}</ul></div>
     <div class="duas-colunas">
@@ -581,18 +579,16 @@ async function telaPainel() {
         ${fin.faltamEmitir.qtd ? `<ul class="dicas">${fin.faltamEmitir.clientes.map((c) => `<li>${esc(c.nome)}</li>`).join('')}${fin.faltamEmitir.qtd > fin.faltamEmitir.clientes.length ? `<li class="sutil">e mais ${fin.faltamEmitir.qtd - fin.faltamEmitir.clientes.length}…</li>` : ''}</ul>` : '<p class="sutil">Todos os clientes já foram faturados neste mês.</p>'}
         <p class="dica"><a href="#/emitir">Emitir agora</a></p></div>
     </div>
-    <h2>Notas por empresa</h2>` : ''}
-    <div class="resumo">
-      <div class="cartao"><div class="sutil">Faturado (autorizadas)</div><div class="valor">${brl(tot.fat)}</div></div>
-      <div class="cartao"><div class="sutil">Notas autorizadas</div><div class="valor">${tot.aut}</div></div>
-      <div class="cartao"><div class="sutil">Pendências</div><div class="valor ${tot.pend ? 'pendente-txt' : ''}">${tot.pend}</div>
-        <div class="dica">Rejeitadas ou sem resposta da Sefin</div></div>
-    </div>
-    <h2>Por empresa</h2>
-    ${linhas.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Empresa</th><th class="num">Autorizadas</th><th class="num">Canceladas</th><th class="num">Pendências</th><th class="num">Faturado</th></tr></thead><tbody>
+    <h2 class="tl-sub">Notas por empresa</h2>` : ''}
+    ${cartoesKpi([
+      { ic: 'tl-moedas', tom: 'verde', valor: brl(tot.fat), rotulo: 'Faturado (notas autorizadas)' },
+      { ic: 'tl-doc', tom: 'laranja', valor: tot.aut, rotulo: 'Notas autorizadas' },
+      { ic: 'tl-alerta', tom: tot.pend ? 'vermelho' : 'neutro', valor: tot.pend, rotulo: 'Pendências · rejeitadas ou sem resposta da Sefin' },
+    ])}
+    ${linhas.length ? `<div class="tl-tabela solta"><div class="rolagem"><table><thead><tr><th>Empresa</th><th class="num">Autorizadas</th><th class="num">Canceladas</th><th class="num">Pendências</th><th class="num">Faturado</th></tr></thead><tbody>
       ${linhas.map((l) => `<tr class="clicavel" data-id="${l.empresa_id}"><td>${esc(l.empresa)}</td><td class="num">${l.autorizadas ?? 0}</td><td class="num">${l.canceladas ?? 0}</td>
         <td class="num ${l.pendencias ? 'pendente-txt' : ''}">${l.pendencias ?? 0}</td><td class="num">${brl(l.faturado)}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhuma empresa cadastrada ainda.</div>'}`;
+    </tbody></table></div></div>` : vazioTela('painel', 'Nenhuma empresa cadastrada', 'Cadastre a primeira empresa para acompanhar o mês.')}`;
   $('#mes').onchange = (e) => { telaPainel.mes = e.target.value; telaPainel(); };
   conteudo.querySelectorAll('tr[data-id]').forEach((tr) => (tr.onclick = () => {
     estado.empresaId = Number(tr.dataset.id); localStorage.setItem('empresaId', estado.empresaId);
