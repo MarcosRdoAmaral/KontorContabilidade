@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
-import { desenharBoleto, type DadosBoleto } from './boleto-pdf.js';
+import { desenharBoleto, ALTURA_FICHA, type DadosBoleto } from './boleto-pdf.js';
 import { COR } from '../pdf/timbrado.js';
 
 /** Demonstrativo de cobrança (A4): cabeçalho do escritório, cliente, serviços, total e a forma de pagamento (Pix ou boleto). */
@@ -13,7 +13,7 @@ export interface DadosDemonstrativo {
   desconto?: { valor: number; motivo: string | null } | null;
   total: number;
   pix?: string | null;             // Pix copia e cola
-  /** Boleto completo: um resumo na página 1 e o boleto inteiro (recibo + ficha de compensação) na página 2. */
+  /** Boleto completo: a ficha de compensação (com o código de barras) vem na parte de baixo da página do demonstrativo. */
   boleto?: DadosBoleto | null;
   rodape?: string | null;
 }
@@ -105,24 +105,19 @@ export async function gerarDemonstrativoPdf(d: DadosDemonstrativo): Promise<Buff
       y += h + 6 * MM;
     }
 
-    // Boleto: resumo aqui; o boleto completo vai na página seguinte
-    if (d.boleto) {
-      const h = 24 * MM;
-      pdf.rect(X, y, W, h).fillAndStroke(FUNDO, LINHA);
-      pdf.fillColor(AZUL).font('Helvetica-Bold').fontSize(10).text('PAGAMENTO VIA BOLETO BANCÁRIO', X + 5 * MM, y + 4 * MM);
-      pdf.fillColor(CINZA).font('Helvetica').fontSize(7).text('Linha digitável', X + 5 * MM, y + 10 * MM);
-      pdf.fillColor('#111').font('Helvetica-Bold').fontSize(10.5).text(d.boleto.linhaDigitavel, X + 5 * MM, y + 13.5 * MM, { width: W - 10 * MM });
-      pdf.fillColor(CINZA).font('Helvetica').fontSize(7.5).text('O boleto completo, com o código de barras, está na página 2.', X + 5 * MM, y + 19 * MM, { width: W - 10 * MM });
-      y += h + 6 * MM;
-    }
-
-    pdf.fillColor(CINZA).font('Helvetica-Oblique').fontSize(8).text('Agradecemos pela confiança em nossos serviços.', X, y, { width: W, align: 'center' });
+    if (!d.boleto) pdf.fillColor(CINZA).font('Helvetica-Oblique').fontSize(8).text('Agradecemos pela confiança em nossos serviços.', X, y, { width: W, align: 'center' });
 
     // rodapé
     const yr = 285 * MM;
     pdf.moveTo(X, yr - 3 * MM).lineTo(X + W, yr - 3 * MM).lineWidth(0.6).stroke(LINHA);
     pdf.fillColor(CINZA).font('Helvetica').fontSize(7).text([d.emitente.nome.toUpperCase(), d.rodape].filter(Boolean).join('  •  '), X, yr, { width: W, align: 'center', lineBreak: false });
-    if (d.boleto) { pdf.addPage({ size: 'A4', margin: 0 }); desenharBoleto(pdf, d.boleto); }
+
+    // Boleto completo (ficha de compensação) na parte de baixo; se não couber, o boleto inteiro vai na página seguinte
+    if (d.boleto) {
+      y -= 2 * MM;
+      if (y + ALTURA_FICHA(true) <= yr - 3 * MM) desenharBoleto(pdf, d.boleto, { y0: y, recibo: false, compacto: true });
+      else { pdf.addPage({ size: 'A4', margin: 0 }); desenharBoleto(pdf, d.boleto); }
+    }
     pdf.end();
   });
 }
