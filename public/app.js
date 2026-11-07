@@ -6671,6 +6671,12 @@ const ICONES = {
   envelope: 'M3 6h18v12H3zM3 7l9 6 9-6',
   nuvem: 'M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.6 8 4 4 0 0 1 17 18M12 12v8M9 15l3-3 3 3',
   refazer: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  'o-mais': 'M12 5v14M5 12h14',
+  dados: 'M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  olho: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  documento: 'M14 3H6v18h12V7zM14 3v4h4M9 12h6M9 16h6',
+  grafico: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  pontos: 'M11 5a1 1 0 1 0 2 0 1 1 0 1 0-2 0zM11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0zM11 19a1 1 0 1 0 2 0 1 1 0 1 0-2 0z',
   seta: 'M5 12h14M13 6l6 6-6 6',
   ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.7 2.7L16 10',
   alerta: 'M12 3 2 20h20zM12 9v5M12 17h.01',
@@ -6729,7 +6735,8 @@ function tituloDaAba(h) {
   if (nome === 'relatorios' && param === 'documentacao') return 'Documentação';
   if (nome === 'config') return 'Configurações';
   const a = document.querySelector(`#menu a[href="#/${nome}"]`);
-  const t = a?.textContent.trim();
+  // só o nome do item: sem os selos ("contratar", contadores) que ficam dentro do link
+  const t = a ? [...a.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim() : '';
   return t || { inicio: 'Início', nota: 'Nota', painel: 'Visão geral' }[nome] || nome.replace(/-/g, ' ').replace(/^./, (x) => x.toUpperCase());
 }
 // As abas valem só enquanto o programa está aberto: ficam em sessionStorage (somem ao fechar) e saem também no logout.
@@ -7082,42 +7089,49 @@ async function telaRadar() {
   if (f.uf === undefined) { f.uf = cfg.ufPadrao ?? ''; f.municipio = cfg.municipioPadrao ?? ''; }
   const variacao = (v) => (v == null ? '<span class="dica">sem comparação</span>' : `<span class="${v >= 0 ? 'cor-verde' : 'cor-vermelho'}">${v >= 0 ? '↑' : '↓'} ${Math.abs(v)}% no período</span>`);
   const kpi = (ic, n, rot, sub, cor) => `<div class="cartao rd-kpi"><span class="rd-kpi-ic" style="--c:${cor}">${icone(ic)}</span><div><strong>${n}</strong><span>${rot}</span><small>${sub}</small></div></div>`;
+  const dica = DICAS_RADAR.at(Math.floor(Date.now() / 864e5) % DICAS_RADAR.length);
   const barras = (l, rot) => { const max = Math.max(1, ...l.map((x) => x.n)); return l.length ? l.map((x) => `<div class="rd-barra"><span title="${esc(x.descricao ?? x.chave)}">${esc(rot(x))}</span><i><b style="width:${(x.n / max) * 100}%"></b></i><em>${x.n}</em></div>`).join('') : '<p class="dica">Pesquise empresas para ver a distribuição.</p>'; };
   conteudo.innerHTML = `
     <div class="topo rd-topo"><div class="rd-tit"><span class="rd-alvo">${icone('radar')}</span><div><h1>Radar de Oportunidades</h1><p class="sutil">Encontre empresas e transforme oportunidades em clientes.</p></div></div>
-      <div class="rd-acoes"><span class="rd-fonte"><i class="${cfg.demonstracao ? 'demo' : ''}"></i>${cfg.demonstracao ? 'Modo demonstração' : 'Fonte: Casa dos Dados'}</span>${adm ? '<button id="rd-cfg">Configurar fonte de dados</button>' : ''}</div></div>
+      <div class="rd-acoes"><span class="rd-fonte"><i class="${cfg.demonstracao ? 'demo' : ''}"></i>${cfg.demonstracao ? 'Modo demonstração' : 'Fonte: Casa dos Dados'}</span>${adm ? `<button id="rd-cfg" class="rd-cfg">${icone('dados')}Configurar fonte de dados</button>` : ''}</div></div>
     ${cfg.demonstracao ? `<div class="banner teste"><strong>Dados de demonstração.</strong> As empresas listadas são fictícias (marcadas como DEMONSTRAÇÃO) e servem para conhecer o Radar. Para pesquisar empresas reais, ${adm ? 'configure a chave da Casa dos Dados em <em>Configurar fonte de dados</em>' : 'peça ao administrador para configurar a fonte de dados'}.</div>` : ''}
     <div class="rd-kpis" id="rd-kpis">
-      ${kpi('radar', k.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k.novos.toLocaleString('pt-BR')} abertas nos últimos ${p.dias} dias`, '#f97316')}
+      ${kpi('empresas', k.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k.novos.toLocaleString('pt-BR')} abertas nos últimos ${p.dias} dias`, '#f97316')}
       ${kpi('carteira', k.leads, 'Novos leads', variacao(k.leadsVar), '#3b82f6')}
       ${kpi('aperto', k.negociacao, 'Em negociação', `${k.totalLeads} lead(s) na carteira`, '#a855f7')}
       ${kpi('trofeu', k.convertidos, 'Convertidos', `${k.convertidosPeriodo} nos últimos ${p.dias} dias`, '#22c55e')}
     </div>
     <section class="cartao rd-filtros">
-      <div class="rd-filtros-topo"><h2>${icone('filtro')} Pesquisar empresas</h2>
+      <div class="rd-filtros-topo"><h2><span class="rd-filtro-ic">${icone('filtro')}</span>Pesquisar empresas</h2>
         <div class="rd-modos">${[['NOVAS', 'Novas empresas'], ['TODAS', 'Todas'], ['CARTEIRA', 'Minha carteira']].map(([m, r]) => `<button type="button" data-modo="${m}" class="${f.modo === m ? 'ativo' : ''}">${r}</button>`).join('')}</div></div>
-      <form id="rd-form" class="rd-grade">
-        <label>Razão social ou CNPJ <input name="texto" value="${esc(f.texto ?? '')}" placeholder="Digite o nome ou CNPJ…"></label>
-        <label>UF <select name="uf"><option value="">Todas</option>${UFS.map((u) => `<option ${f.uf === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
-        <label>Município <input name="municipio" value="${esc(f.municipio ?? '')}" placeholder="Todas as cidades"></label>
-        ${f.modo === 'NOVAS' ? `<label>Período de abertura <select name="dias">${[7, 15, 30, 60, 90, 180, 365].map((d) => `<option value="${d}" ${Number(f.dias) === d ? 'selected' : ''}>Últimos ${d} dias</option>`).join('')}</select></label>`
-          : f.modo === 'TODAS' ? `<label>Abertura de <input type="date" name="aberturaDe" value="${f.aberturaDe ?? ''}"></label><label>até <input type="date" name="aberturaAte" value="${f.aberturaAte ?? ''}"></label>`
-          : `<label>Estágio <select name="estagio"><option value="">Todos</option>${Object.entries(cfg.estagios).map(([e, r]) => `<option value="${e}" ${f.estagio === e ? 'selected' : ''}>${r}</option>`).join('')}</select></label>`}
-        <label>CNAE principal <input name="cnae" value="${esc(f.cnae ?? '')}" placeholder="Ex.: 6201-5/01 ou 62"></label>
-        ${f.modo !== 'CARTEIRA' ? `<label>Situação cadastral <select name="situacao"><option value="">${f.modo === 'NOVAS' ? 'Ativa' : 'Todas'}</option>${['ATIVA', 'BAIXADA', 'INAPTA', 'SUSPENSA', 'NULA'].map((s) => `<option value="${s}" ${f.situacao === s ? 'selected' : ''}>${s[0] + s.slice(1).toLowerCase()}</option>`).join('')}</select></label>` : ''}
-        <details class="rd-mais largo" ${f.atividade || f.natureza || f.porte || f.comTelefone || f.comEmail || f.potencial ? 'open' : ''}><summary>Mais filtros</summary><div class="rd-grade">
+      <form id="rd-form">
+        <div class="rd-grade rd-grade-1">
+          <label>Razão social ou CNPJ <span class="rd-campo ic-dir"><input name="texto" value="${esc(f.texto ?? '')}" placeholder="Digite o nome ou CNPJ…">${icone('busca')}</span></label>
+          <label>UF <select name="uf"><option value="">Todas</option>${UFS.map((u) => `<option ${f.uf === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
+          <label>Município <span class="rd-campo ic-dir"><input name="municipio" list="rd-municipios" value="${esc(f.municipio ?? '')}" placeholder="Selecione…" autocomplete="off">${icone('chevron')}</span>
+            <datalist id="rd-municipios">${[...new Set(p.porMunicipio.map((x) => x.chave))].map((m) => `<option value="${esc(m)}">`).join('')}</datalist></label>
+          ${f.modo === 'NOVAS' ? `<label>Período de abertura <span class="rd-campo ic-esq">${icone('calendario')}<select name="dias">${[7, 15, 30, 60, 90, 180, 365].map((d) => `<option value="${d}" ${Number(f.dias) === d ? 'selected' : ''}>Últimos ${d} dias</option>`).join('')}</select></span></label>`
+            : f.modo === 'TODAS' ? `<label>Abertura de <input type="date" name="aberturaDe" value="${f.aberturaDe ?? ''}"></label><label>até <input type="date" name="aberturaAte" value="${f.aberturaAte ?? ''}"></label>`
+            : `<label>Estágio <select name="estagio"><option value="">Todos</option>${Object.entries(cfg.estagios).map(([e, r]) => `<option value="${e}" ${f.estagio === e ? 'selected' : ''}>${r}</option>`).join('')}</select></label>`}
+          <label>CNAE principal <input name="cnae" value="${esc(f.cnae ?? '')}" placeholder="Ex: 6201-5/01 ou 62"></label>
+        </div>
+        ${f.modo !== 'CARTEIRA' ? `<div class="rd-grade rd-grade-2"><label>Situação cadastral <select name="situacao"><option value="">${f.modo === 'NOVAS' ? 'Ativa' : 'Todas'}</option>${['ATIVA', 'BAIXADA', 'INAPTA', 'SUSPENSA', 'NULA'].map((s) => `<option value="${s}" ${f.situacao === s ? 'selected' : ''}>${s[0] + s.slice(1).toLowerCase()}</option>`).join('')}</select></label></div>` : ''}
+        <div class="rd-mais-corpo rd-grade" id="rd-mais-corpo" ${f.atividade || f.natureza || f.porte || f.comTelefone || f.comEmail || f.potencial ? '' : 'hidden'}>
           ${f.modo !== 'CARTEIRA' ? `<label>Descrição da atividade <input name="atividade" value="${esc(f.atividade ?? '')}" placeholder="Ex.: software, academia"></label>
           <label>Natureza jurídica (código) <input name="natureza" value="${esc(f.natureza ?? '')}" placeholder="Ex.: 2062"></label>
           <label>Porte <select name="porte"><option value="">Todos</option>${[['ME', 'Microempresa'], ['EPP', 'Pequeno porte'], ['DEMAIS', 'Demais']].map(([v, r]) => `<option value="${v}" ${f.porte === v ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
           <label class="rd-chk"><input type="checkbox" name="comTelefone" ${f.comTelefone ? 'checked' : ''}> Com telefone</label><label class="rd-chk"><input type="checkbox" name="comEmail" ${f.comEmail ? 'checked' : ''}> Com e-mail</label>` : ''}
           <label>Potencial estimado <select name="potencial"><option value="">Todos</option>${Object.entries(ROT_POT).map(([v, r]) => `<option value="${v}" ${f.potencial === v ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
-        </div></details>
-        <div class="acoes rd-btn"><button type="button" id="rd-limpar">Limpar</button><button class="primario" type="submit">${icone('busca')} Pesquisar</button></div>
+        </div>
+        <div class="rd-rodape-filtros"><button type="button" class="rd-mais-bt" id="rd-mais" aria-expanded="false">${icone('chevron')}Mais filtros</button>
+          <div class="rd-btn"><button type="button" id="rd-limpar">${icone('refazer')}Limpar</button><button class="primario" type="submit">${icone('busca')}Pesquisar</button></div></div>
       </form>
     </section>
     <div class="rd-corpo">
       <section class="cartao rd-lista"><div id="rd-res"><p class="sutil">Pesquisando…</p></div></section>
       <aside class="rd-lado">
+        <section class="cartao rd-dica"><div><h2>${icone('lampada')} Dica de Oportunidade</h2><p>${esc(dica.texto)}</p>
+          <button type="button" class="rd-saiba" id="rd-saiba">Saiba mais →</button></div>${ILUSTRACAO_DICA}</section>
         <section class="cartao"><h2>${icone('pizza')} Carteira de prospecção</h2>
           <ul class="rd-estagios">${Object.entries(cfg.estagios).map(([e, r]) => `<li><button type="button" data-est="${e}"><i style="background:${COR_ESTAGIO[e]}"></i>${r}<b>${p.porEstagio[e]}</b></button></li>`).join('')}</ul>
           <div class="rd-conv"><span>Taxa de conversão</span><strong>${k.conversao == null ? '—' : `${k.conversao}%`}</strong></div>
@@ -7144,8 +7158,13 @@ async function telaRadar() {
   conteudo.querySelectorAll('[data-est]').forEach((b) => (b.onclick = () => { Object.assign(f, { modo: 'CARTEIRA', estagio: b.dataset.est, pagina: 1, texto: null, uf: '', municipio: '', cnae: null, potencial: null }); telaRadar(); }));
   conteudo.querySelectorAll('.rd-prox [data-cnpj]').forEach((b) => (b.onclick = () => detalheRadar(b.dataset.cnpj, equipe)));
   $('#rd-cfg') && ($('#rd-cfg').onclick = () => configRadar(cfg));
+  const mais = $('#rd-mais'), maisCorpo = $('#rd-mais-corpo');
+  const pintarMais = () => { mais.setAttribute('aria-expanded', String(!maisCorpo.hidden)); mais.classList.toggle('aberto', !maisCorpo.hidden); };
+  mais.onclick = () => { maisCorpo.hidden = !maisCorpo.hidden; pintarMais(); }; pintarMais();
+  $('#rd-saiba').onclick = () => abrirDialogo(`<h2>${esc(dica.titulo)}</h2>${dica.mais}<div class="acoes"><button type="button" class="primario" data-fechar>Entendi</button></div>`);
+  buscaTopoRadar();
   telaRadar.equipe = equipe;
-  telaRadar.kpiHtml = (p2) => { const k2 = p2.kpis; return `${kpi('radar', k2.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k2.novos.toLocaleString('pt-BR')} abertas nos últimos ${p2.dias} dias`, '#f97316')}
+  telaRadar.kpiHtml = (p2) => { const k2 = p2.kpis; return `${kpi('empresas', k2.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k2.novos.toLocaleString('pt-BR')} abertas nos últimos ${p2.dias} dias`, '#f97316')}
       ${kpi('carteira', k2.leads, 'Novos leads', variacao(k2.leadsVar), '#3b82f6')}${kpi('aperto', k2.negociacao, 'Em negociação', `${k2.totalLeads} lead(s) na carteira`, '#a855f7')}
       ${kpi('trofeu', k2.convertidos, 'Convertidos', `${k2.convertidosPeriodo} nos últimos ${p2.dias} dias`, '#22c55e')}`; };
   telaRadar.barras = (p2) => { const a = $('#rd-mun'), c = $('#rd-cnae'); if (a) a.innerHTML = barras(p2.porMunicipio, (x) => x.chave); if (c) c.innerHTML = barras(p2.porCnae, (x) => `${x.chave}${x.descricao ? ` · ${x.descricao}` : ''}`); };
@@ -7161,24 +7180,33 @@ async function pesquisarRadar(atualizar = false) {
   catch (e) { box.innerHTML = `<p class="erro">${esc(mensagemErro(e))}</p>`; return; }
   if (!r.doCache && telaRadar.kpiHtml) api('GET', '/api/radar/painel').then((p2) => { const el = $('#rd-kpis'); if (el) el.innerHTML = telaRadar.kpiHtml(p2); telaRadar.barras(p2); }).catch(() => {});
   const ORD = [['RECENTES', 'Mais recentes'], ['ANTIGAS', 'Mais antigas'], ['NOME', 'Nome'], ['POTENCIAL', 'Potencial']];
-  const linha = (e) => {
-    const seg = e.cnae_descricao ? e.cnae_descricao.split(/[,;]/)[0] : (e.cnae ?? '—');
-    return `<li class="rd-emp">
-      <span class="rd-av" style="--c:${COR_ESTAGIO[e.lead?.estagio] ?? 'var(--laranja)'}">${esc(iniciais(nomeRadar(e)))}</span>
-      <div class="rd-nome"><button type="button" class="link-fech" data-cnpj="${e.cnpj}"><strong>${esc(nomeRadar(e))}</strong></button>${e.demonstracao ? ' <span class="rd-demo">demonstração</span>' : ''}<small>${fmtDoc(e.cnpj)}</small>
-        <span class="rd-tags">${radarIncompleta(e) && !e.demonstracao ? '<span class="rd-tag cinza" title="A pesquisa traz só parte do cadastro. Use Atualizar dados para trazer situação, endereço, CNAE, porte e contatos.">dados resumidos</span>' : ''}${e.situacao && e.situacao !== 'ATIVA' ? `<span class="rd-tag cinza">${esc(e.situacao.toLowerCase())}</span>` : ''}${e.potencial.nivel ? `<span class="rd-tag pot-${e.potencial.nivel}" title="Oportunidade estimada pelo CNAE: ${esc(e.potencial.motivos.join(', ') || 'nenhum critério')}">${ROT_POT[e.potencial.nivel]}</span>` : ''}${e.lead ? `<span class="rd-tag" style="--c:${COR_ESTAGIO[e.lead.estagio]}">${esc(e.lead.rotulo)}</span>` : ''}</span></div>
-      <span class="rd-local">${icone('local')}${esc(e.municipio ?? '—')}${e.uf ? ` / ${e.uf}` : ''}</span>
-      <span class="rd-data" title="Data de abertura">${icone('agenda')}${dataBr(e.data_abertura) || '—'}</span>
-      <span class="rd-seg" title="${esc(e.cnae ?? '')} ${esc(e.cnae_descricao ?? '')}">${esc(seg.length > 34 ? `${seg.slice(0, 33)}…` : seg)}</span>
-      <span class="rd-bts"><button type="button" data-cnpj="${e.cnpj}">Ver detalhes</button>${e.lead ? '' : `<button type="button" class="primario" data-add="${e.cnpj}" title="Adicionar à carteira de prospecção">+ Lead</button>`}</span></li>`;
-  };
+  const sit = (v) => (!v ? '<span class="dica">—</span>' : v === 'ATIVA' ? `<span class="rd-sit ok">${icone('ok', 'ico ico-p')}Ativa</span>` : `<span class="rd-sit">${esc(v[0] + v.slice(1).toLowerCase())}</span>`);
+  const linha = (e) => `<tr>
+      <td class="rd-td-nome"><button type="button" class="link-fech" data-cnpj="${e.cnpj}">${esc(nomeRadar(e))}</button>${e.demonstracao ? ' <span class="rd-demo">demonstração</span>' : ''}
+        <span class="rd-tags">${radarIncompleta(e) && !e.demonstracao ? '<span class="rd-tag cinza" title="A pesquisa traz só parte do cadastro. Use Atualizar dados para trazer situação, endereço, CNAE, porte e contatos.">dados resumidos</span>' : ''}${e.potencial.nivel ? `<span class="rd-tag pot-${e.potencial.nivel}" title="Oportunidade estimada pelo CNAE: ${esc(e.potencial.motivos.join(', ') || 'nenhum critério')}">${ROT_POT[e.potencial.nivel]}</span>` : ''}${e.lead ? `<span class="rd-tag" style="--c:${COR_ESTAGIO[e.lead.estagio]}">${esc(e.lead.rotulo)}</span>` : ''}</span></td>
+      <td class="rd-td-cnpj">${fmtDoc(e.cnpj)}</td><td>${esc(e.uf ?? '—')}</td><td>${esc(nomeCidade(e.municipio) || '—')}</td><td>${sit(e.situacao)}</td>
+      <td class="rd-td-acoes"><button type="button" class="rd-ic" data-cnpj="${e.cnpj}" title="Ver detalhes" aria-label="Ver detalhes">${icone('olho')}</button>${e.lead
+        ? `<button type="button" class="rd-ic" data-cnpj="${e.cnpj}" title="Já está na carteira de prospecção (${esc(e.lead.rotulo)})" aria-label="Abrir lead">${icone('documento')}</button>`
+        : `<button type="button" class="rd-ic" data-add="${e.cnpj}" title="Adicionar à carteira de prospecção" aria-label="Adicionar à carteira">${icone('documento')}</button>`}
+        <details class="cob-mais rd-mais-linha"><summary title="Mais ações" aria-label="Mais ações">${icone('pontos')}</summary><div class="cob-menu">
+          <button type="button" data-cnpj="${e.cnpj}">Ver detalhes</button>${e.lead ? '' : `<button type="button" data-add="${e.cnpj}">Adicionar à carteira</button>`}
+          ${e.demonstracao ? '' : `<button type="button" data-upd="${e.cnpj}">Atualizar dados</button>`}<button type="button" data-copiar="${e.cnpj}">Copiar CNPJ</button></div></details></td></tr>`;
   const pags = []; for (let i = Math.max(1, r.pagina - 2); i <= Math.min(r.paginas, r.pagina + 2); i++) pags.push(i);
-  box.innerHTML = `<div class="rd-lista-topo"><div><h2>${r.modo === 'CARTEIRA' ? 'Minha carteira de prospecção' : 'Empresas encontradas'}</h2>
+  box.innerHTML = `<div class="rd-lista-topo"><span class="rd-res-ic">${icone('grafico')}</span><div class="rd-res-tit"><h2>${r.modo === 'CARTEIRA' ? 'Minha carteira de prospecção' : 'Empresas encontradas'}</h2>
       ${r.modo === 'CARTEIRA' && (telaRadar.f.texto || telaRadar.f.uf || telaRadar.f.municipio || telaRadar.f.cnae || telaRadar.f.potencial) ? `<p class="dica">Filtrado por ${esc([telaRadar.f.texto, [telaRadar.f.municipio, telaRadar.f.uf].filter(Boolean).join(' / '), telaRadar.f.cnae && `CNAE ${telaRadar.f.cnae}`, telaRadar.f.potencial && ROT_POT[telaRadar.f.potencial]].filter(Boolean).join(', '))}. <button type="button" class="link-fech" id="rd-sem-filtro">Mostrar todos os leads${telaRadar.f.estagio ? ' deste estágio' : ''}</button></p>` : ''}
-      <p class="sutil">Mostrando ${r.empresas.length} de ${r.total.toLocaleString('pt-BR')} empresa(s)${r.modo !== 'CARTEIRA' ? ` · ${esc(r.fonte)}${r.doCache ? ` · pesquisa de ${dhBr(r.consultadoEm)} (guardada)` : ''}` : ''}</p></div>
-      <div class="rd-ord">${r.empresas.length && !r.demonstracao ? '<button type="button" id="rd-upd-lote" title="Consulta o cadastro completo de cada empresa desta página na fonte de dados">Atualizar dados</button>' : ''}${r.modo !== 'CARTEIRA' && r.doCache ? '<button type="button" id="rd-atual" title="Faz a pesquisa de novo na fonte, sem usar a pesquisa guardada">Refazer pesquisa</button>' : ''}<label>Ordenar por <select id="rd-ordem">${ORD.map(([v, t]) => `<option value="${v}" ${telaRadar.f.ordem === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
-    ${r.empresas.length ? `<ul class="rd-emps">${r.empresas.map(linha).join('')}</ul>` : `<div class="vazio">${r.modo === 'CARTEIRA' ? 'Nenhum lead na carteira com esses filtros. Adicione empresas pela pesquisa.' : 'Nenhuma empresa encontrada com esses filtros.'}</div>`}
-    ${r.paginas > 1 ? `<div class="rd-pag">${r.pagina > 1 ? `<button type="button" data-pag="${r.pagina - 1}">‹</button>` : ''}${pags.map((i) => `<button type="button" data-pag="${i}" class="${i === r.pagina ? 'ativo' : ''}">${i}</button>`).join('')}${r.pagina < r.paginas ? `<button type="button" data-pag="${r.pagina + 1}">›</button>` : ''}<span class="dica">Página ${r.pagina} de ${r.paginas.toLocaleString('pt-BR')}</span></div>` : ''}`;
+      <p class="sutil">Mostrando ${r.empresas.length} de ${r.total.toLocaleString('pt-BR')} empresa(s)${r.modo !== 'CARTEIRA' ? ` - ${esc(r.fonte)}${r.consultadoEm ? ` - pesquisa de ${dhBr(r.consultadoEm)}` : ''}` : ''}</p></div>
+      ${r.modo !== 'CARTEIRA' ? (r.doCache ? `<span class="rd-atualizado guardada" title="Pesquisa guardada: não consumiu nova consulta na fonte">${icone('relogio', 'ico ico-p')}Pesquisa guardada</span>` : `<span class="rd-atualizado">${icone('ok', 'ico ico-p')}Atualizado agora</span>`) : ''}
+</div>
+    ${r.empresas.length ? `<div class="rolagem"><table class="rd-tab"><thead><tr><th style="width:34%">Empresa</th><th>CNPJ</th><th>UF</th><th>Município</th><th>Situação</th><th class="rd-td-acoes">Ações</th></tr></thead><tbody>${r.empresas.map(linha).join('')}</tbody></table></div>` : `<div class="vazio">${r.modo === 'CARTEIRA' ? 'Nenhum lead na carteira com esses filtros. Adicione empresas pela pesquisa.' : 'Nenhuma empresa encontrada com esses filtros.'}</div>`}
+    <div class="rd-rodape-lista"><div class="rd-ord"><label>Ordenar por <select id="rd-ordem">${ORD.map(([v, t]) => `<option value="${v}" ${telaRadar.f.ordem === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>${r.empresas.length && !r.demonstracao ? '<button type="button" id="rd-upd-lote" title="Consulta o cadastro completo de cada empresa desta página na fonte de dados">Atualizar dados</button>' : ''}${r.modo !== 'CARTEIRA' && r.doCache ? '<button type="button" id="rd-atual" title="Faz a pesquisa de novo na fonte, sem usar a pesquisa guardada">Refazer pesquisa</button>' : ''}</div>
+    ${r.paginas > 1 ? `<div class="rd-pag">${r.pagina > 1 ? `<button type="button" data-pag="${r.pagina - 1}">‹</button>` : ''}${pags.map((i) => `<button type="button" data-pag="${i}" class="${i === r.pagina ? 'ativo' : ''}">${i}</button>`).join('')}${r.pagina < r.paginas ? `<button type="button" data-pag="${r.pagina + 1}">›</button>` : ''}<span class="dica">Página ${r.pagina} de ${r.paginas.toLocaleString('pt-BR')}</span></div>` : ''}</div>`;
+  ligarMenusLinha();
+  box.querySelectorAll('[data-upd]').forEach((b) => (b.onclick = async () => {
+    b.closest('details').open = false;
+    try { const res = await api('POST', '/api/radar/empresas/atualizar', { cnpjs: [b.dataset.upd] }); aviso(res.atualizadas ? 'Dados da empresa atualizados.' : (res.interrompido || res.resultados[0]?.mensagem || 'Não foi possível atualizar.')); pesquisarRadar(); }
+    catch (e) { aviso(mensagemErro(e)); }
+  }));
+  box.querySelectorAll('[data-copiar]').forEach((b) => (b.onclick = async () => { b.closest('details').open = false; try { await navigator.clipboard.writeText(b.dataset.copiar); aviso('CNPJ copiado.'); } catch { aviso(fmtDoc(b.dataset.copiar)); } }));
   box.querySelectorAll('[data-cnpj]').forEach((b) => (b.onclick = () => detalheRadar(b.dataset.cnpj, telaRadar.equipe)));
   box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = async () => {
     b.disabled = true;
@@ -7190,6 +7218,34 @@ async function pesquisarRadar(atualizar = false) {
   $('#rd-atual') && ($('#rd-atual').onclick = () => pesquisarRadar(true));
   $('#rd-upd-lote') && ($('#rd-upd-lote').onclick = () => atualizarRadarLote(r.empresas));
   $('#rd-sem-filtro') && ($('#rd-sem-filtro').onclick = () => { Object.assign(telaRadar.f, { texto: null, uf: '', municipio: '', cnae: null, potencial: null, pagina: 1 }); telaRadar(); });
+}
+
+/** Nome de cidade como se escreve (a fonte manda em maiúsculas). */
+const nomeCidade = (m) => String(m ?? '').toLowerCase().replace(/(^|\s|-)(\p{L})/gu, (x, a, l) => a + l.toUpperCase()).replace(/ (D[aeo]s?|E) /g, (x) => x.toLowerCase());
+
+/** Dicas do quadro "Dica de Oportunidade" (uma por dia). */
+const DICAS_RADAR = [
+  { titulo: 'Simples Nacional perto do limite', texto: 'Empresas do Simples Nacional com faturamento próximo de R$ 4,8M podem migrar para o Lucro Presumido.',
+    mais: '<p>O limite de receita bruta anual do Simples Nacional é de R$ 4,8 milhões (Lei Complementar 123/2006, art. 3º, II). Empresas perto desse valor precisam de planejamento: ultrapassar o limite leva à exclusão do regime.</p><p>Ofereça um estudo comparando Simples Nacional, Lucro Presumido e Lucro Real antes do fim do ano.</p>' },
+  { titulo: 'Empresas recém-abertas', texto: 'Empresas abertas nos últimos 30 dias ainda estão montando a rotina contábil e fiscal.',
+    mais: '<p>Use o modo <strong>Novas empresas</strong> com o período de abertura para encontrar quem acabou de abrir na sua cidade.</p><p>Ofereça o enquadramento tributário, a emissão de notas e a rotina mensal desde o primeiro mês.</p>' },
+];
+const ILUSTRACAO_DICA = `<svg class="rd-dica-ilu" viewBox="0 0 120 96" aria-hidden="true"><defs><linearGradient id="rdg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb347"/><stop offset="1" stop-color="#e2620b"/></linearGradient></defs>
+  <ellipse cx="62" cy="88" rx="52" ry="6" fill="#000" opacity=".25"/><rect x="18" y="62" width="16" height="24" rx="2" fill="#6b6b6b"/><rect x="40" y="50" width="16" height="36" rx="2" fill="url(#rdg)" opacity=".75"/>
+  <rect x="62" y="38" width="16" height="48" rx="2" fill="url(#rdg)" opacity=".85"/><rect x="84" y="24" width="16" height="62" rx="2" fill="url(#rdg)"/>
+  <path d="M14 58 L44 36 L62 44 L100 10" fill="none" stroke="url(#rdg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M88 8 L104 6 L102 22 Z" fill="#ffb347"/></svg>`;
+
+/** No topo, enquanto o Radar está aberto: busca rápida por nome ou CNPJ. */
+function buscaTopoRadar() {
+  const barra = $('#barra-topo'); if (!barra) return;
+  let caixa = $('#topo-busca-radar');
+  if (!caixa) {
+    barra.insertAdjacentHTML('afterbegin', `<form class="topo-busca" id="topo-busca-radar" role="search">${icone('busca')}<input name="q" placeholder="Buscar oportunidades..." aria-label="Buscar oportunidades"></form>`);
+    caixa = $('#topo-busca-radar');
+    caixa.onsubmit = (ev) => { ev.preventDefault(); const f = telaRadar.f; f.texto = caixa.q.value.trim() || null; f.pagina = 1; if (location.hash.startsWith('#/radar')) telaRadar(); };
+    window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/radar')) $('#topo-busca-radar')?.remove(); });
+  }
+  caixa.q.value = telaRadar.f.texto ?? '';
 }
 
 /** A pesquisa traz só parte do cadastro: falta algum dos dados que a consulta por CNPJ completa. */
