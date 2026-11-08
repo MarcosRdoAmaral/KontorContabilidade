@@ -1438,6 +1438,12 @@ const migracoes: string[] = [
     SELECT vinculo, empresa_id, cnpj, 'EMPRESAS', 'Kontor Gestão Empresas', chave_cliente, CASE WHEN situacao = 'CONECTADO' THEN 'CONECTADO' ELSE 'DESCONECTADO' END,
       conectado_em, visto_em, desconectado_em, motivo
     FROM conexao_clientes WHERE vinculo IS NOT NULL AND chave_cliente IS NOT NULL;`,
+  // 55: o que já foi pela conexão sem o cliente pedir (boletos de honorários, pagamento confirmado, cancelamento): não repete
+  `CREATE TABLE conexao_envios (
+    chave TEXT PRIMARY KEY,         -- ex.: COB:12 (boleto), COB-PAGO:12, COB-CANCELADA:12
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
 ];
 
 export function migrar(): void {

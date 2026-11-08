@@ -5423,7 +5423,7 @@ async function telaSolicitacoes(aba) {
     <div id="sol-corpo"></div>`;
   const pintarAuto = (a) => {
     $('#cx-auto').innerHTML = `<span class="orc-ico">${icone('aviao')}</span><div><strong>Envio automático aos clientes conectados: ${a.ligado ? '<span class="cor-verde">ligado</span>' : '<span class="cor-ambar">desligado</span>'}</strong>
-      <span class="dica">${a.ligado ? 'Sem o cliente pedir: o DAS e o DARF da DCTFWeb do Controle mensal vão sozinhos ao Kontor Empresas e ao aplicativo assim que ficam prontos (com a declaração e o recibo), uma vez por mês. Os documentos do DP (FGTS, DARF previdenciária, sindicato, recibos e folha) vão junto do envio automático da pasta do DP.' : 'As guias só vão ao aplicativo quando você clicar em Enviar no Controle mensal.'}</span></div>
+      <span class="dica">${a.ligado ? 'Sem o cliente pedir: o DAS e o DARF da DCTFWeb do Controle mensal vão sozinhos ao Kontor Empresas e ao aplicativo assim que ficam prontos (com a declaração e o recibo), uma vez por mês. Os documentos do DP (FGTS, DARF previdenciária, sindicato, recibos e folha) vão junto do envio automático da pasta do DP. Os boletos de honorários vão assim que são gerados, e o cliente é avisado do pagamento confirmado ou do cancelamento.' : 'As guias e os boletos só vão ao aplicativo quando você clicar em Enviar (Controle mensal ou Cobranças).'}</span></div>
       ${pode('situacao') || pode('controle') ? `<button type="button" class="orc-ouro" id="cx-auto-bt">${a.ligado ? 'Desligar' : 'Ligar'}</button>` : ''}`;
     $('#cx-auto-bt') && ($('#cx-auto-bt').onclick = async () => { try { pintarAuto(await api('PUT', '/api/escritorio/conexao/automatico', { ligado: !a.ligado })); } catch (e) { aviso(mensagemErro(e)); } });
   };

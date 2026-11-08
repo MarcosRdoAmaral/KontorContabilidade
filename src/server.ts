@@ -1,4 +1,4 @@
-import { sincronizarTodos } from './conexao/escritorio.js';
+import { envioAutomaticoCobrancas, sincronizarTodos } from './conexao/escritorio.js';
 import { envioAutomaticoFechamentos } from './servicos/fechamento.js';
 import { envioDpAutomatico } from './servicos/envio-dp.js';
 import Fastify from 'fastify';
@@ -95,7 +95,7 @@ export async function criarApp() {
   // Conexão com o Kontor Gestão Empresas: a cada 2 min traz pedidos de guia e fechamentos dos clientes conectados
   if (process.env.CONEXAO_AUTOMATICA !== '0') {
     // e manda sozinho, aos clientes conectados, as guias do Controle mensal que ficaram prontas
-    const volta = () => sincronizarTodos().then(() => envioAutomaticoFechamentos()).catch((e) => app.log.error(e));
+    const volta = () => sincronizarTodos().then(() => envioAutomaticoFechamentos()).then(() => envioAutomaticoCobrancas()).catch((e) => app.log.error(e));
     const timerCx = setInterval(volta, 2 * 60e3);
     timerCx.unref();
     setTimeout(volta, 20e3).unref();

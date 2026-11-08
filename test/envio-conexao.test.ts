@@ -71,6 +71,35 @@ test('sem o cliente pedir: guias do Controle mensal e documentos do DP vão sozi
     db.prepare("UPDATE fechamentos SET atualizado_em = datetime('now', '+2 seconds') WHERE tipo = 'PGDASD'").run();
     await F.envioAutomaticoFechamentos();
     assert.equal((await recebe()).length, 0);
+
+    // ---- boleto de honorários (cobrança do escritório): vai sozinho; pagamento e cancelamento também ----
+    const E = await import('../src/conexao/escritorio.js');
+    assert.equal((await call('PUT', '/api/escritorio/conexao/automatico', { ligado: true }, t)).json.ligado, true);
+    const escEmp = (db.prepare('SELECT id FROM empresas WHERE eh_escritorio = 1').get() as any).id;
+    const tom = Number(db.prepare("INSERT INTO tomadores (empresa_id, tipo_doc, documento, nome) VALUES (?, 'CNPJ', ?, 'AGRO CONVENIENCIA RISTOW LTDA')").run(escEmp, AGRO).lastInsertRowid);
+    const PIX = '00020101021226580014BR.GOV.BCB.PIX0136123e4567-e12b-12d1-a456-4266554400005204000053039865406450.005802BR5905CICLO6008BRUSQUE62070503***6304ABCD';
+    const novaCob = (venc: string) => Number(db.prepare("INSERT INTO cobrancas (empresa_id, tomador_id, descricao, valor, vencimento, status, forma, pix_copia_cola, criado_em) VALUES (?,?,?,?,?, 'REGISTRADO', 'PIX', ?, datetime('now', '+5 seconds'))")
+      .run(escEmp, tom, 'Honorários contábeis', 450, venc, PIX).lastInsertRowid);
+    const cob = novaCob('2026-12-10');
+    await E.envioAutomaticoCobrancas();
+    const bol = await recebe();
+    assert.equal(bol.length, 1);
+    assert.deepEqual([bol[0].tipo, bol[0].dados.tipo, bol[0].dados.valor, bol[0].dados.validade, bol[0].dados.pix, bol[0].dados.ref], ['GUIA', 'BOLETO', 450, '2026-12-10', PIX, `COB-${cob}`]);
+    assert.match(bol[0].dados.titulo, /^Honorários — \d{2}\/\d{4}$/);
+    assert.equal(Buffer.from(bol[0].dados.pdf, 'base64').subarray(0, 4).toString(), '%PDF');
+    await E.envioAutomaticoCobrancas();
+    assert.equal((await recebe()).length, 0, 'não repete');
+    db.prepare("UPDATE cobrancas SET status = 'PAGO', pago_em = date('now'), valor_pago = 450 WHERE id = ?").run(cob);
+    await E.envioAutomaticoCobrancas();
+    const pago = await recebe();
+    assert.deepEqual([pago[0].tipo, pago[0].dados.ref, pago[0].dados.valor_pago], ['PAGAMENTO', `COB-${cob}`, 450]);
+    // cobrança cancelada depois de enviada: o cliente é avisado
+    const cob2 = novaCob('2027-01-10');
+    await E.envioAutomaticoCobrancas();
+    assert.equal((await recebe()).length, 1);
+    db.prepare("UPDATE cobrancas SET status = 'CANCELADO' WHERE id = ?").run(cob2);
+    await E.envioAutomaticoCobrancas();
+    assert.deepEqual((await recebe()).map((x) => [x.tipo, x.dados.ref]), [['COBRANCA_CANCELADA', `COB-${cob2}`]]);
   } finally {
     await app.close();
     await api.fechar();

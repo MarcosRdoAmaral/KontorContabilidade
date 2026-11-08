@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.53.0';
+export const MANUAL_VERSAO = '1.54.0';
 
 export const MANUAL = [
   {
@@ -235,6 +235,8 @@ export const MANUAL = [
       <p>No <strong>Controle mensal</strong>, ao enviar o DAS ou o DARF por e-mail ou WhatsApp, a guia também vai para o aplicativo dos clientes conectados (uma vez por mês); o botão <em>Enviar pelo aplicativo</em> manda de novo só por lá. A guia chega com o valor, a data, o PDF e, quando o PDF traz, o código de barras e o Pix copia e cola, conferidos pelos dígitos. O cliente recebe uma notificação, paga pelo aplicativo do banco e, se precisar, pede a guia atualizada, que cai aqui em Solicitações.</p>
       <h3>Envio automático (sem o cliente pedir)</h3>
       <p>Com o <strong>envio automático</strong> ligado (padrão; o botão fica no topo de <em>Solicitações dos clientes</em>), o DAS e o DARF da DCTFWeb que ficam prontos no Controle mensal vão sozinhos ao Kontor Empresas e ao aplicativo dos clientes conectados, junto com a declaração e o recibo de entrega, uma vez por mês. Os documentos do DP lidos da pasta do escritório (guia do FGTS, DARF previdenciária, boleto do sindicato, recibo mensal e espelho da folha) vão pela conexão no mesmo envio automático do DP; cliente conectado não precisa ter e-mail no cadastro.</p>
+      <h3>Boletos de honorários</h3>
+      <p>As cobranças do escritório (boleto ou Pix dos honorários) também vão ao Kontor Empresas e ao aplicativo do cliente conectado, com o demonstrativo em PDF, o código de barras e o Pix prontos para copiar: sozinhas com o envio automático ligado, ou pelo botão de enviar da tela de Cobranças (cliente conectado sem e-mail também recebe). O cliente é localizado pelo CNPJ/CPF do tomador da cobrança. Quando o pagamento é confirmado (retorno do banco ou baixa manual) ou a cobrança é cancelada, o cliente é avisado; boleto reemitido substitui o anterior.</p>
       <h3>Pedidos de guia</h3>
       <p>Em <em>Escritório › Solicitações dos clientes</em> chegam os pedidos de DAS, guia da DCTFWeb ou DARF, com o período, a data em que o cliente quer pagar e a observação dele. Para cada pedido:</p>
       <ul><li><strong>Gerar guia</strong>: calcula pelo Integra Contador, como o recálculo da Situação fiscal (DAS: valor em cobrança; DCTFWeb: com multa e juros até a data de pagamento pedida; DARF: informe código da receita, vencimento e valor do principal). Cada guia é uma chamada cobrada pelo SERPRO.</li>

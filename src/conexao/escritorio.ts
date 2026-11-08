@@ -12,6 +12,7 @@ import { ErroNegocio } from '../servicos/emissao.js';
 import { empresaDoEscritorio } from '../servicos/cadastro-unico.js';
 import { gerarGuia, type PedidoGuia } from '../servicos/guias.js';
 import { dadosDePagamento } from '../servicos/fechamento.js';
+import { demonstrativoPdf, obterCobranca, referenciaDa } from '../servicos/cobranca.js';
 import { FalhaApi, buscarEnvelopes, chamarApi, chaveSessao, enviarEnvelope, gerarChaves, impressao, type Envelope } from './nucleo.js';
 
 interface Config { escritorio_id: number; api_id: number; token: string; privada: string; publica: string; cnpj: string; nome: string; ultimo_sync: string | null; ultimo_erro: string | null }
@@ -360,4 +361,66 @@ export function zipRecebido(escritorioId: number, id: number) {
   if (!f) throw new ErroNegocio('Fechamento não encontrado.', 404);
   db.prepare("UPDATE fechamentos_recebidos SET baixado_em = COALESCE(baixado_em, datetime('now')) WHERE id = ?").run(id);
   return { zip: Buffer.from(f.zip), nome: /\.zip$/i.test(f.nome) ? f.nome : `${f.nome}.zip` };
+}
+
+// ---- boletos de honorários (cobranças do escritório) ----
+
+/** Cliente da carteira que corresponde ao tomador da cobrança (mesmo CNPJ/CPF), se estiver conectado. */
+function clienteDaCobranca(c: any): number | null {
+  const t = db.prepare('SELECT t.documento, e.escritorio_id FROM tomadores t JOIN empresas e ON e.id = t.empresa_id WHERE t.id = ?').get(c.tomador_id) as any;
+  if (!t?.documento) return null;
+  const cli = db.prepare('SELECT id FROM empresas WHERE escritorio_id = ? AND documento = ? AND eh_escritorio = 0 ORDER BY na_carteira DESC, id LIMIT 1').get(t.escritorio_id, t.documento) as { id: number } | undefined;
+  return cli && aparelhosConectados(cli.id) ? cli.id : null;
+}
+const jaFoi = (chave: string) => !!db.prepare('SELECT 1 FROM conexao_envios WHERE chave = ?').get(chave);
+const marcar = (chave: string, empresaId: number) => db.prepare('INSERT OR IGNORE INTO conexao_envios (chave, empresa_id) VALUES (?, ?)').run(chave, empresaId);
+
+/**
+ * Manda o boleto (ou Pix) de uma cobrança do escritório ao Kontor Empresas e ao aplicativo do cliente conectado.
+ * Devolve quantos aparelhos receberam (0 = cliente não conectado ou cobrança ainda sem boleto/Pix).
+ */
+export async function enviarCobrancaPelaConexao(escritorioId: number, cobrancaId: number, forcar = false) {
+  const c = obterCobranca(cobrancaId);
+  if (!c || c.status === 'CANCELADO' || c.status === 'PAGO') return 0;
+  if (c.forma === 'PIX' ? !c.pix_copia_cola : !c.linha_digitavel) return 0;
+  const cli = clienteDaCobranca(c);
+  if (!cli) return 0;
+  const chave = `COB:${c.id}:${c.vencimento}:${c.valor}`; // reemitida (outro vencimento ou valor) vai de novo e substitui a anterior
+  if (!forcar && jaFoi(chave)) return 0;
+  const dm = await demonstrativoPdf(c.id);
+  const ref = referenciaDa(c);
+  const n = await enviarAoCliente(escritorioId, cli, 'GUIA', {
+    tipo: 'BOLETO', titulo: `Honorários — ${ref}`, periodo: ref, valor: c.valor, validade: c.vencimento, nome: dm.nome, pdf: dm.pdf.toString('base64'),
+    linha: c.forma === 'PIX' ? null : c.linha_digitavel, pix: c.pix_copia_cola ?? null, ref: `COB-${c.id}`, mensagem: c.descricao ? String(c.descricao).slice(0, 300) : null,
+    pedido: null, competencia: null, enviada_em: new Date().toISOString(),
+  });
+  marcar(chave, cli);
+  return n;
+}
+
+/**
+ * Volta automática: boletos novos, pagamentos confirmados e cancelamentos das cobranças do escritório
+ * vão sozinhos aos clientes conectados (só o que acontecer depois de ligar o envio automático).
+ */
+export async function envioAutomaticoCobrancas() {
+  const escritorios = db.prepare(`SELECT DISTINCT e.escritorio_id FROM conexao_aparelhos a JOIN empresas e ON e.id = a.empresa_id WHERE a.situacao = 'CONECTADO'`).all() as { escritorio_id: number }[];
+  for (const { escritorio_id: esc } of escritorios) {
+    const cfg = lerEnvioAutomatico(esc);
+    if (!cfg.ligado || !cfg.desde) continue;
+    const cobs = db.prepare(`SELECT c.id, c.status, c.pago_em, c.valor_pago FROM cobrancas c JOIN empresas e ON e.id = c.empresa_id
+      WHERE e.escritorio_id = ? AND (c.criado_em >= ? OR c.pago_em >= ?) ORDER BY c.id`).all(esc, cfg.desde, cfg.desde.slice(0, 10)) as any[];
+    for (const x of cobs) {
+      try {
+        if (x.status === 'PAGO' || x.status === 'CANCELADO') {
+          const chaveBoleto = db.prepare("SELECT empresa_id FROM conexao_envios WHERE chave LIKE ?").get(`COB:${x.id}:%`) as { empresa_id: number } | undefined;
+          if (!chaveBoleto || !aparelhosConectados(chaveBoleto.empresa_id)) continue; // o cliente nunca recebeu este boleto pela conexão
+          const chave = `COB-${x.status === 'PAGO' ? 'PAGO' : 'CANCELADA'}:${x.id}`;
+          if (jaFoi(chave)) continue;
+          if (x.status === 'PAGO') await enviarAoCliente(esc, chaveBoleto.empresa_id, 'PAGAMENTO', { ref: `COB-${x.id}`, pago_em: x.pago_em, valor_pago: x.valor_pago ?? null });
+          else await enviarAoCliente(esc, chaveBoleto.empresa_id, 'COBRANCA_CANCELADA', { ref: `COB-${x.id}` });
+          marcar(chave, chaveBoleto.empresa_id);
+        } else await enviarCobrancaPelaConexao(esc, x.id);
+      } catch { /* tenta de novo na próxima volta */ }
+    }
+  }
 }

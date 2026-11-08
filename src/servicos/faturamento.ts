@@ -1,3 +1,4 @@
+import { enviarCobrancaPelaConexao } from '../conexao/escritorio.js';
 import { z } from 'zod';
 import { db } from '../db.js';
 import type { Usuario } from '../auth.js';
@@ -177,11 +178,18 @@ export async function enviarCobrancaPorEmail(escritorioId: number, cobrancaId: n
   if (c.forma === 'PIX' ? !c.pix_copia_cola : !c.nosso_numero) throw new ErroNegocio(c.forma === 'PIX' ? 'Informe o Pix copia e cola antes de enviar.' : (c.observacao_banco ?? 'O boleto ainda não foi gerado.'));
   const t = db.prepare('SELECT * FROM tomadores WHERE id = ?').get(c.tomador_id) as any;
   const para = [...new Set([t.email, ...(t.email_cobranca ?? '').split(/[,;\s]+/)].filter((x: any) => x && /@/.test(x)).map((x: string) => x.toLowerCase()))].slice(0, 5) as string[];
-  if (!para.length) throw new ErroNegocio('O cliente não tem e-mail cadastrado.');
+  // cliente conectado (Kontor Empresas ou aplicativo do celular): o boleto vai também por lá
+  let app = 0;
+  try { app = await enviarCobrancaPelaConexao(escritorioId, c.id, true); } catch (e) { if (!para.length) throw e; }
+  const peloApp = app ? `aplicativo (${app} aparelho${app === 1 ? '' : 's'})` : null;
+  if (!para.length) {
+    if (peloApp) return { para: peloApp };
+    throw new ErroNegocio('O cliente não tem e-mail cadastrado.');
+  }
   const anexos: { filename: string; content: Buffer; contentType: string }[] = [];
   const dm = await demonstrativoPdf(c.id); anexos.push({ filename: dm.nome, content: dm.pdf, contentType: 'application/pdf' });
   try { await enviarMensagemBoleto(escritorioId, para, { ...c, referencia: referenciaDa(c) }, t, anexos); }
   catch (e) { registrarEmailCobranca(c.id, 'ERRO', para.join(', ')); throw e; }
   registrarEmailCobranca(c.id, 'ENVIADO', para.join(', '));
-  return { para: para.join(', ') };
+  return { para: [para.join(', '), peloApp].filter(Boolean).join(' e ') };
 }
