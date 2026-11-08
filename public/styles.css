@@ -1302,3 +1302,11 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
   .tabela-captura td, .tabela-captura th { font-size: .8rem; }
 }
 @media (max-width: 1400px) { .topo-busca { flex: 0 1 280px; min-width: 150px; } }
+@media (max-width: 1600px) {
+  .tabela-controle td:nth-child(2) { min-width: 170px; }
+  .tabela-controle input.ct-num { width: 92px; }
+  .tabela-controle input[type=date] { width: 124px; }
+  .tabela-controle input[data-k=observacoes] { width: 120px; }
+  .tabela-controle select { min-width: 92px; }
+  .tabela-controle [data-hoje] { display: none; } /* "Marcar enviado hoje" continua no menu ⋯ da linha */
+}

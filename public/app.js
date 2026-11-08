@@ -5996,6 +5996,7 @@ async function telaControle() {
     pintarPaginacao();
     const vis = f.porPagina ? todos.slice((f.pagina - 1) * f.porPagina, f.pagina * f.porPagina) : todos;
     $('#ct-lista').innerHTML = vis.length ? vis.map(linha).join('') : `<tr><td colspan="${COLS[f.area].length + 3}"><div class="vazio" style="border:0">Nenhum cliente nesta lista.</div></td></tr>`;
+    encaixarTabela($('#ct-lista')?.closest('table'));
     totais();
     const st = $('#ct-sel-todos'); st.checked = vis.length > 0 && vis.every((c) => sel.has(c.empresa_id));
     st.onchange = () => { vis.forEach((c) => (st.checked ? sel.add(c.empresa_id) : sel.delete(c.empresa_id))); pintar(); };
@@ -7125,6 +7126,20 @@ function fecharAba(id) {
   const prox = abas.lista[Math.min(i, abas.lista.length - 1)];
   if (prox) irParaAba(prox);
   else { abas.pendente = 'nova'; abas.ativa = null; if (location.hash === '#/inicio') abasNavegou(); else location.hash = '#/inicio'; }
+}
+/**
+ * Diminui o zoom de uma tabela larga (Controle mensal) para caber na largura da tela, sem rolagem lateral.
+ * Não passa de 62% para continuar legível; abaixo disso volta a rolagem.
+ */
+function encaixarTabela(tabela) {
+  const caixa = tabela?.parentElement; if (!caixa) return;
+  tabela.style.zoom = '';
+  const natural = tabela.scrollWidth, livre = caixa.clientWidth;
+  if (natural > livre + 1) tabela.style.zoom = String(Math.max(0.62, Math.floor((livre - 8) / natural * 100) / 100));
+  if (!caixa.dataset.encaixe && window.ResizeObserver) {
+    caixa.dataset.encaixe = '1'; let ultima = livre, t;
+    new ResizeObserver(() => { if (!caixa.isConnected || Math.abs(caixa.clientWidth - ultima) < 2) return; ultima = caixa.clientWidth; clearTimeout(t); t = setTimeout(() => encaixarTabela(tabela), 60); }).observe(caixa);
+  }
 }
 function pintarAbas() {
   const caixa = $('#abas-app'); if (!caixa) return;
