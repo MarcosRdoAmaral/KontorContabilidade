@@ -48,7 +48,7 @@ test('módulos vendidos à parte: liberados no teste, só com o código KG3 na l
     assert.equal((await call('PUT', '/api/radar/config', { provedor: 'DEMONSTRACAO' }, t)).status, 403);
     me = (await call('GET', '/api/me', undefined, t)).json;
     assert.ok(!me.modulos.includes('radar'));
-    assert.deepEqual(me.naoContratados.map((m: any) => m.id), ['radar'], 'o menu mostra "contratar"');
+    assert.deepEqual(me.naoContratados.map((m: any) => m.id), ['radar'], 'fica fora do menu (Configurações > Licença oferece a contratação)');
     lic = (await call('GET', '/api/licenca', undefined, t)).json;
     assert.deepEqual(lic.modulos, []); assert.equal(lic.plano, 'prata');
 

@@ -464,11 +464,7 @@ async function iniciar() {
   $('#app').hidden = false;
   $('#nome-usuario').textContent = `${estado.usuario.nome} (${estado.usuario.login})`;
   document.querySelectorAll('[data-modulo]').forEach((a) => (a.hidden = !a.dataset.modulo.split(' ').some((m) => estado.usuario.modulos.includes(m))));
-  // módulos vendidos à parte e ainda não contratados: o item fica no menu, com a marca "contratar"
-  for (const m of estado.usuario.naoContratados ?? []) {
-    const a = document.querySelector(`#menu a[data-modulo="${m.id}"]`);
-    if (a) { a.hidden = false; a.classList.add('nao-contratado'); if (!a.querySelector('.selo-contratar')) a.insertAdjacentHTML('beforeend', '<span class="selo-contratar">contratar</span>'); }
-  }
+  // módulos vendidos à parte e ainda não contratados não aparecem no menu (a contratação fica em Configurações > Licença)
   // grupos do menu: somem se nenhum item é permitido; a abertura de cada um fica guardada neste navegador
   document.querySelectorAll('#menu details.grupo').forEach((g) => {
     g.hidden = ![...g.querySelectorAll('a')].some((a) => !a.hidden);
