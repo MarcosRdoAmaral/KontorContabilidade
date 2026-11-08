@@ -30,6 +30,14 @@ test('Radar de Oportunidades: pesquisa (demonstração e cache), CRM, painel, pe
     const p2 = (await call('POST', '/api/radar/pesquisar', { modo: 'NOVAS', dias: 60, uf: 'SC', municipio: 'Blumenau' }, t)).json;
     assert.equal(p2.doCache, true, 'mesma pesquisa usa o cache');
     const todas = (await call('POST', '/api/radar/pesquisar', { modo: 'TODAS', limite: 100 }, t)).json;
+    // MEI: razão social começa com números; o escritório escolhe trazer, não trazer ou só MEI
+    const meis = todas.empresas.filter((e: any) => e.mei);
+    assert.ok(meis.length > 0 && meis.every((e: any) => /^\d/.test(e.razao_social)));
+    const semMei = (await call('POST', '/api/radar/pesquisar', { modo: 'TODAS', limite: 100, mei: 'EXCLUIR' }, t)).json;
+    assert.equal(semMei.empresas.length, todas.empresas.length - meis.length); assert.equal(semMei.meiOcultos, meis.length);
+    assert.ok(semMei.empresas.every((e: any) => !e.mei));
+    const soMei = (await call('POST', '/api/radar/pesquisar', { modo: 'TODAS', limite: 100, mei: 'SOMENTE' }, t)).json;
+    assert.equal(soMei.empresas.length, meis.length);
     assert.equal(todas.total, 64);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM radar_empresas').get().n, 64, 'sem duplicidade');
     const tec = todas.empresas.find((e: any) => e.cnae === '6201501');

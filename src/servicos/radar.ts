@@ -179,6 +179,7 @@ export const Pesquisa = z.object({
   comTelefone: z.boolean().nullish(),
   comEmail: z.boolean().nullish(),
   potencial: z.enum(['ALTO', 'MEDIO', 'BAIXO']).nullish().or(z.literal('').transform(() => null)),
+  mei: z.enum(['INCLUIR', 'EXCLUIR', 'SOMENTE']).default('INCLUIR'), // MEI: razão social começa com números (o CNPJ do titular)
   estagio: z.string().max(30).nullish(),
   ordem: z.enum(['RECENTES', 'ANTIGAS', 'NOME', 'POTENCIAL']).default('RECENTES'),
   pagina: z.coerce.number().int().min(1).max(500).default(1),
@@ -189,7 +190,7 @@ export type Pesquisa = z.infer<typeof Pesquisa>;
 
 const linhaEmpresa = (r: any, criterios: Criterio[]) => ({
   ...r, endereco: r.endereco_json ? JSON.parse(r.endereco_json) : {}, endereco_json: undefined, alteracoes_json: undefined, demonstracao: !!r.demonstracao,
-  potencial: potencial(r, criterios),
+  potencial: potencial(r, criterios), mei: ehMei(r),
   lead: r.lead_id ? { id: r.lead_id, estagio: r.lead_estagio, rotulo: ESTAGIOS[r.lead_estagio as Estagio], responsavel: r.lead_responsavel ?? null, proximo_contato: r.lead_proximo ?? null } : null,
 });
 const SELECT_EMP = `SELECT e.*, l.id AS lead_id, l.estagio AS lead_estagio, l.proximo_contato AS lead_proximo, u.nome AS lead_responsavel
@@ -235,8 +236,17 @@ export async function pesquisar(escritorioId: number, usuarioId: number, p: Pesq
   const porCnpj = new Map((cnpjs.length ? db.prepare(`${SELECT_EMP} WHERE e.cnpj IN (${cnpjs.map(() => '?').join(',')})`).all(escritorioId, ...cnpjs) as any[] : []).map((r) => [r.cnpj, linhaEmpresa(r, criterios)]));
   let empresas = cnpjs.map((c) => porCnpj.get(c)).filter(Boolean) as any[];
   if (p.potencial) empresas = empresas.filter((e) => e.potencial.nivel === p.potencial);
+  const antes = empresas.length;
+  empresas = filtrarMei(empresas, p.mei);
   ordenar(empresas, p.ordem);
-  return { modo: p.modo, fonte: prov.nome, demonstracao: prov.demonstracao, total, pagina: p.pagina, limite: p.limite, paginas: Math.max(1, Math.ceil(total / p.limite)), doCache, consultadoEm, empresas };
+  return { modo: p.modo, fonte: prov.nome, demonstracao: prov.demonstracao, total, pagina: p.pagina, limite: p.limite, paginas: Math.max(1, Math.ceil(total / p.limite)), doCache, consultadoEm, empresas,
+    meiOcultos: p.mei === 'EXCLUIR' ? antes - empresas.length : 0, outrosOcultos: p.mei === 'SOMENTE' ? antes - empresas.length : 0 };
+}
+
+/** MEI: a razão social do MEI é o CNPJ seguido do nome do titular, então começa com números. */
+export const ehMei = (e: { razao_social?: string | null }) => /^\s*\d/.test(String(e.razao_social ?? ''));
+function filtrarMei<T extends { razao_social?: string | null }>(l: T[], modo: Pesquisa['mei']) {
+  return modo === 'EXCLUIR' ? l.filter((e) => !ehMei(e)) : modo === 'SOMENTE' ? l.filter(ehMei) : l;
 }
 
 function ordenar(l: any[], ordem: Pesquisa['ordem']) {
@@ -257,7 +267,7 @@ function carteira(escritorioId: number, p: Pesquisa, criterios: Criterio[]) {
   if (p.cnae) { cond.push('e.cnae LIKE ?'); par.push(`${so(p.cnae)}%`); }
   const linhas = (db.prepare(`SELECT e.*, l.id AS lead_id, l.estagio AS lead_estagio, l.proximo_contato AS lead_proximo, u.nome AS lead_responsavel
     FROM radar_leads l JOIN radar_empresas e ON e.cnpj = l.cnpj LEFT JOIN usuarios u ON u.id = l.responsavel_id WHERE ${cond.join(' AND ')}`).all(...par) as any[]).map((r) => linhaEmpresa(r, criterios));
-  let l = p.potencial ? linhas.filter((e) => e.potencial.nivel === p.potencial) : linhas;
+  let l = filtrarMei(p.potencial ? linhas.filter((e) => e.potencial.nivel === p.potencial) : linhas, p.mei);
   ordenar(l, p.ordem);
   const total = l.length;
   l = l.slice((p.pagina - 1) * p.limite, p.pagina * p.limite);

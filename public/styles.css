@@ -1067,7 +1067,7 @@ a.kp:hover { border-color: var(--laranja); }
 .rd-modos button { padding: 9px 22px; font-weight: 600; border-radius: 999px; background: transparent; }
 .rd-grade-1 { grid-template-columns: minmax(200px, 1.45fr) minmax(110px, .85fr) minmax(160px, 1.2fr) minmax(160px, 1.2fr) minmax(160px, 1.2fr); }
 .rd-grade-2 { grid-template-columns: minmax(200px, 1.45fr) 1fr; margin-top: 10px; }
-.rd-grade-2 > label { grid-column: 1; }
+.rd-grade-2 > label { grid-column: auto; }
 .rd-campo { position: relative; display: block; }
 .rd-campo .ico { position: absolute; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; pointer-events: none; color: var(--tinta); }
 .rd-campo.ic-dir .ico { right: 12px; }
@@ -1310,3 +1310,4 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
   .tabela-controle select { min-width: 92px; }
   .tabela-controle [data-hoje] { display: none; } /* "Marcar enviado hoje" continua no menu ⋯ da linha */
 }
+.rd-mei { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 6px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; color: var(--texto-2, #9aa4b2); border: 1px solid currentColor; vertical-align: 1px; }

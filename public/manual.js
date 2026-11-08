@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.55.2';
+export const MANUAL_VERSAO = '1.56.0';
 
 export const MANUAL = [
   {
@@ -47,6 +47,7 @@ export const MANUAL = [
       <h3>Pesquisar</h3>
       <p>Use <em>Novas empresas</em> (abertas nos últimos dias, só ativas), <em>Todas</em> (qualquer data de abertura) ou <em>Minha carteira</em> (os leads do escritório). Os filtros se combinam: razão social ou CNPJ, UF, município, período ou datas de abertura, CNAE principal, situação cadastral e, em <em>Mais filtros</em>, descrição da atividade, natureza jurídica, porte, com telefone, com e-mail e potencial. Com a Casa dos Dados, o filtro pela descrição da atividade vale para a página trazida; para buscar por atividade em toda a base, use o CNAE.</p>
       <p>Cada empresa fica guardada uma vez só (pelo CNPJ), com a fonte e a data da última atualização. A pesquisa traz só parte do cadastro (a empresa aparece com a marca <em>dados resumidos</em>). O botão <em>Atualizar dados</em>, no topo da lista, consulta o cadastro completo (situação, endereço, CNAE, natureza jurídica, porte e contatos) das empresas da página: só as com dados resumidos ou todas. Cada empresa é uma consulta na Casa dos Dados. O mesmo botão existe em <em>Ver detalhes</em>, para uma empresa só. <em>Refazer pesquisa</em> repete a pesquisa na fonte, sem usar a pesquisa guardada. Em <em>Alterações cadastrais</em> aparecem só os dados que mudaram (antes e agora); informações que faltavam e foram completadas não contam como alteração.</p>
+      <p><strong>MEI:</strong> escolha <em>Trazer MEI</em>, <em>Não trazer MEI</em> ou <em>Só MEI</em>. O sistema reconhece o MEI pela razão social, que começa com o número do CNPJ; a lista marca essas empresas com a etiqueta <em>MEI</em>. A escolha vale para a página trazida da fonte (o total informado continua o da fonte) e fica guardada neste computador.</p>
       <h3>Potencial estimado</h3>
       <p>O Kontor estima a oportunidade pelos critérios do escritório (começo do código CNAE e palavras na descrição da atividade, com peso): prestador de serviços, pode emitir NFS-e, boleto recorrente e automação de cobranças, que podem ser ajustados. É sempre uma <em>estimativa</em>: o CNAE não confirma que a empresa precisa do serviço.</p>
       <h3>Carteira de prospecção (CRM)</h3>

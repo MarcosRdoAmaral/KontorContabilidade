@@ -195,9 +195,11 @@ export function empresasDemonstracao(hoje = new Date()): EmpresaRadar[] {
     const [cnae, desc, seg] = ATIVIDADES[(i * 5) % ATIVIDADES.length];
     const nome = `${NOMES[i % NOMES.length]} ${seg}`;
     const abertura = new Date(hoje.getTime() - ((i * 37) % 120) * 864e5 - (i >= 48 ? 400 * 864e5 : 0)).toISOString().slice(0, 10);
+    const cnpj = dv(`99${String(100000 + i * 731).padStart(6, '0')}0001`);
+    const mei = i % 6 === 0; // como na Receita, a razão social do MEI começa com o número do CNPJ
     l.push({
-      cnpj: dv(`99${String(100000 + i * 731).padStart(6, '0')}0001`),
-      razao_social: `${nome.toUpperCase()} LTDA (DEMONSTRAÇÃO)`, nome_fantasia: `${nome} (demonstração)`,
+      cnpj,
+      razao_social: mei ? `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)} ${nome.toUpperCase()} (DEMONSTRAÇÃO)` : `${nome.toUpperCase()} LTDA (DEMONSTRAÇÃO)`, nome_fantasia: `${nome} (demonstração)`,
       data_abertura: abertura, uf: 'SC', municipio: cid, cod_municipio: ibge, cnae, cnae_descricao: desc,
       natureza_codigo: i % 3 ? '2062' : '2135', natureza_descricao: i % 3 ? 'Sociedade Empresária Limitada' : 'Empresário (Individual)',
       situacao: i % 11 === 10 ? 'BAIXADA' : 'ATIVA', porte: PORTES[i % PORTES.length],
