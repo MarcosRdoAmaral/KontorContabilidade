@@ -45,6 +45,10 @@ test('ADN: leitura das respostas', async () => {
   const rej = lerRespostaAdn(400, { StatusProcessamento: 'REJEICAO', Erros: [{ Codigo: 'E123', Descricao: 'Certificado não autorizado' }] });
   assert.equal(rej.situacao, 'REJEICAO'); assert.match(rej.erros[0], /E123 - Certificado não autorizado/);
   assert.equal(lerRespostaAdn(500, null).situacao, 'ERRO');
+  assert.match(lerRespostaAdn(400, { title: 'Bad Request', detail: 'Procuração não encontrada' }).erros[0], /Procuração não encontrada/, 'problem+json');
+  assert.match(lerRespostaAdn(400, { errors: { cnpjConsulta: ['CNPJ inválido'] } }).erros[0], /cnpjConsulta: CNPJ inválido/, 'erros por campo');
+  assert.match(lerRespostaAdn(400, '<html><body>Certificado sem permissão</body></html>').erros[0], /^Certificado sem permissão$/, 'texto/HTML');
+  assert.match(lerRespostaAdn(400, null).erros[0], /HTTP 400/);
 });
 
 test('captura: NFS-e do ADN, NF-e de venda pelo autXML e pacote do mês', async () => {

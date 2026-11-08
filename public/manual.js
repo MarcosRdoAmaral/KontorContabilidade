@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.54.0';
+export const MANUAL_VERSAO = '1.55.0';
 
 export const MANUAL = [
   {
@@ -103,7 +103,7 @@ export const MANUAL = [
       </ul>
       <p>“Só não enviados” mostra o que falta mandar; o rodapé soma faturamento, impostos e encargos.</p>
       <h3>Fechamento: guias do Simples e da DCTFWeb e envio ao cliente</h3>
-      <p>As declarações são transmitidas no seu sistema (SCI, portal do Simples, e-CAC); o Kontor busca o que já foi transmitido, gera a guia e envia ao cliente. A coluna <em>PGDAS-D</em> (aba Fiscal) e a coluna <em>DCTFWeb</em> (aba Departamento pessoal) mostram a situação do mês; clique nela para abrir a janela do cliente. Tudo passa pelo Integra Contador, com a procuração do cliente ao escritório, e cada chamada é cobrada pelo SERPRO.</p>
+      <p>As declarações são transmitidas no seu sistema (SCI, portal do Simples, e-CAC); o Kontor busca o que já foi transmitido, gera a guia e envia ao cliente. A coluna <em>PGDAS-D</em> (aba Fiscal) e a coluna <em>DCTFWeb</em> (aba Departamento pessoal) mostram a situação do mês; clique nela para abrir a janela do cliente. Tudo passa pelo Integra Contador, com a procuração do cliente ao escritório.</p>
       <ul>
         <li><strong>Simples (aba Fiscal):</strong> <em>Buscar declaração e DAS já transmitidos</em> traz a declaração, o recibo e o DAS; o faturamento do mês (receita bruta do PA, lida da declaração) e o valor do DAS vão para o Controle mensal. O botão <em>Buscar DAS já transmitidos</em> faz isso para vários clientes.</li>
         <li><strong>DCTFWeb (aba Departamento pessoal):</strong> <em>Buscar recibo e DARF já transmitidos</em> traz o recibo e gera o DARF, com juros e multa até a <em>Data de pagamento do DARF</em> (em branco = hoje). O valor vai para o DARF Prev. O botão <em>Buscar DARFs já transmitidos</em> faz isso para vários clientes.</li>
@@ -196,7 +196,7 @@ export const MANUAL = [
       <p>No alto do Monitor fiscal, o botão <em>Pendências por cliente (PDF)</em> gera um relatório consolidado da carteira no papel timbrado do escritório: os totais em aberto (Receita/PGFN, FGTS e parcelas em atraso), uma linha por cliente com pendência (situação, valores, obrigações atrasadas e a entregar no mês, mensagens não lidas da caixa postal e certificados vencendo) e, depois, o detalhe de cada cliente. Vale para os clientes marcados na lista ou, sem marcação, para todos os da lista (com o filtro aplicado). Bom para reunião de equipe ou para o responsável de cada carteira. Os dois relatórios (Pendências por cliente e Situação fiscal do cliente) também ficam no menu <strong>Relatórios</strong>, no grupo <em>Fiscal dos clientes</em>, onde dá para filtrar as pendências por responsável.</p>
       <h3>Relatório consolidado do cliente</h3>
       <p>No detalhe do cliente (clique no nome dele no Monitor fiscal), o botão <em>Relatório consolidado (PDF)</em> gera a <strong>Situação fiscal do cliente</strong> no papel timbrado do escritório, pronto para enviar: a situação geral, o total em aberto (Receita/PGFN, FGTS e parcelas em atraso), o resumo de cada processo, os débitos por tributo e período, as inscrições em dívida ativa, os parcelamentos, as competências do FGTS, as mensagens não lidas da caixa postal, as obrigações atrasadas e dos próximos 30 dias, os certificados e procurações e, no Simples, o faturamento acumulado frente ao sublimite. Nada é consultado na hora: o relatório usa as últimas consultas (a data de cada uma aparece no PDF).</p>
-      <p>Os botões acima da lista (<em>Consultar situação fiscal</em>, <em>Consultar parcelamentos</em>, <em>Consultar caixa postal</em> e <em>Consultar FGTS Digital</em>, para quem tem acesso à Situação fiscal) valem para os clientes marcados ou, sem marcação, para todos os da lista (respeitando a busca e o filtro). As consultas à Receita buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Cada chamada é cobrada pelo SERPRO e nada roda sozinho.</p>
+      <p>Os botões acima da lista (<em>Consultar situação fiscal</em>, <em>Consultar parcelamentos</em>, <em>Consultar caixa postal</em> e <em>Consultar FGTS Digital</em>, para quem tem acesso à Situação fiscal) valem para os clientes marcados ou, sem marcação, para todos os da lista (respeitando a busca e o filtro). As consultas à Receita buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Nada roda sozinho.</p>
       <ul>
         <li><strong>Parcelamentos:</strong> para clientes do Simples e MEI, os pedidos do parcelamento normal, especial, Pert e Relp e, havendo parcelamento ativo, as parcelas em aberto (de 4 a 8 chamadas por cliente). Parcela de mês anterior ainda em aberto conta como em atraso. Clique no nome do cliente na lista para ver as parcelas e gerar o DAS de cada uma; o DAS fica guardado com as guias do cliente. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</li>
         <li><strong>Caixa postal:</strong> a lista das mensagens mais recentes do e-CAC (assunto, data, se foi lida e se a Receita marcou como relevante), uma chamada por cliente. O conteúdo não é aberto na consulta. Para ler uma mensagem, clique no cliente e em <em>Abrir</em>: o Kontor avisa antes, porque abrir pode registrar a leitura no e-CAC e, numa intimação, contar como ciência e começar o prazo.</li>
@@ -239,7 +239,7 @@ export const MANUAL = [
       <p>As cobranças do escritório (boleto ou Pix dos honorários) também vão ao Kontor Empresas e ao aplicativo do cliente conectado, com o demonstrativo em PDF, o código de barras e o Pix prontos para copiar: sozinhas com o envio automático ligado, ou pelo botão de enviar da tela de Cobranças (cliente conectado sem e-mail também recebe). O cliente é localizado pelo CNPJ/CPF do tomador da cobrança. Quando o pagamento é confirmado (retorno do banco ou baixa manual) ou a cobrança é cancelada, o cliente é avisado; boleto reemitido substitui o anterior.</p>
       <h3>Pedidos de guia</h3>
       <p>Em <em>Escritório › Solicitações dos clientes</em> chegam os pedidos de DAS, guia da DCTFWeb ou DARF, com o período, a data em que o cliente quer pagar e a observação dele. Para cada pedido:</p>
-      <ul><li><strong>Gerar guia</strong>: calcula pelo Integra Contador, como o recálculo da Situação fiscal (DAS: valor em cobrança; DCTFWeb: com multa e juros até a data de pagamento pedida; DARF: informe código da receita, vencimento e valor do principal). Cada guia é uma chamada cobrada pelo SERPRO.</li>
+      <ul><li><strong>Gerar guia</strong>: calcula pelo Integra Contador, como o recálculo da Situação fiscal (DAS: valor em cobrança; DCTFWeb: com multa e juros até a data de pagamento pedida; DARF: informe código da receita, vencimento e valor do principal).</li>
         <li><strong>Anexar PDF</strong>: para a guia emitida em outro lugar (e-CAC, prefeitura).</li>
         <li><strong>Enviar</strong>: depois de conferir o PDF; pode ir com uma mensagem. A guia chega no Kontor Empresas do cliente com valor, validade e PDF.</li>
         <li><strong>Recusar</strong>: com o motivo, que o cliente vê.</li></ul>
@@ -262,7 +262,7 @@ export const MANUAL = [
       </ol>
       <p class="dica">Se o SERPRO responder “Versão Descontinuada”, ele mudou a versão de algum serviço. Em Configurações &gt; Integra Contador &gt; Avançado, informe a versão nova no formato SISTEMA=versão (ex.: SITFIS=2.0) ou aguarde a atualização do sistema.</p>
       <h3>Conferir</h3>
-      <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer (o SERPRO cobra por consulta) e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. Para conferir só alguns clientes, marque as linhas antes: o botão passa a <em>Conferir N selecionada(s) na Receita</em> e consulta só essas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
+      <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. Para conferir só alguns clientes, marque as linhas antes: o botão passa a <em>Conferir N selecionada(s) na Receita</em> e consulta só essas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
       <p class="dica">EFD, ECD, ECF, eSocial, FGTS e as obrigações estaduais e municipais não passam pelo Integra Contador e continuam sendo marcadas à mão.</p>`,
   },
   {
@@ -285,7 +285,7 @@ export const MANUAL = [
         <li><strong>DAS de cobrança:</strong> Simples Nacional, com o valor em cobrança na Receita (já descontando pagamentos parciais e parcelas) e a validade definida pela Receita.</li>
         <li><strong>Guia da DCTFWeb:</strong> contribuições previdenciárias (CP-patronal, terceiros), com todos os débitos do período de apuração.</li>
       </ul>
-      <p><em>Outra guia</em> recalcula informando os dados à mão. Nada é gerado sozinho: cada guia é uma chamada ao Integra Contador, cobrada pelo SERPRO. As inscrições em dívida ativa (PGFN) não saem pelo Integra Contador: use o Regularize.</p>
+      <p><em>Outra guia</em> recalcula informando os dados à mão. Nada é gerado sozinho. As inscrições em dívida ativa (PGFN) não saem pelo Integra Contador: use o Regularize.</p>
       <h3>Aviso de débitos ao cliente</h3>
       <p>Marque na coluna <strong>Avisar</strong> os clientes que devem receber por e-mail o aviso de débitos em aberto (quem já sabe e não paga normalmente pode ficar desmarcado). O aviso lista os débitos por tributo e as inscrições em dívida ativa, sem guias: o cliente procura o escritório quando quiser pagar. Ele sai depois da consulta automática, se a opção <em>avisar os clientes marcados</em> estiver ligada (uma vez por consulta), ou na hora, pelo botão <em>Avisar o cliente agora</em> em Detalhes, que mostra o texto antes de enviar.</p>
       <h3>FGTS Digital</h3>
@@ -293,7 +293,6 @@ export const MANUAL = [
       <p>O resultado aparece na coluna <em>FGTS Digital</em> (em dia, valor em aberto, sem procuração) e o detalhe fica guardado com a data. A guia é emitida no próprio portal. O cliente precisa ter dado procuração ao escritório no FGTS Digital, e o certificado A1 do escritório precisa estar instalado no Windows (dois cliques no arquivo .pfx). A sessão do portal dura cerca de 30 minutos.</p>
       <h3>Consulta automática</h3>
       <p>No quadro <em>Consulta automática</em> (administrador), escolha um ou dois dias do mês e os e-mails que recebem o resultado. Nesses dias, a partir das 7h e com o programa aberto, o sistema consulta todos os clientes ativos e manda um e-mail com quem tem pendência, separando as <strong>pendências novas</strong> das que continuam e listando os clientes que não puderam ser consultados (sem procuração, por exemplo). Se o computador estiver desligado no dia, a consulta roda na próxima abertura do programa. Relatórios que a Receita ainda estava gerando são buscados sozinhos nas rodadas seguintes.</p>
-      <p class="dica">O quadro mostra quantas chamadas ao Integra Contador a consulta automática faz por mês (duas por cliente em cada rodada).</p>
       <p class="dica">É preciso o Integra Contador configurado (Configurações &gt; Integra Contador) e a procuração eletrônica do cliente para o escritório no e-CAC.</p>`,
   },
   {

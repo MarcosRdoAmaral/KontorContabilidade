@@ -4898,7 +4898,7 @@ async function telaCertificados() {
       <td>${esc(tab.tiposCertificado[c.tipo] ?? c.tipo)}${c.emissor ? `<br><span class="dica">${esc(c.emissor)}</span>` : ''}</td>
       <td>${esc(c.cliente ?? '—')}</td><td>${dataBr(c.validade)}</td>
       <td>${esc(c.guarda ?? '')}${c.observacoes ? `<br><span class="dica">${esc(c.observacoes)}</span>` : ''}</td>
-      <td class="c"><span class="tl-ac tl-ac-texto">${c.origem === 'SISTEMA' ? `<button type="button" data-emp="${c.empresa_id}">${icone('refazer')} Trocar A1</button>` : `${c.situacao !== 'RENOVADO' ? `<button type="button" data-ren="${c.id}">${icone('refazer')} Renovado</button>` : ''}<button type="button" data-ed="${c.id}" title="Editar" aria-label="Editar" class="so-ic">${icone('lapis')}</button>`}</span></td></tr>`).join('')
+      <td class="c"><span class="tl-ac tl-ac-texto">${c.origem === 'SISTEMA' ? `<button type="button" data-emp="${c.empresa_id}" title="Trocar o certificado A1">${icone('refazer')} Trocar A1</button>` : `${c.situacao !== 'RENOVADO' ? `<button type="button" data-ren="${c.id}" title="Marcar como renovado">${icone('refazer')} Renovado</button>` : ''}<button type="button" data-ed="${c.id}" title="Editar" aria-label="Editar" class="so-ic">${icone('lapis')}</button>`}</span></td></tr>`).join('')
       : '<tr><td colspan="7"><div class="vazio" style="border:0">Nenhum certificado nesta lista.</div></td></tr>';
     conteudo.querySelectorAll('[data-ed]').forEach((b) => (b.onclick = () => formCert(d.certificados.find((c) => c.id === Number(b.dataset.ed)), tab, carteira)));
     conteudo.querySelectorAll('[data-ren]').forEach((b) => (b.onclick = () => renovarCert(d.certificados.find((c) => c.id === Number(b.dataset.ren)))));
@@ -5500,7 +5500,7 @@ function gerarGuiaPedido(s) {
       ${darf ? `<div class="grade"><label>Código da receita <input name="receita" required placeholder="0000-00"></label><label>Descrição <input name="descricao" value="${esc(s.descricao ?? '')}"></label>
         <label>Vencimento original <input type="date" name="vencimento" required></label><label>Valor do principal (R$) <input name="valor" required inputmode="decimal"></label>
         <label>Pagar em <input type="date" name="data" value="${esc(s.data_pagamento ?? '')}"></label><label>Número de referência <input name="referencia"></label></div>` : ''}
-      <p class="dica">A guia é calculada pelo Integra Contador${s.tipo === 'DCTFWEB' ? ', com multa e juros até a data de pagamento pedida (ou hoje)' : s.tipo === 'DAS' ? ', com o valor em cobrança do período' : ''}. Cada guia é uma chamada cobrada pelo SERPRO. Depois de gerar, confira o PDF e clique em Enviar.</p>
+      <p class="dica">A guia é calculada pelo Integra Contador${s.tipo === 'DCTFWEB' ? ', com multa e juros até a data de pagamento pedida (ou hoje)' : s.tipo === 'DAS' ? ', com o valor em cobrança do período' : ''}. Depois de gerar, confira o PDF e clique em Enviar.</p>
       <p class="erro" id="fg-erro"></p>
       <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="primario">Gerar guia</button></div></form>`, (d) => {
     $('#fg').onsubmit = async (ev) => {
@@ -5701,7 +5701,6 @@ async function conferirNaReceita(mes, tarefas = []) {
   abrirDialogo(`<h2>Conferir na Receita</h2>
     ${tarefas.length ? `<p>Só ${pv.clientes.length === 1 ? 'o cliente selecionado' : `os ${pv.clientes.length} clientes selecionados`}: <strong>${esc(pv.clientes.slice(0, 5).join(', '))}${pv.clientes.length > 5 ? '…' : ''}</strong>.</p>` : '<p class="dica">Nenhuma linha selecionada: confere todos os clientes do mês. Para conferir só alguns, marque as linhas antes.</p>'}
     <p>${tarefas.length ? 'Selecionadas para conferir' : 'Em aberto para conferir'}: <strong>${pv.porObrigacao.DAS}</strong> DAS (PGDAS-D), <strong>${pv.porObrigacao.DCTFWEB}</strong> DCTFWeb e <strong>${pv.porObrigacao.DEFIS}</strong> DEFIS, incluindo as atrasadas.</p>
-    <p>Serão feitas <strong>${pv.consultas} consulta(s)</strong> ao Integra Contador. O SERPRO cobra por consulta, conforme o seu contrato.</p>
     <p class="dica">O que for localizado é marcado como <em>Entregue</em>, com o número da declaração e a data de transmissão. O que não for localizado continua em aberto.</p>
     <div class="acoes"><button class="primario" id="conf-ok">Conferir agora</button><button data-fechar>Cancelar</button></div>`, (d) => {
     $('#conf-ok').onclick = async (ev) => {
@@ -6046,22 +6045,22 @@ async function telaControle() {
   $('#ct-imp').onclick = () => importarPlanilhaControle(telaControle);
   $('#ct-dctf-lote') && ($('#ct-dctf-lote').onclick = () => {
     const alvo = alvoLote().filter((c) => c.dados.sem_folha && fech.resumo[c.empresa_id]?.DCTFWEB?.situacao !== 'TRANSMITIDA');
-    loteFechamento(`Transmitir a DCTFWeb sem movimento de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes marcados como "Sem folha" no mês e ainda não transmitidos: o Kontor busca a DCTFWeb sem movimento em andamento, assina com o certificado do escritório e transmite. Declarações com movimento são transmitidas no seu sistema da folha; aqui você só busca o recibo e o DARF. Algumas chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
+    loteFechamento(`Transmitir a DCTFWeb sem movimento de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes marcados como "Sem folha" no mês e ainda não transmitidos: o Kontor busca a DCTFWeb sem movimento em andamento, assina com o certificado do escritório e transmite. Declarações com movimento são transmitidas no seu sistema da folha; aqui você só busca o recibo e o DARF.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb`, { mes: f.mes }).then((r) => (r.jaTransmitida ? 'já estava transmitida' : `transmitida${r.recibo ? `, recibo ${r.recibo}` : ''}`) + (r.valor != null ? ` — DARF ${brl(r.valor)}` : r.aviso ? ` — ${r.aviso}` : '')), telaControle);
   });
   $('#ct-dctf-busca') && ($('#ct-dctf-busca').onclick = () => {
     const alvo = alvoLote().filter((c) => c.tem_funcionarios && !c.dados.sem_folha && !fech.resumo[c.empresa_id]?.DCTFWEB?.tem_guia);
-    loteFechamento(`Buscar DARFs da DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite a DCTFWeb em outro sistema (SCI, e-CAC): o Kontor não transmite nada, só busca o recibo da declaração já transmitida e gera o DARF. Ficam de fora os clientes marcados sem folha e os que já têm DARF. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
+    loteFechamento(`Buscar DARFs da DCTFWeb de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite a DCTFWeb em outro sistema (SCI, e-CAC): o Kontor não transmite nada, só busca o recibo da declaração já transmitida e gera o DARF. Ficam de fora os clientes marcados sem folha e os que já têm DARF.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/dctfweb/buscar`, { mes: f.mes }).then((r) => (r.valor != null ? `DARF ${brl(r.valor)}` : r.aviso || 'recibo encontrado, sem DARF')), telaControle);
   });
   $('#ct-pg-zerado') && ($('#ct-pg-zerado').onclick = () => {
     const alvo = alvoLote().filter((c) => c.regime === 'SIMPLES' && c.dados.sem_movimento && fech.resumo[c.empresa_id]?.PGDASD?.situacao !== 'TRANSMITIDA');
-    loteFechamento(`Transmitir PGDAS-D zerados de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes do Simples marcados como "Sem mov." no mês e ainda não transmitidos: o Kontor transmite o PGDAS-D com receita zero (sem DAS). Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO. Se já houver declaração no mês, o cliente aparece com erro e fica como está.',
+    loteFechamento(`Transmitir PGDAS-D zerados de ${rotuloMes(f.mes)}`, alvo, 'Só para os clientes do Simples marcados como "Sem mov." no mês e ainda não transmitidos: o Kontor transmite o PGDAS-D com receita zero (sem DAS). Se já houver declaração no mês, o cliente aparece com erro e fica como está.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/zerado`, { mes: f.mes }).then((r) => `transmitido${r.recibo ? ` (${r.recibo})` : ''}`), telaControle);
   });
   $('#ct-pg-busca') && ($('#ct-pg-busca').onclick = () => {
     const alvo = alvoLote().filter((c) => c.regime === 'SIMPLES' && !c.dados.sem_movimento && !fech.resumo[c.empresa_id]?.PGDASD?.tem_guia);
-    loteFechamento(`Buscar DAS do Simples de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite o PGDAS-D em outro sistema (SCI, portal do Simples): o Kontor não transmite nada, só busca a declaração e o recibo já transmitidos e gera o DAS. Ficam de fora os clientes sem movimento e os que já têm DAS. São 2 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO.',
+    loteFechamento(`Buscar DAS do Simples de ${rotuloMes(f.mes)}`, alvo, 'Para quem transmite o PGDAS-D em outro sistema (SCI, portal do Simples): o Kontor não transmite nada, só busca a declaração e o recibo já transmitidos e gera o DAS. Ficam de fora os clientes sem movimento e os que já têm DAS.',
       (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/buscar`, { mes: f.mes }).then((r) => `${r.faturamento != null ? `faturamento ${brl(r.faturamento)} · ` : ''}${r.valor != null ? `DAS ${brl(r.valor)}` : r.aviso || 'declaração encontrada, sem DAS'}`), telaControle);
   });
   $('#ct-env-lote') && ($('#ct-env-lote').onclick = () => {
@@ -6127,7 +6126,7 @@ async function abrirFechamento(empresaId, mes, aoFim, foco = 'PGDASD') {
   const fatorR = (ids) => ids.some((id) => [10, 11, 12, 29].includes(Number(id)));
   const simples = d.regime === 'SIMPLES' && foco === 'PGDASD';
   abrirDialogo(`<div class="dlg-largo"><h2>${foco === 'PGDASD' ? 'Simples Nacional' : 'DCTFWeb'} ${rotuloMes(mes)} — ${esc(d.cliente)}</h2>
-    <p class="sutil">${fmtDoc(d.documento)} · cada transmissão e guia é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
+    <p class="sutil">${fmtDoc(d.documento)}</p>
     ${simples ? `<fieldset class="sub"><legend>Simples Nacional (PGDAS-D)</legend>
       ${pg ? `<p>Situação: <strong class="${pg.situacao === 'TRANSMITIDA' ? 'cor-verde' : pg.situacao === 'ERRO' ? 'cor-vermelho' : 'cor-ambar'}">${pg.situacao === 'TRANSMITIDA' ? `Transmitida${pg.recibo ? ` (${esc(pg.recibo)})` : ''} em ${dhBr(pg.transmitida_em)}` : pg.situacao === 'CALCULADO' ? 'Calculada, ainda não transmitida' : 'Erro'}</strong>${pg.erro ? `<br><span class="dica cor-vermelho">${esc(pg.erro)}</span>` : ''}</p>` : ''}
       <div class="acoes"><button type="button" class="primario" id="fc-pg-buscar">Buscar declaração e DAS já transmitidos</button>${pg?.tem_guia ? arq('PGDASD', 'guia', 'DAS (PDF)') : ''}${pg?.tem_recibo ? arq('PGDASD', 'recibo', 'Recibo') : ''}${pg?.tem_declaracao ? arq('PGDASD', 'declaracao', 'Declaração') : ''}</div>
@@ -6260,7 +6259,6 @@ function agendaSituacaoHtml(ag) {
         <label>Segundo dia (opcional) <select name="dia2">${opDia(ag.dias[1] ?? null, true)}</select></label>
         <label class="largo">Enviar o resultado para (até 5 e-mails, separados por vírgula) <input name="emails" value="${esc((ag.emails ?? []).join(', '))}"></label>
         <label class="largo"><span><input type="checkbox" name="avisarClientes" ${ag.avisarClientes ? 'checked' : ''}> Depois da consulta, avisar por e-mail os clientes marcados na coluna “Avisar” que tiverem débitos em aberto</span><span class="dica">O aviso lista os débitos, sem guias: o cliente procura o escritório quando quiser pagar. Cada consulta é avisada uma vez só.</span></label>
-        <p class="dica largo">${ag.clientes} cliente(s) ativo(s): cerca de <strong id="agsf-chamadas">${ag.chamadasPorMes}</strong> chamada(s) ao Integra Contador por mês, cobradas pelo SERPRO.</p>
         <p class="erro largo" id="erro-agsf"></p>
         <div class="acoes largo"><button class="primario" type="submit">Salvar</button></div></form>` : '<p class="dica">Só um administrador altera a consulta automática.</p>'}
       ${ag.ultimaExecucao ? `<p class="dica">Última rodada automática: ${dhBr(ag.ultimaExecucao)} — ${esc(ag.ultimoResultado ?? '')}</p>` : ''}
@@ -6270,7 +6268,7 @@ function agendaSituacaoHtml(ag) {
 function ligarAgendaSituacao(ag, recarregar) {
   const fa = $('#form-agsf');
   if (fa) {
-    const conta = () => { const n = 1 + (fa.dia2.value && fa.dia2.value !== fa.dia1.value ? 1 : 0); $('#agsf-chamadas').textContent = ag.clientes * 2 * n; };
+    const conta = () => {};
     fa.dia1.onchange = fa.dia2.onchange = conta;
     fa.onsubmit = async (ev) => {
       ev.preventDefault(); $('#erro-agsf').textContent = '';
@@ -6315,7 +6313,6 @@ function formGuia(d, sug, voltarPara) {
     <p class="dica" data-t="DAS">O DAS de cobrança sai com o valor em cobrança na Receita (já descontando pagamentos parciais e parcelas) e com a data de validade que a própria Receita define.</p>
     <p class="dica" data-t="DCTFWEB">A guia da DCTFWeb reúne todos os débitos daquele período de apuração, com multa e juros até a data de pagamento.</p>
     <p class="dica" data-t="DARF">O Sicalc calcula multa e juros até a data de pagamento sobre o valor do principal (o saldo devedor do relatório).</p>
-    <p class="dica">Cada guia gerada é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
     <p class="erro" id="erro-guia"></p>
     <div class="acoes"><button class="primario" type="submit">Gerar guia (PDF)</button><button type="button" id="guia-voltar">Voltar</button></div></form>`, (dlg) => {
     const f = dlg.querySelector('#form-guia');
@@ -6388,7 +6385,7 @@ async function detalheSituacaoFiscal(id) {
     </div>` : ''}
     ${porTributo.size ? `<h3>Impostos em aberto na Receita Federal</h3><table class="tabela"><thead><tr><th>Tributo</th><th class="num">Débitos</th><th>Vencimento mais antigo</th><th class="num">Saldo</th></tr></thead><tbody>
       ${[...porTributo.values()].sort((x, y) => y.total - x.total).map((g) => `<tr><td>${rec(g.receita)}${esc(g.nome)}</td><td class="num">${g.qtd}</td><td>${dataBr(g.maisAntigo)}</td><td class="num"><strong>${brl(g.total)}</strong></td></tr>`).join('')}</tbody></table>` : ''}
-    ${debitos.length ? `<details open><summary><strong>Todos os débitos (${debitos.length})</strong> <span class="dica">— “Recalcular” gera a guia atualizada (um PDF por guia, cobrado pelo SERPRO)</span></summary><table class="tabela" style="margin-top:8px"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo (c/ multa e juros)</th><th>Situação</th><th></th></tr></thead><tbody>${debitos.map(linhaDeb).join('')}</tbody></table></details>` : ''}
+    ${debitos.length ? `<details open><summary><strong>Todos os débitos (${debitos.length})</strong> <span class="dica">— “Recalcular” gera a guia atualizada (um PDF por guia)</span></summary><table class="tabela" style="margin-top:8px"><thead><tr><th>Receita</th><th>Período</th><th>Vencimento</th><th class="num">Valor original</th><th class="num">Saldo (c/ multa e juros)</th><th>Situação</th><th></th></tr></thead><tbody>${debitos.map(linhaDeb).join('')}</tbody></table></details>` : ''}
     ${inscricoes.length ? `<h3>Inscrições em dívida ativa (PGFN)</h3><table class="tabela"><thead><tr><th>Inscrição</th><th>Tributo</th><th>Inscrito em</th><th>Situação</th><th>Processo</th></tr></thead><tbody>
       ${inscricoes.map((i) => i.tipo === 'INSCRICAO' ? `<tr><td>${esc(i.inscricao)}</td><td>${esc(i.receita ?? '')} ${esc(i.descricao ?? '')}</td><td>${dataBr(i.inscritoEm)}</td><td>${esc(i.situacao ?? '')}</td><td><span class="dica">${esc(i.processo ?? '')}</span></td></tr>` : `<tr><td colspan="5">${esc(i.texto)}</td></tr>`).join('')}</tbody></table>
       <p class="dica">O relatório não traz o valor das inscrições em dívida ativa, e a guia delas não sai pelo Integra Contador: valores e guias no <a href="https://www.regularize.pgfn.gov.br/" target="_blank" rel="noopener">Regularize (PGFN)</a>.</p>` : ''}
@@ -6531,7 +6528,7 @@ async function telaMonitor() {
     <section class="cartao">
       <div class="topo-cartao"><div><h2>Faturamento acumulado</h2>
         <p class="sutil">Faturamento do ano de cada cliente do Simples, lido da declaração do PGDAS-D mais recente buscada no Kontor, comparado ao sublimite de R$ 3,6 milhões (acima dele, ICMS e ISS saem do DAS) e ao limite de R$ 4,8 milhões do Simples. Quem passou ou está perto do sublimite aparece primeiro, em Atenção.</p></div>
-        ${estado.usuario.modulos.includes('controle') ? `<button id="mon-decl" title="Uma chamada ao Integra Contador por cliente">Buscar declarações de ${rotuloMes(MES_DECL)}</button>` : ''}</div>
+        ${estado.usuario.modulos.includes('controle') ? `<button id="mon-decl">Buscar declarações de ${rotuloMes(MES_DECL)}</button>` : ''}</div>
       ${d.sublimites.clientes.length ? `<div class="mon-sub">${d.sublimites.clientes.map((c) => {
         const cor = c.situacao === 'ATENCAO' ? 'var(--g-atencao)' : c.situacao === 'PENDENTE' ? 'var(--g-pend)' : 'var(--g-s2)';
         return `<div class="mon-sub-linha"><span class="mon-sub-nome"><strong>${esc(c.cliente)}</strong><br><span class="selo-estado" style="--c:${COR_ESTADO[c.situacao]}">${c.situacao === 'ATENCAO' ? 'Atenção' : c.situacao === 'PENDENTE' ? 'Perto do sublimite' : 'Dentro do sublimite'}</span></span>
@@ -6553,7 +6550,7 @@ async function telaMonitor() {
           <button id="mon-fgts" title="Entra no FGTS Digital com o certificado do escritório">Consultar FGTS Digital</button></div></div>
         <div id="sf-res"></div>` : ''}
       <div id="mon-clientes"></div>
-      ${sf ? `<p class="dica">Coluna “Avisar”: marque só os clientes que devem receber o aviso de débitos em aberto por e-mail (quem já sabe e não paga normalmente pode ficar desmarcado). Cada consulta à situação fiscal usa duas chamadas ao Integra Contador, cobradas pelo SERPRO.</p>` : ''}
+      ${sf ? `<p class="dica">Coluna “Avisar”: marque só os clientes que devem receber o aviso de débitos em aberto por e-mail (quem já sabe e não paga normalmente pode ficar desmarcado).</p>` : ''}
     </section>
     ${ag ? agendaSituacaoHtml(ag) : ''}`;
 
@@ -6577,13 +6574,13 @@ async function telaMonitor() {
     const nomeP = d.processos.find((p) => p.id === f.processo)?.nome;
     $('#mon-tit-clientes').textContent = `Clientes${nomeP ? ` — ${nomeP}` : ''}${f.estado ? ` — ${ROTULO_ESTADO[f.estado]}` : f.processo ? ' — com pendência' : ''} (${l.length})`;
     const podeIgnorar = estado.usuario.tipo === 'adm' || estado.usuario.papel === 'admin'; // ignorar coluna: só administrador
-    const chip = (e) => `<span class="selo-estado" style="--c:${COR_ESTADO[e ?? 'SEM_DADOS']}">${e ? ROTULO_ESTADO[e] : '—'}</span>`;
-    $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela mon-tab"><thead><tr>${sf ? '<th><input type="checkbox" id="mon-todos" aria-label="Selecionar todos"></th>' : ''}<th>Cliente</th><th>Geral</th>${d.processos.map((p) => `<th>${esc(p.nome)}</th>`).join('')}${sf ? '<th title="Avisar o cliente por e-mail dos débitos em aberto">Avisar</th>' : ''}</tr></thead><tbody>
+    const chip = (e) => `<span class="selo-estado" style="--c:${COR_ESTADO[e ?? 'SEM_DADOS']}" title="${e ? ROTULO_ESTADO[e] : 'Sem informação'}">${e ? ROTULO_ESTADO[e] : '—'}</span>`;
+    $('#mon-clientes').innerHTML = (f.estado || f.processo ? '<p><button type="button" id="mon-limpar">Mostrar todos</button></p>' : '') + (l.length ? `<div class="rolagem"><table class="tabela mon-tab"><thead><tr>${sf ? '<th><input type="checkbox" id="mon-todos" aria-label="Selecionar todos"></th>' : ''}<th>Cliente</th><th>Geral</th>${d.processos.map((p) => { const curto = { 'FGTS Digital': 'FGTS', 'Situação fiscal': 'Sit. fiscal', Parcelamentos: 'Parcel.', 'Caixa postal': 'Cx. postal', Certificados: 'Certif.', 'Demais obrigações': 'Outras' }[p.nome]; return `<th title="${esc(p.nome)}">${curto ? `<span class="th-longo">${esc(p.nome)}</span><span class="th-curto">${curto}</span>` : esc(p.nome)}</th>`; }).join('')}${sf ? '<th title="Avisar o cliente por e-mail dos débitos em aberto">Avisar</th>' : ''}</tr></thead><tbody>
       ${l.map((c) => { const x = sfDe.get(c.empresa_id); return `<tr>${sf ? `<td><input type="checkbox" data-sel="${c.empresa_id}" aria-label="Selecionar ${esc(c.cliente)}"></td>` : ''}<td class="mon-cli-nome"><button type="button" class="link-fech" data-det="${c.empresa_id}" title="Situação fiscal, parcelamentos e caixa postal"><strong>${esc(c.cliente)}</strong></button><br><span class="dica">${fmtDoc(c.documento)}</span></td><td>${chip(c.geral)}</td>${d.processos.map((p) => {
         const ign = (c.ignorados ?? []).includes(p.id);
         if (ign && !podeIgnorar) return '<td class="mon-ign"><span class="dica">ignorado</span></td>';
         if (ign) return `<td class="mon-ign"><span class="dica">ignorado</span> <button type="button" class="ign-x" data-ign="${c.empresa_id}:${p.id}" data-v="0" title="Voltar a acompanhar ${esc(p.nome)} neste cliente" aria-label="Voltar a acompanhar ${esc(p.nome)}">↺</button></td>`;
-        return `<td>${chip(c.processos[p.id])}${podeIgnorar ? `<button type="button" class="ign-x" data-ign="${c.empresa_id}:${p.id}" data-v="1" title="Ignorar ${esc(p.nome)} neste cliente (some da tela, do status geral e dos avisos)" aria-label="Ignorar ${esc(p.nome)} neste cliente">×</button>` : ''}${sf && p.id === 'SITFIS' ? `<div class="mon-extra">${celulaSf(x)}</div>` : sf && p.id === 'FGTS' && x?.fgts ? `<div class="mon-extra">${celulaFgts(x)}</div>` : ''}</td>`;
+        return `<td class="mon-proc">${chip(c.processos[p.id])}${podeIgnorar ? `<button type="button" class="ign-x" data-ign="${c.empresa_id}:${p.id}" data-v="1" title="Ignorar ${esc(p.nome)} neste cliente (some da tela, do status geral e dos avisos)" aria-label="Ignorar ${esc(p.nome)} neste cliente">×</button>` : ''}${sf && p.id === 'SITFIS' ? `<div class="mon-extra">${celulaSf(x)}</div>` : sf && p.id === 'FGTS' && x?.fgts ? `<div class="mon-extra">${celulaFgts(x)}</div>` : ''}</td>`;
       }).join('')}
         ${sf ? `<td>${x ? `<input type="checkbox" data-avisar="${c.empresa_id}" ${x.avisar_debitos ? 'checked' : ''} aria-label="Avisar este cliente" title="${x.email ? `Avisar ${esc(x.email)}` : 'Sem e-mail no cadastro'}">${x.ultimo_aviso ? `<br><span class="dica">avisado ${dataBr(x.ultimo_aviso)}</span>` : ''}` : ''}</td>` : ''}</tr>`; }).join('')}
       </tbody></table></div>` : '<div class="vazio">Nenhum cliente nesta situação.</div>');
@@ -6622,7 +6619,7 @@ async function telaMonitor() {
     $('#mon-sf').onclick = (ev) => {
       const ids = alvo().map((c) => c.empresa_id);
       if (!ids.length) return aviso('Nenhum cliente na lista.');
-      if (!confirm(`Consultar a situação fiscal de ${ids.length} cliente(s)?\nSerão cerca de ${ids.length * 2} chamadas ao Integra Contador, cobradas pelo SERPRO. Pode levar alguns segundos por cliente.`)) return;
+      if (!confirm(`Consultar a situação fiscal de ${ids.length} cliente(s)?\nPode levar alguns segundos por cliente.`)) return;
       consultarSituacoes(ids, ev.target);
     };
     $('#mon-fgts').onclick = () => consultarFgtsDigital(sf.clientes, selecionados());
@@ -6638,13 +6635,13 @@ async function telaMonitor() {
     try { await baixar(`/api/escritorio/monitor/pendencias?${new URLSearchParams({ ...(ids.length === d.clientes.length ? {} : { ids: ids.join(',') }), ...(fc ? { competencia: fc } : {}) })}`, 'Pendencias_por_cliente.pdf', true); } finally { b.disabled = false; }
   };
   $('#mon-decl') && ($('#mon-decl').onclick = () => loteFechamento(`Buscar as declarações do Simples de ${rotuloMes(MES_DECL)}`, d.clientes.filter((c) => c.regime === 'SIMPLES'),
-    'Para cada cliente do Simples, o Kontor busca a declaração do PGDAS-D já transmitida (sem gerar DAS) e lê o faturamento do mês, o acumulado do ano e o RBT12. O faturamento do mês também vai para o Controle mensal. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
+    'Para cada cliente do Simples, o Kontor busca a declaração do PGDAS-D já transmitida (sem gerar DAS) e lê o faturamento do mês, o acumulado do ano e o RBT12. O faturamento do mês também vai para o Controle mensal.',
     (c) => api('POST', `/api/escritorio/fechamento/${c.empresa_id}/pgdas/declaracao`, { mes: MES_DECL }).then((r) => `${r.faturamento != null ? `faturamento do mês ${brl(r.faturamento)}` : 'declaração encontrada'}${r.rba != null ? ` · acumulado ${brl(r.rba + (r.faturamento ?? 0))}` : ''}`), telaMonitor));
   $('#mon-parc') && ($('#mon-parc').onclick = () => loteFechamento('Consultar parcelamentos', alvo((c) => c.regime === 'SIMPLES' || c.regime === 'MEI'),
-    'Para cada cliente do Simples ou MEI, o Kontor consulta na Receita os pedidos de parcelamento (normal, especial, Pert e Relp) e, havendo parcelamento ativo, as parcelas em aberto. São de 4 a 8 chamadas ao Integra Contador por cliente, cobradas pelo SERPRO. O cliente precisa ter dado procuração ao escritório.',
+    'Para cada cliente do Simples ou MEI, o Kontor consulta na Receita os pedidos de parcelamento (normal, especial, Pert e Relp) e, havendo parcelamento ativo, as parcelas em aberto. O cliente precisa ter dado procuração ao escritório.',
     (c) => api('POST', `/api/escritorio/parcelamentos/${c.empresa_id}/consultar`).then((r) => ({ SEM_PARCELAMENTO: 'sem parcelamento', EM_DIA: `${r.ativos} parcelamento(s) em dia`, EM_ATRASO: `${r.atrasadas} parcela(s) em atraso`, SEM_PROCURACAO: 'sem procuração', ERRO: `erro: ${r.erro}` }[r.situacao] + (r.erro && r.situacao !== 'ERRO' ? ` (${r.erro})` : ''))), telaMonitor));
   $('#mon-caixa') && ($('#mon-caixa').onclick = () => loteFechamento('Consultar a caixa postal do e-CAC', alvo(),
-    'Para cada cliente, o Kontor busca a lista das mensagens mais recentes da caixa postal (assunto, data, se foi lida e se a Receita marcou como relevante). O conteúdo das mensagens NÃO é aberto: isso só acontece quando você pede, mensagem a mensagem. Uma chamada ao Integra Contador por cliente, cobrada pelo SERPRO.',
+    'Para cada cliente, o Kontor busca a lista das mensagens mais recentes da caixa postal (assunto, data, se foi lida e se a Receita marcou como relevante). O conteúdo das mensagens NÃO é aberto: isso só acontece quando você pede, mensagem a mensagem.',
     (c) => api('POST', `/api/escritorio/caixa-postal/${c.empresa_id}/consultar`).then((r) => (r.situacao === 'OK' ? `${r.nao_lidas} não lida(s)${r.relevantes ? `, ${r.relevantes} relevante(s)` : ''}` : r.erro)), telaMonitor));
   conteudo.querySelectorAll('[data-estado], [data-processo]').forEach((el) => (el.onclick = () => {
     f.estado = el.dataset.estado ?? null; f.processo = el.dataset.processo ?? null; telaMonitor().then(() => $('#mon-tit-clientes').scrollIntoView({ behavior: 'smooth' }));
@@ -6745,7 +6742,7 @@ async function detalheMonitor(empresaId) {
       <td>${m.relevante ? '<strong>' : ''}${esc(m.assunto || '(sem assunto)')}${m.relevante ? '</strong>' : ''}<br><span class="dica">${esc(m.origem)}</span></td>
       <td>${m.lida ? `<span class="dica">Lida${m.aberta_no_kontor ? ' (pelo Kontor)' : ''}</span>` : `<span class="selo-estado" style="--c:${m.relevante ? 'var(--g-atencao)' : 'var(--g-pend)'}">Não lida${m.relevante ? ' · relevante' : ''}</span>`}</td>
       <td>${pode ? `<button type="button" data-msg="${esc(m.isn)}">Abrir</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="dica">Nenhuma mensagem.</p>'}`;
-  abrirDialogo(`<div class="dlg-largo"><h2>${esc(d.cliente)}</h2><p class="sutil">${fmtDoc(d.documento)} · cada consulta é uma chamada ao Integra Contador, cobrada pelo SERPRO.</p>
+  abrirDialogo(`<div class="dlg-largo"><h2>${esc(d.cliente)}</h2><p class="sutil">${fmtDoc(d.documento)}</p>
     ${pode ? `<fieldset class="sub"><legend>Situação fiscal (Receita Federal e PGFN)</legend>${sfHtml}<div class="acoes">${sfx?.id && sfx.status === 'PRONTA' ? `<button type="button" id="dm-sf-rel" class="primario">Ver débitos, guias e aviso ao cliente</button>` : ''}<button type="button" id="dm-sf">Consultar agora</button></div></fieldset>
     <fieldset class="sub"><legend>FGTS Digital</legend>${sfx ? celulaFgts(sfx).replace('data-fgts', 'id="dm-fgts" data-fgts') : '<p class="dica">—</p>'}</fieldset>` : ''}
     <fieldset class="sub"><legend>Parcelamentos do Simples / MEI</legend>${d.regime === 'SIMPLES' || d.regime === 'MEI' ? parcHtml + (pode ? '<div class="acoes"><button type="button" id="dm-parc">Consultar agora</button></div>' : '') : '<p class="dica">Cliente fora do Simples e do MEI. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</p>'}</fieldset>
@@ -7160,7 +7157,7 @@ function ajustarAbas() {
   if (!mais) return;
   els.forEach((el) => (el.hidden = false));
   mais.hidden = true;
-  const larguraAba = els[0]?.offsetWidth || 180;
+  const larguraAba = 180; // largura cheia de uma aba (encolhem até 112px só quando nem uma cabe)
   const folga = 6;
   const reservado = ($('#aba-nova')?.offsetWidth ?? 34) + folga;
   const larguraMais = 64 + folga;
@@ -7186,6 +7183,8 @@ function iniciarAbas() {
   barra.insertAdjacentHTML('afterbegin', '<div class="abas-app" id="abas-app" role="tablist" aria-label="Telas abertas"></div>');
   let espera;
   window.addEventListener('resize', () => { clearTimeout(espera); espera = setTimeout(ajustarAbas, 80); });
+  // a barra muda de largura sem a janela mudar (busca do topo aparece/some, fonte carrega): recalcula as abas
+  if (window.ResizeObserver) { let ultima = 0; new ResizeObserver(() => { const w = $('#abas-app')?.clientWidth ?? 0; if (Math.abs(w - ultima) < 2) return; ultima = w; clearTimeout(espera); espera = setTimeout(ajustarAbas, 30); }).observe($('#abas-app')); }
   document.addEventListener('click', (ev) => {
     const lista = $('#aba-mais-lista');
     if (lista && !lista.hidden && !ev.target.closest('#aba-mais')) { lista.hidden = true; $('#aba-mais-botao')?.setAttribute('aria-expanded', 'false'); }
@@ -7742,7 +7741,7 @@ function configRadar(cfg) {
     <div class="rd-grade">
       <label>Fonte <select name="provedor"><option value="CASA_DOS_DADOS" ${cfg.provedorEscolhido === 'CASA_DOS_DADOS' ? 'selected' : ''}>Casa dos Dados</option><option value="DEMONSTRACAO" ${cfg.provedorEscolhido === 'DEMONSTRACAO' ? 'selected' : ''}>Demonstração (dados fictícios)</option></select></label>
       <label>Chave de API (api-key) <input name="apiKey" type="password" autocomplete="off" placeholder="${cfg.temChave ? '•••••• guardada (deixe em branco para manter)' : 'Cole a chave do portal da Casa dos Dados'}"></label>
-      <label>Guardar cada pesquisa por (horas) <input type="number" name="cacheHoras" min="1" max="720" value="${cfg.cacheHoras}"><span class="dica">Pesquisas repetidas nesse prazo não gastam saldo.</span></label>
+      <label>Guardar pesquisa (horas) <input type="number" name="cacheHoras" min="1" max="720" value="${cfg.cacheHoras}"><span class="dica">Pesquisas repetidas nesse prazo não gastam saldo.</span></label>
       <label>UF padrão <select name="ufPadrao"><option value="">—</option>${UFS.map((u) => `<option ${cfg.ufPadrao === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
       <label>Município padrão <input name="municipioPadrao" value="${esc(cfg.municipioPadrao ?? '')}"></label>
     </div>

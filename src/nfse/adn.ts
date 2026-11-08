@@ -21,8 +21,18 @@ export type ConsultaAdn = (nsu: number) => Promise<{ status: number; corpo: any 
 /** Interpreta a resposta do ADN (os nomes dos campos variam entre maiúsculas e minúsculas). */
 export function lerRespostaAdn(status: number, corpo: any): RespostaAdn {
   const pegar = (o: any, ...nomes: string[]) => { for (const n of nomes) { if (o?.[n] !== undefined) return o[n]; const k = Object.keys(o ?? {}).find((x) => x.toLowerCase() === n.toLowerCase()); if (k) return o[k]; } return undefined; };
-  const erros = ([] as any[]).concat(pegar(corpo, 'Erros', 'erros') ?? []).filter(Boolean)
-    .map((e: any) => [pegar(e, 'Codigo', 'codigo'), pegar(e, 'Descricao', 'descricao', 'mensagem') ?? (typeof e === 'string' ? e : JSON.stringify(e))].filter(Boolean).join(' - '));
+  const texto = typeof corpo === 'string' ? corpo.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  if (texto) corpo = null;
+  const erros = ([] as any[]).concat(pegar(corpo, 'Erros', 'erros', 'Erro', 'errors') ?? []).filter(Boolean)
+    .flatMap((e: any) => typeof e === 'object' && !pegar(e, 'Codigo', 'codigo', 'Descricao', 'descricao', 'mensagem', 'message') && !Array.isArray(e)
+      ? Object.entries(e).map(([k, v]) => `${k}: ${([] as any[]).concat(v).join(' ')}`)
+      : [[pegar(e, 'Codigo', 'codigo'), pegar(e, 'Descricao', 'descricao', 'mensagem', 'message') ?? (typeof e === 'string' ? e : JSON.stringify(e))].filter(Boolean).join(' - ')]);
+  // respostas fora do padrão (problem+json, mensagem solta ou texto/HTML): mostra o que o ADN disse
+  if (!erros.length) {
+    const solto = [pegar(corpo, 'Mensagem', 'mensagem', 'message', 'title'), pegar(corpo, 'detail', 'Detalhe')].filter((x) => x && typeof x === 'string');
+    if (solto.length) erros.push(solto.join(' - '));
+    else if (texto) erros.push(texto.slice(0, 300));
+  }
   if (status === 429) return { http: status, situacao: 'LIMITE', docs: [], erros: erros.length ? erros : ['Muitas consultas seguidas: o ADN pediu para aguardar.'] };
   const sp = String(pegar(corpo, 'StatusProcessamento') ?? '').toUpperCase();
   const lote = ([] as any[]).concat(pegar(corpo, 'LoteDFe', 'loteDFe') ?? []);
@@ -37,7 +47,7 @@ export function lerRespostaAdn(status: number, corpo: any): RespostaAdn {
   }
   if (docs.length) return { http: status, situacao: 'DOCUMENTOS', docs, erros };
   if (sp.includes('NENHUM') || status === 404 || status === 204) return { http: status, situacao: 'NENHUM', docs: [], erros: [] };
-  if (sp.includes('REJEI') || status === 400) return { http: status, situacao: 'REJEICAO', docs: [], erros: erros.length ? erros : ['O ADN rejeitou a consulta.'] };
+  if (sp.includes('REJEI') || status === 400) return { http: status, situacao: 'REJEICAO', docs: [], erros: erros.length ? erros : [`O ADN rejeitou a consulta (HTTP ${status}), sem informar o motivo.`] };
   if (status >= 200 && status < 300) return { http: status, situacao: 'NENHUM', docs: [], erros: [] };
   return { http: status, situacao: 'ERRO', docs: [], erros: erros.length ? erros : [`O ADN respondeu com erro ${status}.`] };
 }
@@ -54,7 +64,7 @@ export function consultaAdn(cert: CertificadoA1, ambiente: 1 | 2 = 1, cnpjConsul
       res.on('end', () => {
         const bruto = Buffer.concat(partes).toString('utf8');
         let corpo: any = null;
-        try { corpo = bruto ? JSON.parse(bruto) : null; } catch { corpo = null; }
+        try { corpo = bruto ? JSON.parse(bruto) : null; } catch { corpo = bruto; }
         resolve({ status: res.statusCode ?? 0, corpo });
       });
     });

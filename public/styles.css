@@ -744,7 +744,9 @@ main:focus, main:focus-visible { outline: none; }
 .rd-modos { display: flex; gap: 6px; flex-wrap: wrap; }
 .rd-modos button { border-radius: 999px; padding: 8px 16px; }
 .rd-modos button.ativo { background: var(--laranja); color: var(--sobre-acento, #1b1405); border-color: var(--laranja); font-weight: 600; }
-.rd-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 14px; align-items: end; }
+.rd-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 14px; align-items: start; }
+.rd-grade > label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rd-grade > label > .dica { margin: 0; font-size: 12px; }
 .rd-grade .largo { grid-column: 1 / -1; }
 .rd-chk { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; min-height: 38px; }
 .rd-mais summary { cursor: pointer; color: var(--laranja); margin: 4px 0 8px; }
@@ -910,8 +912,8 @@ input.invalido { border-color: #c0392b !important; box-shadow: 0 0 0 2px rgba(19
 .ct-tabela .tabela { overflow: visible; }
 
 /* ---------- Abas das telas abertas (topo) ---------- */
-.abas-app { flex: 1 1 auto; min-width: 0; margin-right: auto; display: flex; align-items: center; gap: 6px; overflow: visible; padding: 2px 0; position: relative; }
-.aba-app { display: flex; align-items: center; flex: 0 0 180px; width: 180px; border: 1px solid var(--linha); border-radius: 10px 10px 4px 4px; background: var(--superficie); }
+.abas-app { flex: 1 1 0; min-width: 0; margin-right: auto; display: flex; align-items: center; gap: 6px; overflow: visible; padding: 2px 0; position: relative; }
+.aba-app { display: flex; align-items: center; flex: 0 1 180px; width: 180px; min-width: 112px; border: 1px solid var(--linha); border-radius: 10px 10px 4px 4px; background: var(--superficie); }
 .aba-app .aba-ir { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 6px 8px 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .88rem; color: var(--tinta-2); }
 .aba-app .aba-fechar { border: 0; background: transparent; padding: 2px 8px; margin-right: 4px; font-size: 1.05rem; line-height: 1; color: var(--tinta-2); border-radius: 6px; }
 .aba-app .aba-fechar:hover { background: var(--superficie-2); color: var(--tinta); }
@@ -1253,3 +1255,50 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
 .cx-auto:empty { display: none; }
 .cx-auto { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0 0 16px; border: 1px solid var(--linha); border-radius: 14px; background: var(--superficie); }
 .cx-auto > div { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.th-curto { display: none; }
+
+/* Telas menores (notebook, monitor com zoom): tabelas compactas para caber sem rolagem lateral */
+@media (max-width: 1600px) {
+  .rolagem table { font-size: .86rem; }
+  .rolagem table th, .rolagem table td { padding: 9px 7px; }
+  .rolagem table th { white-space: normal; }
+  .rolagem .tl-ac { gap: 4px; }
+  .rolagem .tl-ac button, .rolagem .tl-ac a, .rolagem .tl-ac .tl-mais > summary { width: 30px; height: 30px; border-radius: 8px; }
+  .rolagem .tl-ac .ico { width: 16px; height: 16px; }
+  .rolagem .tl-ac .tl-mais .cob-menu button { width: auto; height: auto; font-size: .85rem; }
+  .rolagem .tl-ac { flex-wrap: wrap; justify-content: center; }
+  .rolagem .tl-ac-texto button:not(.so-ic) { width: auto; padding: 0 9px; font-size: .8rem; }
+  .rolagem .mon-extra { white-space: normal; }
+  .mon-tab { font-size: .8rem !important; }
+  /* nos processos fica só a bolinha (a legenda das cores está no quadro acima; o nome aparece ao passar o mouse) */
+  .mon-tab .mon-proc .selo-estado { font-size: 0; gap: 0; }
+  .mon-tab .mon-proc .selo-estado::before { width: 11px; height: 11px; }
+  .mon-tab .mon-extra { font-size: .72rem; }
+  .mon-tab th { font-size: .72rem; }
+  .mon-tab td.mon-proc { padding-left: 4px; padding-right: 4px; position: relative; }
+  .mon-tab td.mon-proc > .ign-x { position: absolute; top: 4px; right: 0; opacity: 0; }
+  .mon-tab tr:hover td.mon-proc > .ign-x, .mon-tab td.mon-proc > .ign-x:focus-visible { opacity: .6; }
+  .rolagem .mon-tab th { white-space: nowrap; }
+  .mon-tab .th-longo { display: none; }
+  .mon-tab .th-curto { display: inline; }
+  .mon-tab .mon-cli-nome .dica { white-space: nowrap; }
+  .mon-tab th, .mon-tab td { padding: 7px 4px; }
+  .rolagem .mon-cli-nome { min-width: 118px; }
+  .rd-tab th, .rd-tab td { padding: 10px 7px; }
+}
+@media (max-width: 1500px) { .rd-corpo { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 861px) and (max-width: 1200px) {
+  .app { grid-template-columns: 240px 1fr; }
+  .lateral { padding: 18px 12px; }
+  main { padding: 22px 16px; }
+}
+@media (max-width: 1200px) {
+  .rolagem table { font-size: .8rem; }
+  .rolagem table th, .rolagem table td { padding-left: 5px; padding-right: 5px; }
+  .mon-tab { font-size: .74rem !important; }
+  .rolagem .mon-tab th, .rolagem .mon-tab td { padding-left: 3px; padding-right: 3px; }
+  .mon-tab .mon-extra { font-size: .68rem; }
+  .tabela-captura td, .tabela-captura th { font-size: .8rem; }
+}
+@media (max-width: 1400px) { .topo-busca { flex: 0 1 280px; min-width: 150px; } }
