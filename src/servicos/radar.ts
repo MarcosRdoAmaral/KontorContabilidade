@@ -65,8 +65,10 @@ export function configPublicaRadar(escritorioId: number) {
   return { provedor: real ? 'CASA_DOS_DADOS' : 'DEMONSTRACAO', provedorEscolhido: c.provedor, temChave: !!c.apiKeyEnc, demonstracao: !real, cacheHoras: c.cacheHoras,
     ufPadrao: c.ufPadrao, municipioPadrao: c.municipioPadrao, criterios: c.criterios ?? CRITERIOS_PADRAO, criteriosPadrao: !c.criterios, estagios: ESTAGIOS, origens: ORIGENS, canais: CANAIS };
 }
-export function salvarConfigRadar(escritorioId: number, usuarioId: number, d: z.infer<typeof ConfigRadar>) {
+export function salvarConfigRadar(escritorioId: number, usuarioId: number, d: z.infer<typeof ConfigRadar>, mestre = false) {
   const atual = lerConfigRadar(escritorioId);
+  // a fonte e a chave da Casa dos Dados são do usuário master (suporte Kontor); os demais só ajustam critérios e padrões
+  if (!mestre) d = { ...d, provedor: atual.provedor, apiKey: null };
   const apiKeyEnc = d.apiKey ? cifrarTexto(d.apiKey) : atual.apiKeyEnc;
   if (d.provedor === 'CASA_DOS_DADOS' && !apiKeyEnc) throw new ErroNegocio('Informe a chave de API (api-key) da Casa dos Dados.');
   const nova: ConfigSalva = { provedor: d.provedor, apiKeyEnc, cacheHoras: d.cacheHoras, ufPadrao: d.ufPadrao?.toUpperCase() ?? null, municipioPadrao: d.municipioPadrao || null, criterios: d.criterios ?? atual.criterios };

@@ -120,6 +120,10 @@ test('Radar de Oportunidades: pesquisa (demonstração e cache), CRM, painel, pe
     assert.equal((await call('GET', '/api/radar/painel', undefined, sem)).status, 403);
     assert.equal((await call('GET', '/api/radar/painel', undefined, com)).status, 200);
     assert.equal((await call('PUT', '/api/radar/config', { provedor: 'DEMONSTRACAO', cacheHoras: 24 }, com)).status, 403);
+    // fonte e chave da Casa dos Dados: só o master Kontor; o administrador ajusta o resto e a fonte não muda
+    const r = await call('PUT', '/api/radar/config', { provedor: 'CASA_DOS_DADOS', apiKey: 'chave-qualquer', cacheHoras: 12 }, t);
+    assert.equal(r.status, 200); assert.equal(r.json.provedorEscolhido, 'DEMONSTRACAO'); assert.equal(r.json.temChave, false); assert.equal(r.json.cacheHoras, 12);
+    db.prepare("UPDATE usuarios SET mestre = 1 WHERE id = (SELECT id FROM usuarios WHERE tipo = 'adm' AND mestre = 0 ORDER BY id LIMIT 1)").run();
     assert.equal((await call('PUT', '/api/radar/config', { provedor: 'CASA_DOS_DADOS', cacheHoras: 24 }, t)).status, 400, 'Casa dos Dados exige a chave');
   } finally { await app.close(); }
 });

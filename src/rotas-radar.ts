@@ -15,7 +15,7 @@ export async function rotasRadar(app: FastifyInstance) {
     api.addHook('preHandler', exigirLogin);
     api.get('/api/radar/painel', async (req) => painelRadar(u(req).escritorio_id, z.coerce.number().int().min(7).max(365).default(30).parse((req.query as any)?.dias)));
     api.get('/api/radar/config', async (req) => configPublicaRadar(u(req).escritorio_id));
-    api.put('/api/radar/config', async (req) => salvarConfigRadar(u(req).escritorio_id, u(req).id, ConfigRadar.parse(req.body)));
+    api.put('/api/radar/config', async (req) => salvarConfigRadar(u(req).escritorio_id, u(req).id, ConfigRadar.parse(req.body), !!u(req).mestre));
     api.get('/api/radar/auditoria', async (req) => listarAuditoria(u(req).escritorio_id));
     api.post('/api/radar/pesquisar', async (req) => pesquisar(u(req).escritorio_id, u(req).id, Pesquisa.parse(req.body ?? {})));
     api.post('/api/radar/empresas/atualizar', async (req) => atualizarVarias(u(req).escritorio_id, u(req).id, z.object({ cnpjs: z.array(z.string()).min(1).max(25) }).parse(req.body).cnpjs));

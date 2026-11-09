@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário).
  */
-export const MANUAL_VERSAO = '1.57.0';
+export const MANUAL_VERSAO = '1.58.0';
 
 export const MANUAL = [
   {
@@ -258,7 +258,7 @@ export const MANUAL = [
       <ol>
         <li>Contrate o Integra Contador na Loja Serpro com o e-CNPJ do escritório. O Consumer Key e o Consumer Secret ficam na Área do Cliente Serpro.</li>
         <li>Envie o certificado A1 da empresa do escritório em Cadastros &gt; Empresas: a autenticação é feita com ele.</li>
-        <li>Em Configurações &gt; Integra Contador, informe as chaves, escolha Produção e use <em>Testar conexão</em>. O ambiente de Demonstração responde com dados fictícios, para testar antes do contrato.</li>
+        <li>Em Configurações &gt; Integra Contador (aba visível só para o usuário master Kontor, o suporte), informe as chaves, escolha Produção e use <em>Testar conexão</em>. O ambiente de Demonstração responde com dados fictícios, para testar antes do contrato.</li>
         <li>Cada cliente outorga procuração eletrônica ao CNPJ do escritório no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</li>
       </ol>
       <p class="dica">Se o SERPRO responder “Versão Descontinuada”, ele mudou a versão de algum serviço. Em Configurações &gt; Integra Contador &gt; Avançado, informe a versão nova no formato SISTEMA=versão (ex.: SITFIS=2.0) ou aguarde a atualização do sistema.</p>

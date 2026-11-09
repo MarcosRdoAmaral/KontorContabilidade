@@ -330,8 +330,10 @@ export async function rotasEscritorio(app: FastifyInstance) {
     });
 
     // ---------- Integra Contador (SERPRO) ----------
-    api.get('/api/escritorio/integra/config', async (req) => ({ ...configIntegra(u(req).escritorio_id), conferiveis: CONFERIVEIS }));
-    api.put('/api/escritorio/integra/config', async (req) => { salvarIntegra(u(req).escritorio_id, ConfigIntegra.parse(req.body)); return { ok: true }; });
+    // chaves do Integra Contador: só o usuário master (suporte Kontor) vê e altera
+    const soMestre = (req: any) => { if (!u(req).mestre) throw new ErroNegocio('Só o usuário master do Kontor acessa a configuração do Integra Contador.', 403); };
+    api.get('/api/escritorio/integra/config', async (req) => { soMestre(req); return { ...configIntegra(u(req).escritorio_id), conferiveis: CONFERIVEIS }; });
+    api.put('/api/escritorio/integra/config', async (req) => { soMestre(req); salvarIntegra(u(req).escritorio_id, ConfigIntegra.parse(req.body)); return { ok: true }; });
     api.post('/api/escritorio/integra/testar', async (req) => testarConexao(u(req).escritorio_id));
     // `tarefas`: só as linhas selecionadas em Obrigações e prazos (sem seleção, todo o mês)
     const idsTarefas = z.array(z.number().int().positive()).max(2000).nullish();

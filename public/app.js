@@ -3668,7 +3668,7 @@ async function telaConfig(aba) {
   const adm = estado.usuario.tipo === 'adm';
   const abas = [
     ['conta', 'Minha conta', true], ['usuarios', 'Usuários e acessos', adm], ['email', 'E-mail', adm], ['modelos', 'Modelos de e-mail', adm],
-    ['avisos', 'Avisos de prazos', adm], ['integra', 'Integra Contador', adm], ['aparencia', 'Aparência', true], ['backup', 'Backup', adm], ['contabilidade', 'Contabilidade', adm], ['licenca', 'Licença', true], ['atualizacoes', 'Atualizações', true],
+    ['avisos', 'Avisos de prazos', adm], ['integra', 'Integra Contador', !!estado.usuario.mestre], ['aparencia', 'Aparência', true], ['backup', 'Backup', adm], ['contabilidade', 'Contabilidade', adm], ['licenca', 'Licença', true], ['atualizacoes', 'Atualizações', true],
   ].filter((x) => x[2]);
   if (!abas.some((x) => x[0] === aba)) aba = abas[0][0];
   conteudo.innerHTML = `
@@ -5690,7 +5690,7 @@ async function conferirNaReceita(mes, tarefas = []) {
   if (!pv.configurado) {
     return abrirDialogo(`<h2>Conferir na Receita</h2>
       <p>A conferência usa o <strong>Integra Contador</strong> do SERPRO, que consulta em nome dos clientes o PGDAS-D (DAS do Simples), a DCTFWeb e a DEFIS.</p>
-      <p>${estado.usuario.tipo === 'adm' ? 'Configure em <a href="#/config/integra" data-fechar>Configurações &gt; Integra Contador</a>.' : 'Peça a um administrador para configurar em Configurações &gt; Integra Contador.'}</p>
+      <p>${estado.usuario.mestre ? 'Configure em <a href="#/config/integra" data-fechar>Configurações &gt; Integra Contador</a>.' : 'Fale com o suporte Kontor para ativar.'}</p>
       <div class="acoes"><button data-fechar>Fechar</button></div>`);
   }
   if (!pv.tarefas) return aviso(tarefas.length ? 'Entre as linhas selecionadas não há DAS, DCTFWeb ou DEFIS em aberto: só essas três a Receita confere.' : 'Nenhuma DAS, DCTFWeb ou DEFIS em aberto neste mês (nem atrasada) para conferir.');
@@ -6496,7 +6496,7 @@ async function telaMonitor() {
   conteudo.innerHTML = `
     <div class="orc-topo tl-topo"><span class="orc-ico grande">${icone('monitor')}</span><div class="tl-tit"><h1>Monitor fiscal</h1><p class="sutil">Situação de cada cliente nos processos que o Kontor acompanha: obrigações, fechamentos, FGTS Digital, situação fiscal e certificados.</p></div>
       <div class="mon-atual"><label class="mon-comp" title="O escritório processa o mês anterior: em novembro, a competência outubro. O Monitor olha esta competência e as anteriores.">Competência <select id="mon-comp">${(() => { const base = mesAnterior(mesAtual()); const l = []; for (let i = 0, m = base; i < 6; i++, m = mesAnterior(m)) l.push(m); if (!l.includes(d.competencia)) l.push(d.competencia); return l.map((m) => `<option value="${m}" ${m === d.competencia ? 'selected' : ''}>${rotuloMes(m)}${m === base ? ' (em processamento)' : ''}</option>`).join(''); })()}</select></label> <span class="dica">Atualizado em<br>${dhBr(d.atualizado_em)}</span> <button type="button" class="orc-ouro" id="mon-atualizar">${icone('refazer')} Atualizar</button> <button type="button" id="mon-pend-pdf" class="tl-btn-ouro" title="PDF com as pendências de cada cliente: os marcados na lista ou, sem marcação, todos os da lista">${icone('tl-baixar')} Pendências por cliente (PDF)</button></div></div>
-    ${sf && !sf.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado: as consultas à Receita (situação fiscal, parcelamentos e caixa postal) não funcionam. ${estado.usuario.tipo === 'adm' ? '<a href="#/config/integra">Configurar</a>' : 'Peça a um administrador.'}</div>` : ''}
+    ${sf && !sf.configurado ? `<div class="banner teste">O Integra Contador ainda não está configurado: as consultas à Receita (situação fiscal, parcelamentos e caixa postal) não funcionam. ${estado.usuario.mestre ? '<a href="#/config/integra">Configurar</a>' : 'Fale com o suporte Kontor.'}</div>` : ''}
     ${sf ? `<div class="sf-kpis">${cartoesKpi([
       { ic: 'tl-alerta', tom: sf.resumo.comPendencias ? 'vermelho' : 'verde', rotulo: 'Débitos na Receita e PGFN', valor: `${sf.resumo.comPendencias} ${sf.resumo.comPendencias === 1 ? 'cliente' : 'clientes'}`, sub: `${brl(sf.resumo.totalAberto)} em aberto na Receita`, filtro: 'PENDENCIAS' },
       { ic: 'tl-check', tom: 'verde', rotulo: 'Situação fiscal regular', valor: sf.resumo.regulares, sub: 'sem pendências na última consulta', filtro: 'REGULAR' },
@@ -7441,7 +7441,7 @@ async function telaRadar() {
   conteudo.innerHTML = `
     <div class="topo rd-topo"><div class="rd-tit"><span class="rd-alvo">${icone('radar')}</span><div><h1>Radar de Oportunidades</h1><p class="sutil">Encontre empresas e transforme oportunidades em clientes.</p></div></div>
       <div class="rd-acoes"><span class="rd-fonte"><i class="${cfg.demonstracao ? 'demo' : ''}"></i>${cfg.demonstracao ? 'Modo demonstração' : 'Fonte: Casa dos Dados'}</span>${adm ? `<button id="rd-cfg" class="rd-cfg">${icone('dados')}Configurar fonte de dados</button>` : ''}</div></div>
-    ${cfg.demonstracao ? `<div class="banner teste"><strong>Dados de demonstração.</strong> As empresas listadas são fictícias (marcadas como DEMONSTRAÇÃO) e servem para conhecer o Radar. Para pesquisar empresas reais, ${adm ? 'configure a chave da Casa dos Dados em <em>Configurar fonte de dados</em>' : 'peça ao administrador para configurar a fonte de dados'}.</div>` : ''}
+    ${cfg.demonstracao ? `<div class="banner teste"><strong>Dados de demonstração.</strong> As empresas listadas são fictícias (marcadas como DEMONSTRAÇÃO) e servem para conhecer o Radar. Para pesquisar empresas reais, ${estado.usuario.mestre ? 'configure a chave da Casa dos Dados em <em>Configurar fonte de dados</em>' : 'fale com o suporte Kontor para ativar a fonte de dados'}.</div>` : ''}
     <div class="rd-kpis" id="rd-kpis">
       ${kpi('empresas', k.identificadas.toLocaleString('pt-BR'), 'Empresas identificadas', `${k.novos.toLocaleString('pt-BR')} abertas nos últimos ${p.dias} dias`, '#f97316')}
       ${kpi('carteira', k.leads, 'Novos leads', variacao(k.leadsVar), '#3b82f6')}
@@ -7752,8 +7752,8 @@ function configRadar(cfg) {
   abrirDialogo(`<form id="rd-cfg-f" class="dlg-largo"><h2>Fonte de dados do Radar</h2>
     <p class="sutil">O Radar pesquisa o cadastro público de CNPJ da Receita Federal por meio de um fornecedor com API. Hoje: <strong>Casa dos Dados</strong> (plano pago, com saldo de consultas). Sem chave, o Radar fica em modo demonstração.</p>
     <div class="rd-grade">
-      <label>Fonte <select name="provedor"><option value="CASA_DOS_DADOS" ${cfg.provedorEscolhido === 'CASA_DOS_DADOS' ? 'selected' : ''}>Casa dos Dados</option><option value="DEMONSTRACAO" ${cfg.provedorEscolhido === 'DEMONSTRACAO' ? 'selected' : ''}>Demonstração (dados fictícios)</option></select></label>
-      <label>Chave de API (api-key) <input name="apiKey" type="password" autocomplete="off" placeholder="${cfg.temChave ? '•••••• guardada (deixe em branco para manter)' : 'Cole a chave do portal da Casa dos Dados'}"></label>
+${estado.usuario.mestre ? `      <label>Fonte <select name="provedor"><option value="CASA_DOS_DADOS" ${cfg.provedorEscolhido === 'CASA_DOS_DADOS' ? 'selected' : ''}>Casa dos Dados</option><option value="DEMONSTRACAO" ${cfg.provedorEscolhido === 'DEMONSTRACAO' ? 'selected' : ''}>Demonstração (dados fictícios)</option></select></label>
+      <label>Chave de API (api-key) <input name="apiKey" type="password" autocomplete="off" placeholder="${cfg.temChave ? '•••••• guardada (deixe em branco para manter)' : 'Cole a chave do portal da Casa dos Dados'}"></label>` : ''}
       <label>Guardar pesquisa (horas) <input type="number" name="cacheHoras" min="1" max="720" value="${cfg.cacheHoras}"><span class="dica">Pesquisas repetidas nesse prazo não gastam saldo.</span></label>
       <label>UF padrão <select name="ufPadrao"><option value="">—</option>${UFS.map((u) => `<option ${cfg.ufPadrao === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
       <label>Município padrão <input name="municipioPadrao" value="${esc(cfg.municipioPadrao ?? '')}"></label>
@@ -7774,7 +7774,7 @@ function configRadar(cfg) {
       const criterios = [...dlg.querySelectorAll('#rd-crit fieldset')].map((fs, i) => ({ id: cfg.criterios[i].id, nome: fs.querySelector('[name=nome]').value.trim(), peso: Number(fs.querySelector('[name=peso]').value) || 1,
         cnaes: lista(fs.querySelector('[name=cnaes]').value).map((x) => x.replace(/\D/g, '')).filter((x) => x.length >= 2), palavras: lista(fs.querySelector('[name=palavras]').value).filter((x) => x.length >= 3) }));
       try {
-        await api('PUT', '/api/radar/config', { provedor: d.provedor, apiKey: d.apiKey || null, cacheHoras: Number(d.cacheHoras) || 24, ufPadrao: d.ufPadrao || null, municipioPadrao: d.municipioPadrao || null, criterios });
+        await api('PUT', '/api/radar/config', { provedor: d.provedor || cfg.provedorEscolhido, apiKey: d.apiKey || null, cacheHoras: Number(d.cacheHoras) || 24, ufPadrao: d.ufPadrao || null, municipioPadrao: d.municipioPadrao || null, criterios });
         dlg.close(); aviso('Fonte de dados do Radar salva.'); telaRadar.f = null; telaRadar();
       } catch (er) { dlg.querySelector('#rd-cfg-erro').textContent = mensagemErro(er); }
     };

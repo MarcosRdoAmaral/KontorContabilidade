@@ -46,6 +46,8 @@ test('Integra Contador: configuração, prévia e conferência das obrigações'
     definirInicioDoControle(1, '2026-01-01');
 
     // ---------- configuração ----------
+    assert.equal((await call('GET', '/api/escritorio/integra/config', undefined, t)).status, 403, 'chaves do Integra Contador: só o master Kontor');
+    db.prepare("UPDATE usuarios SET mestre = 1 WHERE upper(login) = 'ANA'").run(); // a partir daqui, como o master
     assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: '' }, t)).status, 400, 'produção exige as chaves');
     assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: 'chave', consumerSecret: 'segredo' }, t)).status, 200);
     const cfg = (await call('GET', '/api/escritorio/integra/config', undefined, t)).json;
@@ -61,6 +63,7 @@ test('Integra Contador: configuração, prévia e conferência das obrigações'
     assert.deepEqual([iv.versao('SITFIS'), iv.versao('PGDASD')], ['2.5', '1.0'], 'ajuste da configuração vale por cima do catálogo');
     assert.equal((await call('PUT', '/api/escritorio/integra/config', { ambiente: 'PRODUCAO', consumerKey: 'chave2', versoes: '' }, t)).status, 200);
     assert.equal(iv.versao('SITFIS'), '2.0');
+    db.prepare("UPDATE usuarios SET mestre = 0 WHERE upper(login) = 'ANA'").run();
     // sem certificado do escritório, a autenticação real explica o que falta
     const teste = await call('POST', '/api/escritorio/integra/testar', undefined, t);
     assert.equal(teste.status, 400); assert.match(teste.json.erro, /certificado A1/);
