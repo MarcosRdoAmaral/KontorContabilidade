@@ -465,13 +465,13 @@ async function iniciar() {
   $('#nome-usuario').textContent = `${estado.usuario.nome} (${estado.usuario.login})`;
   document.querySelectorAll('[data-modulo]').forEach((a) => (a.hidden = !a.dataset.modulo.split(' ').some((m) => estado.usuario.modulos.includes(m))));
   // módulos vendidos à parte e ainda não contratados não aparecem no menu (a contratação fica em Configurações > Licença)
-  // grupos do menu: somem se nenhum item é permitido; a abertura de cada um fica guardada neste navegador
+  // grupos do menu: somem se nenhum item é permitido e o programa abre sempre com todos recolhidos
+  // (o grupo da tela atual fica destacado mesmo fechado; clique no nome para ver as telas)
   document.querySelectorAll('#menu details.grupo').forEach((g) => {
     g.hidden = ![...g.querySelectorAll('a')].some((a) => !a.hidden);
-    let guardado = null; try { guardado = localStorage.getItem('menu-' + g.dataset.grupo); } catch { /* sem armazenamento */ }
-    g.open = guardado === '1' || (guardado === null && g.dataset.grupo === 'escritorio');
-    g.addEventListener('toggle', () => { try { localStorage.setItem('menu-' + g.dataset.grupo, g.open ? '1' : '0'); } catch { /* ok */ } });
+    g.open = false;
   });
+  try { Object.keys(localStorage).filter((k) => k.startsWith('menu-')).forEach((k) => localStorage.removeItem(k)); } catch { /* sem armazenamento */ }
   // quem não tem o acesso a Relatórios ainda enxerga o manual, por um item próprio no menu
   $('#menu-doc').hidden = estado.usuario.modulos.includes('relatorios');
   iconesMenu(); iniciarTopo();
@@ -518,7 +518,7 @@ function rotear() {
   abasNavegou(); // a aba ativa passa a mostrar esta tela
   const nome = nomeHash || telaInicial();
   if ($('#dialogo').open) $('#dialogo').close(); // trocar de tela fecha a janela aberta
-  document.querySelectorAll('#menu details.grupo').forEach((g) => { const ativo = [...g.querySelectorAll('a')].some((a) => a.getAttribute('href') === `#/${nome}` && !a.hidden); g.classList.toggle('tem-ativo', ativo); if (ativo) g.open = true; });
+  document.querySelectorAll('#menu details.grupo').forEach((g) => { const ativo = [...g.querySelectorAll('a')].some((a) => a.getAttribute('href') === `#/${nome}` && !a.hidden); g.classList.toggle('tem-ativo', ativo); });
   document.querySelectorAll('nav a, .lateral-rodape a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === `#/${nome}` || (a.id === 'menu-doc' && nome === 'relatorios' && param === 'documentacao') || (a.closest('.lateral-rodape') && a.getAttribute('href') === '#/config' && nome === 'config')));
   const manual = nome === 'relatorios' && param === 'documentacao'; // o manual é de todos os usuários
   if (['usuarios', 'email', 'backup', 'licenca'].includes(nome)) { location.hash = '#/config/' + nome; return; } // endereços antigos

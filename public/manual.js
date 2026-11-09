@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário). `grupo` segue o menu lateral; `tela` é a rota aberta pelo botão "Abrir esta tela".
  */
-export const MANUAL_VERSAO = '1.59.0';
+export const MANUAL_VERSAO = '1.59.1';
 
 export const MANUAL = [
   {
@@ -37,7 +37,7 @@ export const MANUAL = [
     id: 'navegacao', grupo: 'Comece aqui', titulo: 'Telas, abas e menu', resumo: 'Como o sistema é organizado: menu por grupos, abas no topo, busca, sininho e telas menores.',
     corpo: `
       <h3>Menu lateral</h3>
-      <p>No alto fica a <strong>empresa selecionada</strong> (com o CNPJ, o ambiente e a validade do certificado): as telas de faturamento, compras e financeiro mostram os dados dela. As telas do escritório (Carteira, Monitor fiscal, Controle mensal etc.) valem para toda a carteira. Abaixo, os itens seguem os grupos <strong>Escritório</strong>, <strong>Faturamento</strong>, <strong>Compras</strong>, <strong>Financeiro</strong> e <strong>Cadastros</strong>, mais Relatórios e, no rodapé, Configurações e Sair. Clique no nome do grupo para abrir ou recolher; o grupo da tela atual abre sozinho.</p>
+      <p>No alto fica a <strong>empresa selecionada</strong> (com o CNPJ, o ambiente e a validade do certificado): as telas de faturamento, compras e financeiro mostram os dados dela. As telas do escritório (Carteira, Monitor fiscal, Controle mensal etc.) valem para toda a carteira. Abaixo, os itens seguem os grupos <strong>Escritório</strong>, <strong>Faturamento</strong>, <strong>Compras</strong>, <strong>Financeiro</strong> e <strong>Cadastros</strong>, mais Relatórios e, no rodapé, Configurações e Sair. O programa abre com todos os grupos recolhidos: clique no nome do grupo para ver as telas. O grupo da tela aberta fica destacado mesmo recolhido.</p>
       <p class="dica">O menu mostra só o que o seu usuário pode usar (Configurações &gt; Usuários e acessos) e só os módulos contratados na licença.</p>
       <h3>Abas no topo</h3>
       <p>Cada tela abre numa <strong>aba</strong> no alto, como num navegador: clique na aba para voltar a ela, no <strong>×</strong> para fechar e no <strong>+</strong> para abrir uma aba nova (começa no Início). Cabem até 10 abas; quando não há espaço, as que sobram vão para o menu <strong>☰</strong> ao lado. As abas valem enquanto o programa está aberto.</p>
