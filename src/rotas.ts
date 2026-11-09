@@ -29,6 +29,7 @@ import { apagarCadeiaIcp, baixarCadeiaIcp, definirVerificacaoServidor, extrairCe
 import { criarBackup, listarBackups } from './servicos/backup.js';
 import { analisarPlanilha, importarLote } from './servicos/importar-clientes.js';
 import { consultarCnpj } from './servicos/consulta-cnpj.js';
+import { ClienteCarteira, criarCliente } from './servicos/carteira.js';
 import { strToU8, zipSync } from 'fflate';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -172,6 +173,12 @@ export async function rotas(app: FastifyInstance) {
   });
   app.get('/api/setup/status', async () => ({ configurado: sistemaConfigurado(), desktop: config.desktop, versao: VERSAO }));
 
+  // primeiro acesso: busca o CNPJ do escritório na Receita (só enquanto o sistema não foi configurado)
+  app.get('/api/setup/cnpj/:cnpj', async (req, reply) => {
+    if (sistemaConfigurado()) return reply.code(409).send({ erro: 'O sistema já foi configurado.' });
+    return consultarCnpj((req.params as any).cnpj);
+  });
+
   app.post('/api/setup', async (req, reply) => {
     const d = z.object({
       escritorio: z.string().min(2, 'Informe o nome do escritório'),
@@ -179,10 +186,32 @@ export async function rotas(app: FastifyInstance) {
       usuario: z.string().trim().regex(/^[A-Za-z0-9._-]{3,30}$/, 'Usuário: 3 a 30 letras ou números, sem espaços nem acentos').optional(),
       email: z.string().email('E-mail inválido'),
       senha: z.string().min(8, 'A senha precisa ter pelo menos 8 caracteres'),
+      // dados do escritório vindos da Receita na tela (opcional: sem internet, cadastra depois)
+      empresa: z.object({
+        documento: z.string(), cod_municipio: z.string().nullish(), uf: z.string().nullish(), email: z.string().nullish(), op_simp_nac: z.number().int().nullish(),
+        nome_fantasia: z.string().nullish(), cep: z.string().nullish(), logradouro: z.string().nullish(), numero: z.string().nullish(), complemento: z.string().nullish(),
+        bairro: z.string().nullish(), cidade: z.string().nullish(), cnae: z.string().nullish(),
+      }).nullish(),
     }).parse(req.body);
     if (sistemaConfigurado()) return reply.code(409).send({ erro: 'O sistema já foi configurado.' });
     const id = configurarPrimeiroAcesso(d);
-    return { token: gerarToken(id) };
+    // já deixa o escritório cadastrado como empresa do escritório; se faltar algo, avisa e o cadastro é feito depois em Empresas
+    let aviso: string | null = null;
+    if (d.empresa?.documento) {
+      try {
+        const escId = (db.prepare('SELECT escritorio_id FROM usuarios WHERE id = ?').get(id) as any).escritorio_id;
+        const e = d.empresa;
+        criarCliente(escId, ClienteCarteira.parse({
+          documento: e.documento, razao_social: d.escritorio, nome_fantasia: e.nome_fantasia, cod_municipio: e.cod_municipio ?? '', uf: e.uf, email: e.email,
+          regime: e.op_simp_nac === 2 ? 'MEI' : e.op_simp_nac === 3 ? 'SIMPLES' : 'PRESUMIDO', eh_escritorio: true, contribuinte_iss: true, cnae: e.cnae,
+          cep: e.cep, logradouro: e.logradouro, numero: e.numero, complemento: e.complemento, bairro: e.bairro, cidade: e.cidade,
+        }));
+      } catch (er: any) {
+        req.log.warn({ erro: er?.message }, 'Primeiro acesso: escritório não cadastrado como empresa');
+        aviso = 'O acesso foi criado, mas não deu para cadastrar a empresa do escritório agora. Cadastre em Cadastros > Empresas (emissão).';
+      }
+    }
+    return { token: gerarToken(id), aviso };
   });
 
   // ---------- Autenticação ----------

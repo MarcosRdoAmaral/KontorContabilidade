@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário). `grupo` segue o menu lateral; `tela` é a rota aberta pelo botão "Abrir esta tela".
  */
-export const MANUAL_VERSAO = '1.59.1';
+export const MANUAL_VERSAO = '1.60.0';
 
 export const MANUAL = [
   {
@@ -13,7 +13,7 @@ export const MANUAL = [
       <p>O Kontor Gestão Contabilidade é o sistema de gestão do escritório de contabilidade: carteira de clientes, agenda de obrigações e prazos, certificados e procurações, contratos e honorários e captura de documentos. Ele traz junto tudo o que o Kontor Gestão faz — emissão de NFS-e pelo <strong>Emissor Nacional</strong>, boletos, despesas, extrato e relatórios — para o escritório e para os clientes que emitem por ele.</p>
       <h3>Para começar a gestão do escritório</h3>
       <ol>
-        <li><strong>Empresa do escritório:</strong> em Cadastros &gt; Empresas, cadastre o escritório e marque “Esta é a empresa do escritório”.</li>
+        <li><strong>Empresa do escritório:</strong> já criada no primeiro acesso pelo CNPJ; em Cadastros &gt; Empresas (emissão), complete a inscrição municipal e envie o certificado digital A1.</li>
         <li><strong>Carteira:</strong> cadastre os clientes (ou importe uma planilha com os CNPJs) (com o CNPJ, os dados vêm da Receita), com regime, responsável e perfil.</li>
         <li><strong>Equipe:</strong> em Configurações &gt; Usuários e acessos, crie um usuário para cada pessoa; eles aparecem como responsáveis.</li>
         <li><strong>Obrigações:</strong> confira o catálogo (Obrigações e prazos &gt; Catálogo) e a data “Controlar prazos a partir de”.</li>
@@ -22,7 +22,7 @@ export const MANUAL = [
       </ol>
       <h3>Antes da primeira nota</h3>
       <ol>
-        <li><strong>Primeiro acesso:</strong> informe o nome do escritório e crie o usuário administrador.</li>
+        <li><strong>Primeiro acesso:</strong> informe o <strong>CNPJ do escritório</strong> e clique em Buscar: a razão social vem da Receita Federal e o escritório já fica cadastrado como empresa do escritório (município, endereço, regime do Simples e e-mail). Depois crie o usuário administrador. Sem internet na hora, digite a razão social e cadastre o escritório depois em Cadastros &gt; Empresas (emissão).</li>
         <li><strong>Licença:</strong> em Configurações &gt; Licença, cole o código recebido para liberar a emissão.</li>
         <li><strong>Empresa:</strong> em Empresas, cadastre cada prestador (CNPJ, regime, município, ambiente).</li>
         <li><strong>Certificado A1:</strong> na linha da empresa, botão Certificado (arquivo .pfx e senha). Empresas que emitem só pelo portal com CNPJ e senha não precisam dele (veja <em>Empresas</em>).</li>

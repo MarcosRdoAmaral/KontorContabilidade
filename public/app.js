@@ -312,19 +312,44 @@ function mostrarSetup() {
   $('#setup').hidden = false;
 }
 
+// primeiro acesso: o CNPJ busca a razão social e os dados do escritório na Receita
+let dadosSetup = null;
+async function buscarCnpjSetup() {
+  const f = $('#form-setup'), doc = f.cnpj.value.replace(/\D/g, ''), dica = $('#setup-cnpj-dica');
+  dadosSetup = null;
+  if (!doc) return;
+  if (doc.length !== 14) { dica.textContent = 'Informe os 14 dígitos do CNPJ.'; return; }
+  dica.textContent = 'Buscando na Receita Federal…';
+  try {
+    const r = await fetch(`/api/setup/cnpj/${doc}`); const j = await r.json();
+    if (!r.ok) throw new Error(/inválido/i.test(j.erro || '') ? j.erro : 'Não foi possível consultar a Receita agora.');
+    dadosSetup = j;
+    f.escritorio.value = j.razao_social || f.escritorio.value;
+    if (!f.email.value && j.email) f.email.value = j.email;
+    dica.textContent = `${j.razao_social}${j.municipio ? ` · ${j.municipio}/${j.uf}` : ''}${j.situacao ? ` · ${j.situacao}` : ''}`;
+  } catch (e) { dica.textContent = `${mensagemErro(e)} Digite a razão social abaixo e complete o cadastro depois, em Empresas.`; }
+}
+$('#setup-buscar').onclick = buscarCnpjSetup;
+$('#form-setup').cnpj.addEventListener('change', buscarCnpjSetup);
+
 $('#form-setup').onsubmit = async (ev) => {
   ev.preventDefault();
   const f = ev.target;
   if (f.senha.value !== f.senha2.value) return ($('#erro-setup').textContent = 'As senhas não são iguais.');
   try {
+    const doc = f.cnpj.value.replace(/\D/g, '');
+    const d = dadosSetup && dadosSetup.documento === doc ? dadosSetup : null;
+    const empresa = d ? { documento: d.documento, cod_municipio: d.cod_municipio, uf: d.uf, email: d.email, op_simp_nac: d.op_simp_nac, nome_fantasia: d.nome_fantasia,
+      cep: d.cep, logradouro: d.logradouro, numero: d.numero, complemento: d.complemento, bairro: d.bairro, cidade: d.municipio, cnae: d.cnae } : null;
     const r = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ escritorio: f.escritorio.value, nome: f.nome.value, usuario: f.usuario.value.trim().toUpperCase(), email: f.email.value, senha: f.senha.value }) });
+      body: JSON.stringify({ escritorio: f.escritorio.value, nome: f.nome.value, usuario: f.usuario.value.trim().toUpperCase(), email: f.email.value, senha: f.senha.value, empresa }) });
     const j = await r.json();
     if (!r.ok) throw Object.assign(new Error(j.erro), { campos: j.campos });
     estado.token = j.token;
     localStorage.setItem('token', j.token);
     $('#setup').hidden = true;
-    iniciar();
+    await iniciar();
+    aviso(j.aviso || (empresa ? 'Escritório cadastrado. Em Cadastros > Empresas (emissão), complete a inscrição municipal e o certificado digital.' : 'Acesso criado. Cadastre o escritório em Cadastros > Empresas (emissão).'));
   } catch (e) { $('#erro-setup').textContent = mensagemErro(e); }
 };
 

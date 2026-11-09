@@ -1316,3 +1316,6 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
 .man-trilha { margin: 0 0 2px; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2, #9aa4b2); }
 .man-abrir { display: inline-flex; text-decoration: none; padding: 6px 14px; }
 @media print { .no-print { display: none !important; } .man-grupo-imp { page-break-before: always; } }
+.setup-cnpj { display: flex; gap: 8px; }
+.setup-cnpj input { flex: 1; min-width: 0; }
+.setup-cnpj button { flex: none; }
