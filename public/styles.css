@@ -1319,3 +1319,4 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
 .setup-cnpj { display: flex; gap: 8px; }
 .setup-cnpj input { flex: 1; min-width: 0; }
 .setup-cnpj button { flex: none; }
+.rel-grupos details.grupo.tem-ativo > summary { color: var(--laranja); }

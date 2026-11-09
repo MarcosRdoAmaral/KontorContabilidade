@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário). `grupo` segue o menu lateral; `tela` é a rota aberta pelo botão "Abrir esta tela".
  */
-export const MANUAL_VERSAO = '1.60.0';
+export const MANUAL_VERSAO = '1.60.1';
 
 export const MANUAL = [
   {

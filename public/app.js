@@ -2350,8 +2350,8 @@ async function telaRelatorios(aba) {
     ${cabecaTela('relatorios', 'Relatórios', 'A nota e o boleto têm datas diferentes (emissão, vencimento, pagamento). Cada relatório diz qual data usa no filtro e mostra as outras nas colunas.')}
     <nav class="abas" aria-label="Relatórios"><a href="#/relatorios" class="ativo">Relatórios</a><a href="#/relatorios/documentacao">Documentação</a></nav>
     <div class="rel-layout">
-    <nav class="rel-grupos" aria-label="Tipos de relatório">${podeFiscal ? `<details class="grupo" open><summary>Fiscal dos clientes <span class="dica">2</span></summary>
-      <a href="#" data-fis="pend">Pendências por cliente</a><a href="#" data-fis="sit">Situação fiscal do cliente</a></details>` : ''}${GRUPOS_REL.filter((g) => cat.some((c) => c.grupo === g)).map((g) => `<details class="grupo" ${cat.some((c) => c.grupo === g && c.id === est.rel) ? 'open' : ''}><summary>${esc(g)} <span class="dica">${cat.filter((c) => c.grupo === g).length}</span></summary>
+    <nav class="rel-grupos" aria-label="Tipos de relatório">${podeFiscal ? `<details class="grupo"><summary>Fiscal dos clientes <span class="dica">2</span></summary>
+      <a href="#" data-fis="pend">Pendências por cliente</a><a href="#" data-fis="sit">Situação fiscal do cliente</a></details>` : ''}${GRUPOS_REL.filter((g) => cat.some((c) => c.grupo === g)).map((g) => `<details class="grupo${cat.some((c) => c.grupo === g && c.id === est.rel) ? ' tem-ativo' : ''}"><summary>${esc(g)} <span class="dica">${cat.filter((c) => c.grupo === g).length}</span></summary>
       ${cat.filter((c) => c.grupo === g).map((c) => `<a href="#" data-rel="${c.id}" class="${c.id === est.rel ? 'ativo' : ''}">${esc(c.titulo)}</a>`).join('')}</details>`).join('')}</nav>
     <div class="rel-corpo">
     <form id="form-rel" class="tl-filtros">
@@ -2373,6 +2373,7 @@ async function telaRelatorios(aba) {
   conteudo.querySelectorAll('[data-rel]').forEach((a) => (a.onclick = (ev) => {
     ev.preventDefault(); f.rel.value = a.dataset.rel; est.rel = a.dataset.rel;
     conteudo.querySelectorAll('[data-rel]').forEach((x) => x.classList.toggle('ativo', x === a));
+    conteudo.querySelectorAll('.rel-grupos details').forEach((d) => d.classList.toggle('tem-ativo', d.contains(a)));
     ajustar(); $('#res-rel').innerHTML = vazioTela('relatorios', 'Pronto para gerar', 'Ajuste o período e clique em Gerar.');
   }));
   const qs = (formato) => { const a = atual(); return new URLSearchParams({ de: a.de, ate: a.ate, formato, ...(a.tomadorId && { tomadorId: a.tomadorId }), ...(a.situacao && { situacao: a.situacao }) }).toString(); };
