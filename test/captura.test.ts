@@ -139,6 +139,12 @@ test('captura: NFS-e do ADN, NF-e de venda pelo autXML e pacote do mês', async 
     assert.equal(nomes.filter((n) => n.startsWith('servicos/prestadas/')).length, 2); assert.equal(nomes.filter((n) => n.startsWith('servicos/tomadas/')).length, 1);
     assert.match(strFromU8(arqs['servicos/relatorio-nfse.csv']), /"Tomada";.*"Sim"/);
     assert.ok(nomes.some((n) => n.startsWith('entradas/') || n.includes('sefaz')), 'compras continuam no pacote');
+    // ---------- conferência por CFOP e NFS-e ----------
+    const cf = (await call('GET', `/api/escritorio/captura/${cli}/conferencia?mes=2026-10`, undefined, t)).json;
+    assert.deepEqual([cf.saidas.notas, cf.saidas.canceladas, cf.saidas.cfops[0].cfop, cf.saidas.cfops[0].origem, cf.saidas.cfops[0].valor], [1, 1, '5102', 'Saída para o estado', 250]);
+    assert.deepEqual([cf.entradas.notas, cf.entradas.cfops[0].cfop, cf.entradas.totalNotas], [1, '5102', 250]);
+    assert.deepEqual([cf.nfsePrestadas.notas, cf.nfsePrestadas.canceladas, cf.nfseTomadas.notas, cf.nfseTomadas.valor], [0, 2, 1, 400]);
+    assert.match(strFromU8(arqs['conferencia-cfop-e-nfse.csv']), /"Saída";"5102";"Saída para o estado";"1";"1";"250,00"/);
   } finally {
     await app.close();
   }

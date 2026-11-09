@@ -28,6 +28,7 @@ import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servi
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
 import { xmlNfseCapturada } from './servicos/nfse-capturadas.js';
+import { conferenciaFiscal } from './servicos/conferencia-fiscal.js';
 import { ConfigAvisos, configAvisos, enviarResumo, montarResumo, salvarAvisos } from './servicos/avisos.js';
 
 /** Rotas exclusivas do Kontor Gestão Contabilidade (gestão do escritório). Permissões em src/auth.ts (REGRAS). */
@@ -300,6 +301,7 @@ export async function rotasEscritorio(app: FastifyInstance) {
     api.get('/api/escritorio/captura', async (req) => statusCaptura(u(req).escritorio_id, mesDe(req.query), empresasDoUsuario(u(req))));
     api.get('/api/escritorio/captura/autxml', async (req) => statusAutXml(u(req).escritorio_id, mesDe(req.query)));
     api.get('/api/escritorio/captura/:id/notas', async (req) => { checar(req, id(req)); return notasDoMes(u(req).escritorio_id, id(req), mesDe(req.query)); });
+    api.get('/api/escritorio/captura/:id/conferencia', async (req) => { checar(req, id(req)); return conferenciaFiscal(u(req).escritorio_id, id(req), mesDe(req.query)); });
     api.get('/api/escritorio/captura/:id/xml/:chave', async (req, reply) => {
       checar(req, id(req));
       const chave = String((req.params as any).chave);

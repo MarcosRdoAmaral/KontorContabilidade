@@ -4,6 +4,7 @@ import { lerNfse } from '../nfse/leitura.js';
 import { ErroNegocio } from './emissao.js';
 import { balancoExtrato } from './extrato.js';
 import { despesaMes, recebidoMes } from './financeiro.js';
+import { calcularPerfil } from './tributacao.js';
 import { COR, MM, cabecalho, docFmt, rodapes, type Emitente } from '../pdf/timbrado.js';
 
 /**
@@ -336,6 +337,120 @@ export const RELATORIOS: Record<string, Def> = {
     }),
   },
   // ---------------- Clientes ----------------
+  // ---------------- Novos (1º lote vindo da revisão dos relatórios de ERP) ----------------
+  'faturamento-diario': {
+    grupo: 'Faturamento', titulo: 'Faturamento diário', filtroData: 'Data de emissão da nota',
+    descricao: 'Dia a dia: quantas notas foram autorizadas, quanto foi faturado, o que foi cancelado e o acumulado no período.',
+    gerar: (e, f) => {
+      const l = db.prepare(`SELECT COALESCE(date(autorizada_em,'-3 hours'), date(criado_em,'-3 hours')) AS dia, status, valor_servico AS v FROM notas
+        WHERE empresa_id = ? AND status IN ('AUTORIZADA','CANCELADA') ${f.tomadorId ? 'AND tomador_id = ' + Number(f.tomadorId) : ''}`).all(e) as any[];
+      const dd = new Map<string, any>();
+      for (const n of l.filter((x) => entre(x.dia, f))) {
+        const r = dd.get(n.dia) ?? dd.set(n.dia, { data: n.dia, qtd: 0, faturado: 0, cancelado: 0 }).get(n.dia);
+        if (n.status === 'CANCELADA') r.cancelado += n.v; else { r.qtd++; r.faturado += n.v; }
+      }
+      let acum = 0;
+      const linhas = [...dd.values()].sort((a, b) => a.data.localeCompare(b.data)).map((r) => ({ ...r, faturado: r2(r.faturado), cancelado: r2(r.cancelado), acumulado: r2((acum += r.faturado)) }));
+      return { colunas: [{ k: 'data', nome: 'Dia', tipo: 'data' }, { k: 'qtd', nome: 'Notas', tipo: 'inteiro', soma: true }, { k: 'faturado', nome: 'Faturado', tipo: 'moeda', soma: true },
+        { k: 'cancelado', nome: 'Canceladas', tipo: 'moeda', soma: true }, { k: 'acumulado', nome: 'Acumulado', tipo: 'moeda' }], linhas };
+    },
+  },
+  'razao-cliente': {
+    grupo: 'Contas a receber', titulo: 'Razão do cliente (extrato da conta)', filtroData: 'Emissão da cobrança e data do pagamento',
+    descricao: 'O extrato de um cliente, linha a linha: cada cobrança emitida (débito) e cada pagamento (crédito), com o saldo devedor. Escolha o cliente. Bom para mandar junto de uma cobrança.',
+    gerar: (e, f) => {
+      if (!f.tomadorId) throw new ErroNegocio('Escolha o cliente para gerar o razão.');
+      const l = titulos(e, f.tomadorId);
+      const mov: any[] = [];
+      for (const x of l) {
+        mov.push({ data: x.emissao_boleto ?? x.emissao, historico: `Cobrança${x.n_nfse ? ` · NFS-e ${x.n_nfse}` : ''}${x.descricao ? ` · ${x.descricao}` : ''} · vence ${x.vencimento.split('-').reverse().join('/')}`, debito: r2(x.valor), credito: 0 });
+        if (x.st === 'PAGO') mov.push({ data: x.pago_em ?? x.vencimento, historico: `Pagamento da cobrança de ${x.vencimento.split('-').reverse().join('/')}`, debito: 0, credito: r2(x.valor_pago ?? x.valor) });
+      }
+      mov.sort((a, b) => a.data.localeCompare(b.data) || b.debito - a.debito);
+      const anterior = r2(mov.filter((m) => m.data < f.de).reduce((t, m) => t + m.debito - m.credito, 0));
+      let saldo = anterior;
+      const linhas = [{ data: f.de, historico: 'Saldo anterior', debito: 0, credito: 0, saldo: anterior, _subtotal: true },
+        ...mov.filter((m) => entre(m.data, f)).map((m) => ({ ...m, saldo: r2((saldo += m.debito - m.credito)) }))];
+      return { colunas: [{ k: 'data', nome: 'Data', tipo: 'data' }, { k: 'historico', nome: 'Histórico', tipo: 'texto' }, { k: 'debito', nome: 'Cobrado', tipo: 'moeda', soma: true },
+        { k: 'credito', nome: 'Pago', tipo: 'moeda', soma: true }, { k: 'saldo', nome: 'Saldo devedor', tipo: 'moeda' }], linhas };
+    },
+  },
+  'contas-a-pagar': {
+    grupo: 'Despesas e pagamentos', titulo: 'Contas a pagar em aberto', filtroData: 'Vencimento da parcela', situacoes: ['Vencida', 'A vencer'],
+    descricao: 'Parcelas das compras (NF-e de entrada) e despesas lançadas com data futura que ainda não foram ligadas a uma saída do extrato ou da fatura do cartão, por vencimento e fornecedor.',
+    gerar: (e, f) => {
+      const hoje = hojeBr();
+      const parcelas = db.prepare(`SELECT p.vencimento, p.valor, p.numero, c.numero AS nf, c.fornecedor_nome AS fornecedor, c.fornecedor_documento AS documento
+        FROM compra_parcelas p JOIN compras c ON c.id = p.compra_id LEFT JOIN despesas d ON d.id = p.despesa_id
+        WHERE c.empresa_id = ? AND d.extrato_lancamento_id IS NULL AND d.cartao_lancamento_id IS NULL`).all(e) as any[];
+      const futuras = db.prepare(`SELECT d.data AS vencimento, d.valor, d.categoria, d.descricao FROM despesas d
+        WHERE d.empresa_id = ? AND d.origem = 'MANUAL' AND d.data > ? AND d.extrato_lancamento_id IS NULL AND d.cartao_lancamento_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM compra_parcelas p WHERE p.despesa_id = d.id)`).all(e, hoje) as any[];
+      const linhas = [
+        ...parcelas.map((p) => ({ vencimento: p.vencimento, fornecedor: p.fornecedor, documento: p.documento, origem: `NF ${p.nf ?? ''}${p.numero ? ` · parcela ${p.numero}` : ''}`, valor: r2(p.valor) })),
+        ...futuras.map((d) => ({ vencimento: d.vencimento, fornecedor: d.descricao || d.categoria, documento: null, origem: `Despesa · ${d.categoria}`, valor: r2(d.valor) })),
+      ].filter((x) => entre(x.vencimento, f))
+        .map((x) => ({ ...x, situacao: x.vencimento < hoje ? 'Vencida' : 'A vencer', atraso: x.vencimento < hoje ? dias(hoje, x.vencimento) : 0 }))
+        .filter((x) => !f.situacao || x.situacao === f.situacao).sort((a, b) => a.vencimento.localeCompare(b.vencimento) || String(a.fornecedor).localeCompare(String(b.fornecedor)));
+      return { colunas: [COL.vencimento, { k: 'fornecedor', nome: 'Fornecedor / despesa', tipo: 'texto' }, { k: 'documento', nome: 'CNPJ/CPF', tipo: 'texto' }, { k: 'origem', nome: 'Documento', tipo: 'texto' },
+        { k: 'valor', nome: 'Valor', tipo: 'moeda', soma: true }, { k: 'atraso', nome: 'Dias vencida', tipo: 'inteiro' }, COL.situacao], linhas };
+    },
+  },
+  'pagamentos-pj': {
+    grupo: 'Fiscal e retenções', titulo: 'Pagamentos a pessoas jurídicas (retenções)', filtroData: 'Data de emissão da nota de entrada',
+    descricao: 'Compras de fornecedores com CNPJ, somadas por fornecedor, com as retenções calculadas pela tributação vinculada a cada compra (IRRF, PIS, COFINS, CSLL, INSS e ISS retidos). Base para conferir a EFD-Reinf e a DIRF. Compra sem tributação com retenção aparece com retenção zero.',
+    gerar: (e, f) => {
+      const l = db.prepare(`SELECT c.fornecedor_documento AS documento, c.fornecedor_nome AS fornecedor, c.valor_total, c.emissao, td.perfil_id
+        FROM compras c LEFT JOIN tipos_documento td ON td.id = c.tipo_documento_id
+        WHERE c.empresa_id = ? AND c.emissao BETWEEN ? AND ? AND length(replace(replace(replace(COALESCE(c.fornecedor_documento,''),'.',''),'/',''),'-','')) = 14`).all(e, f.de, f.ate) as any[];
+      const IMP = ['IRRF', 'PIS', 'COFINS', 'CSLL', 'INSS', 'ISS'] as const;
+      const por = new Map<string, any>();
+      for (const c of l) {
+        const r = por.get(c.documento) ?? por.set(c.documento, { fornecedor: c.fornecedor, documento: c.documento, notas: 0, valor: 0, ...Object.fromEntries(IMP.map((i) => [i, 0])) }).get(c.documento);
+        r.notas++; r.valor += c.valor_total;
+        if (c.perfil_id) for (const x of calcularPerfil(c.perfil_id, c.valor_total, c.emissao)) if (x.retido && (IMP as readonly string[]).includes(x.imposto)) r[x.imposto] += x.valor;
+      }
+      const mo = (k: string, nome: string): Coluna => ({ k, nome, tipo: 'moeda', soma: true });
+      const linhas = [...por.values()].map((r) => ({ ...r, valor: r2(r.valor), ...Object.fromEntries(IMP.map((i) => [i, r2(r[i])])), total_ret: r2(IMP.reduce((t, i) => t + r[i], 0)) })).sort((a, b) => b.valor - a.valor);
+      return { colunas: [{ k: 'fornecedor', nome: 'Fornecedor', tipo: 'texto' }, { k: 'documento', nome: 'CNPJ', tipo: 'texto' }, { k: 'notas', nome: 'Notas', tipo: 'inteiro', soma: true }, mo('valor', 'Valor pago'),
+        ...IMP.map((i) => mo(i, `${i} retido`)), mo('total_ret', 'Total retido')], linhas };
+    },
+  },
+  'fluxo-previsto': {
+    grupo: 'Resultado e caixa', titulo: 'Fluxo de caixa previsto (diário)', filtroData: 'Vencimento (a receber e a pagar)',
+    descricao: 'Dia a dia: o que deve entrar (cobranças em aberto) e sair (contas a pagar em aberto), com o saldo projetado a partir do último saldo do extrato importado. O que já venceu sem baixa entra na primeira linha, como "Em atraso".',
+    gerar: (e, f) => {
+      const hoje = hojeBr();
+      const ini = f.de < hoje ? hoje : f.de;
+      const rec = titulos(e, f.tomadorId).filter((x) => x.st !== 'PAGO');
+      const pag = RELATORIOS['contas-a-pagar'].gerar(e, { de: '1900-01-01', ate: f.ate }).linhas;
+      const ult = db.prepare(`SELECT saldo, data FROM extrato_lancamentos WHERE empresa_id = ? AND saldo IS NOT NULL AND data <= ? ORDER BY data DESC, id DESC LIMIT 1`).get(e, hoje) as any;
+      let saldo = r2(ult?.saldo ?? 0);
+      const linhas: any[] = [{ data: ult?.data ?? hoje, historico: ult ? 'Saldo do extrato' : 'Sem extrato importado: saldo inicial zero', entradas: 0, saidas: 0, saldo, _subtotal: true }];
+      const atrasoE = soma(rec.filter((x) => x.vencimento < ini), 'valor'), atrasoS = soma(pag.filter((x: any) => x.vencimento < ini), 'valor');
+      if (atrasoE || atrasoS) linhas.push({ data: ini, historico: 'Em atraso (vencido sem baixa)', entradas: atrasoE, saidas: atrasoS, saldo: (saldo = r2(saldo + atrasoE - atrasoS)) });
+      const dd = new Map<string, any>();
+      for (const x of rec.filter((x) => x.vencimento >= ini && x.vencimento <= f.ate)) (dd.get(x.vencimento) ?? dd.set(x.vencimento, { e: 0, s: 0 }).get(x.vencimento)).e += x.valor;
+      for (const x of pag.filter((x: any) => x.vencimento >= ini && x.vencimento <= f.ate)) (dd.get(x.vencimento) ?? dd.set(x.vencimento, { e: 0, s: 0 }).get(x.vencimento)).s += x.valor;
+      for (const [d, v] of [...dd.entries()].sort((a, b) => a[0].localeCompare(b[0]))) linhas.push({ data: d, historico: 'Previsto', entradas: r2(v.e), saidas: r2(v.s), saldo: (saldo = r2(saldo + v.e - v.s)) });
+      return { colunas: [{ k: 'data', nome: 'Data', tipo: 'data' }, { k: 'historico', nome: 'Histórico', tipo: 'texto' }, { k: 'entradas', nome: 'A receber', tipo: 'moeda', soma: true },
+        { k: 'saidas', nome: 'A pagar', tipo: 'moeda', soma: true }, { k: 'saldo', nome: 'Saldo projetado', tipo: 'moeda' }], linhas };
+    },
+  },
+  'livro-caixa': {
+    grupo: 'Resultado e caixa', titulo: 'Livro caixa (extrato)', filtroData: 'Data do lançamento no extrato',
+    descricao: 'Entradas e saídas do extrato bancário importado, em ordem de data, com a categoria e o saldo dia a dia. Serve de livro caixa para quem é do Simples ou autônomo.',
+    gerar: (e, f) => {
+      const l = db.prepare(`SELECT data, descricao, categoria, valor FROM extrato_lancamentos WHERE empresa_id = ? AND data BETWEEN ? AND ? ORDER BY data, id`).all(e, f.de, f.ate) as any[];
+      const antes = db.prepare(`SELECT saldo FROM extrato_lancamentos WHERE empresa_id = ? AND data < ? AND saldo IS NOT NULL ORDER BY data DESC, id DESC LIMIT 1`).get(e, f.de) as any;
+      const imp = db.prepare(`SELECT saldo_anterior FROM extrato_importacoes WHERE empresa_id = ? AND periodo_ini >= ? AND saldo_anterior IS NOT NULL ORDER BY periodo_ini LIMIT 1`).get(e, f.de) as any;
+      let saldo = r2(antes?.saldo ?? imp?.saldo_anterior ?? 0);
+      const linhas = [{ data: f.de, historico: 'Saldo anterior', categoria: '', entrada: 0, saida: 0, saldo, _subtotal: true },
+        ...l.map((x) => ({ data: x.data, historico: x.descricao, categoria: x.categoria ?? 'Sem classificação', entrada: x.valor > 0 ? r2(x.valor) : 0, saida: x.valor < 0 ? r2(-x.valor) : 0, saldo: (saldo = r2(saldo + x.valor)) }))];
+      return { colunas: [{ k: 'data', nome: 'Data', tipo: 'data' }, { k: 'historico', nome: 'Histórico', tipo: 'texto' }, { k: 'categoria', nome: 'Categoria', tipo: 'texto' },
+        { k: 'entrada', nome: 'Entrada', tipo: 'moeda', soma: true }, { k: 'saida', nome: 'Saída', tipo: 'moeda', soma: true }, { k: 'saldo', nome: 'Saldo', tipo: 'moeda' }], linhas };
+    },
+  },
   'curva-abc': {
     grupo: 'Clientes', titulo: 'Curva ABC de clientes', filtroData: 'Data de emissão da nota',
     descricao: 'Clientes ordenados pelo valor faturado, com a participação de cada um e a classe: A (até 80% do faturamento), B (até 95%) e C (o restante).',

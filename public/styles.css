@@ -1311,3 +1311,8 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
   .tabela-controle [data-hoje] { display: none; } /* "Marcar enviado hoje" continua no menu ⋯ da linha */
 }
 .rd-mei { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 6px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; color: var(--texto-2, #9aa4b2); border: 1px solid currentColor; vertical-align: 1px; }
+.man-grupo { margin: 14px 4px 4px; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2, #9aa4b2); }
+.man-grupo:first-child { margin-top: 4px; }
+.man-trilha { margin: 0 0 2px; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2, #9aa4b2); }
+.man-abrir { display: inline-flex; text-decoration: none; padding: 6px 14px; }
+@media print { .no-print { display: none !important; } .man-grupo-imp { page-break-before: always; } }

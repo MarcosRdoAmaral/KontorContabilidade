@@ -2261,18 +2261,20 @@ async function telaDocumentacao() {
     const q = est.busca.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     const achados = MANUAL.filter((t) => !q || textoPuro(t).includes(q));
     if (!achados.some((t) => t.id === est.topico) && achados[0]) est.topico = achados[0].id;
+    // índice agrupado como o menu lateral
+    let grupoAtual = null;
     $('#man-lista').innerHTML = achados.length
-      ? achados.map((t) => `<a href="#" data-t="${t.id}" class="${t.id === est.topico ? 'ativo' : ''}"><strong>${esc(t.titulo)}</strong><span>${esc(t.resumo)}</span></a>`).join('')
+      ? achados.map((t) => `${t.grupo && t.grupo !== grupoAtual ? `<h4 class="man-grupo">${esc((grupoAtual = t.grupo))}</h4>` : ''}<a href="#" data-t="${t.id}" class="${t.id === est.topico ? 'ativo' : ''}"><strong>${esc(t.titulo)}</strong><span>${esc(t.resumo)}</span></a>`).join('')
       : '<p class="dica">Nada encontrado.</p>';
     $('#man-lista').querySelectorAll('[data-t]').forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); est.topico = a.dataset.t; pintar(); $('#man-corpo').scrollIntoView({ block: 'start' }); }));
     const t = MANUAL.find((x) => x.id === est.topico);
-    $('#man-corpo').innerHTML = t ? `<h2>${esc(t.titulo)}</h2><p class="sutil">${esc(t.resumo)}</p>${t.corpo}` : '';
+    $('#man-corpo').innerHTML = t ? `${t.grupo ? `<p class="man-trilha">${esc(t.grupo)}</p>` : ''}<h2>${esc(t.titulo)}</h2><p class="sutil">${esc(t.resumo)}</p>${t.tela ? `<p class="no-print"><a class="tl-btn-borda man-abrir" href="${esc(t.tela)}">Abrir esta tela</a></p>` : ''}${t.corpo}` : '';
   };
   $('#man-busca').oninput = (ev) => { est.busca = ev.target.value; pintar(); };
   $('#man-imprimir').onclick = () => {
     const t = MANUAL.find((x) => x.id === est.topico);
     const box = $('#man-corpo'); const antes = box.innerHTML;
-    box.innerHTML = `<h1>Manual do Kontor Gestão Contabilidade — versão ${MANUAL_VERSAO}</h1>` + MANUAL.map((x) => `<section><h2>${esc(x.titulo)}</h2>${x.corpo}</section>`).join('');
+    box.innerHTML = `<h1>Manual do Kontor Gestão Contabilidade — versão ${MANUAL_VERSAO}</h1>` + MANUAL.map((x, i) => `${x.grupo && x.grupo !== MANUAL[i - 1]?.grupo ? `<h1 class="man-grupo-imp">${esc(x.grupo)}</h1>` : ''}<section><h2>${esc(x.titulo)}</h2>${x.corpo}</section>`).join('');
     document.body.classList.add('imprimindo-manual');
     const voltar = () => { document.body.classList.remove('imprimindo-manual'); box.innerHTML = antes; window.removeEventListener('afterprint', voltar); };
     window.addEventListener('afterprint', voltar); setTimeout(() => window.print(), 50);
@@ -5376,7 +5378,7 @@ async function telaCaptura() {
       <td><span class="dica">NF-e:</span> ${ultima(l.ultima_consulta, l.ultimo_resultado, l.ultimo_erro, l.proxima_consulta, l.pode_consultar, l.tem_certificado)}
         ${l.eh_escritorio ? '' : `<br><span class="dica">NFS-e:</span> ${ultima(l.adn_ultima, l.adn_resultado, l.adn_erro, l.adn_proxima, l.pode_adn, l.tem_certificado || l.procuracao_ok)}`}</td>
       <td>${!l.tem_certificado && !l.procuracao_ok ? '—' : l.automatica || l.adn_automatica ? '<span class="cor-verde">ligada</span>' : 'desligada'}</td>
-      <td class="c"><span class="tl-ac">${l.eh_escritorio ? '' : `<a href="#/resumo/${l.id}" title="Resumo do cliente" aria-label="Resumo do cliente">${icone('grafico')}</a>`}<button type="button" data-notas="${l.id}" title="Notas do mês" aria-label="Notas do mês">${icone('tl-olho')}</button><button type="button" data-pac="${l.id}" title="Pacote do mês (ZIP)" aria-label="Pacote do mês (ZIP)" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>${icone('tl-baixar')}</button></span></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
+      <td class="c"><span class="tl-ac">${l.eh_escritorio ? '' : `<a href="#/resumo/${l.id}" title="Resumo do cliente" aria-label="Resumo do cliente">${icone('grafico')}</a>`}<button type="button" data-notas="${l.id}" title="Notas do mês" aria-label="Notas do mês">${icone('tl-olho')}</button><button type="button" data-conf="${l.id}" title="Conferência por CFOP e NFS-e" aria-label="Conferência por CFOP e NFS-e" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>${icone('tl-check')}</button><button type="button" data-pac="${l.id}" title="Pacote do mês (ZIP)" aria-label="Pacote do mês (ZIP)" ${l.nfe_mes + l.vendas_mes + l.nfse_prestadas + l.nfse_tomadas ? '' : 'disabled'}>${icone('tl-baixar')}</button></span></td></tr>`).join('') || '<tr><td colspan="9"><div class="vazio" style="border:0">Nenhum cliente ativo na carteira.</div></td></tr>'}
     </tbody></table></div></section>
     <p class="dica">O pacote do mês (ZIP) traz os XML das notas de compra, de venda e de serviço (prestadas e tomadas), com planilhas de conferência.</p>`;
   $('#mes-cap').onchange = (ev) => { telaCaptura.mes = ev.target.value || mesAtual(); telaCaptura(); };
@@ -5400,6 +5402,7 @@ async function telaCaptura() {
   }));
   conteudo.querySelectorAll('[data-pac]').forEach((b) => (b.onclick = () => baixar(`/api/escritorio/captura/${b.dataset.pac}/pacote?mes=${mes}`, `documentos_${mes}.zip`)));
   conteudo.querySelectorAll('[data-notas]').forEach((b) => (b.onclick = () => notasCapturadas(lista.find((l) => l.id === Number(b.dataset.notas)), mes)));
+  conteudo.querySelectorAll('[data-conf]').forEach((b) => (b.onclick = () => conferenciaCaptura(lista.find((l) => l.id === Number(b.dataset.conf)), mes)));
 }
 
 // ---------------------------------------------------------------------------
@@ -5626,6 +5629,25 @@ async function conexaoDoCliente(c) {
     });
   };
   try { await pintar(); } catch (e) { aviso(mensagemErro(e)); }
+}
+
+/** Conferência do mês do cliente: NF-e de entrada e saída por CFOP e resumo das NFS-e (dos documentos já capturados). */
+async function conferenciaCaptura(cli, mes) {
+  const c = await api('GET', `/api/escritorio/captura/${cli.id}/conferencia?mes=${mes}`);
+  const bloco = (titulo, b) => `<h3>${titulo} <span class="dica">${b.notas} nota(s)${b.canceladas ? ` · ${b.canceladas} cancelada(s)` : ''}${b.semXml ? ` · ${b.semXml} sem XML completo` : ''}</span></h3>
+    ${b.cfops.length ? `<table class="tabela"><thead><tr><th>CFOP</th><th>Origem/destino</th><th class="num">Notas</th><th class="num">Itens</th><th class="num">Valor dos itens</th></tr></thead><tbody>
+      ${b.cfops.map((x) => `<tr><td><strong>${esc(x.cfop)}</strong></td><td>${esc(x.origem)}</td><td class="num">${x.notas}</td><td class="num">${x.itens}</td><td class="num">${brl(x.valor)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="4">Totais das notas: produtos ${brl(b.valorProdutos)} · ICMS ${brl(b.icms)} · ICMS-ST ${brl(b.icmsSt)} · IPI ${brl(b.ipi)}</th><th class="num">${brl(b.totalNotas)}</th></tr></tfoot></table>` : '<p class="dica">Nenhuma nota com XML completo neste mês.</p>'}`;
+  const nfse = (nome, r) => `<tr><td>${nome}</td><td class="num">${r.notas}</td><td class="num">${r.canceladas}</td><td class="num">${brl(r.valor)}</td><td class="num">${brl(r.iss)}</td><td class="num">${brl(r.issRetido)}</td><td class="num">${brl(r.liquido)}</td></tr>`;
+  abrirDialogo(`<div class="dlg-largo"><h2>Conferência — ${esc(cli.cliente)} — ${rotuloMes(mes)}</h2>
+    <p class="dica">Somada dos documentos já capturados (nada é consultado agora). O CFOP das entradas é o informado pelo fornecedor na nota dele; o valor é o dos itens, já sem o desconto. Notas canceladas ficam fora.</p>
+    ${bloco('NF-e de entrada (compras)', c.entradas)}
+    ${bloco('NF-e de saída (vendas)', c.saidas)}
+    <h3>NFS-e</h3>
+    <table class="tabela"><thead><tr><th></th><th class="num">Notas</th><th class="num">Canceladas</th><th class="num">Valor</th><th class="num">ISS</th><th class="num">ISS retido</th><th class="num">Líquido</th></tr></thead>
+      <tbody>${nfse('Prestadas', c.nfsePrestadas)}${nfse('Tomadas', c.nfseTomadas)}</tbody></table>
+    <p class="dica">A mesma conferência vai em planilha no <em>Pacote do mês</em> (conferencia-cfop-e-nfse.csv).</p>
+    <div class="acoes"><button data-fechar>Fechar</button></div></div>`);
 }
 
 async function notasCapturadas(cli, mes) {

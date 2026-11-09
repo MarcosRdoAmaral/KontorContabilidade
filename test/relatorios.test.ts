@@ -72,14 +72,15 @@ test('relatórios: nota emitida em uma data e boleto com vencimento em outra', a
     assert.equal((await rel('a-receber', 'de=2026-10-31&ate=2026-10-01')).status, 400);
     assert.equal((await call('GET', `/api/empresas/${eid}/relatorios/a-receber?de=2026-10-01&ate=2026-10-31`)).status, 401);
     const cat = (await call('GET', '/api/relatorios', t)).json;
-    assert.equal(cat.length, 24);
+    assert.equal(cat.length, 30);
     assert.ok(cat.every((c: any) => c.grupo), 'todo relatório tem grupo');
     assert.deepEqual([...new Set(cat.map((c: any) => c.grupo))].sort(), ['Clientes', 'Contas a receber', 'Despesas e pagamentos', 'Faturamento', 'Fiscal e retenções', 'Resultado e caixa']);
     // todos os relatórios rodam, em JSON e PDF, sem erro
     for (const c of cat) {
-      const r = await rel(c.id, 'de=2026-10-01&ate=2026-10-31');
+      const cli = c.id === 'razao-cliente' ? `&tomadorId=${a}` : '';
+      const r = await rel(c.id, 'de=2026-10-01&ate=2026-10-31' + cli);
       assert.equal(r.status, 200, `${c.id}: ${JSON.stringify(r.json)}`);
-      assert.equal(Buffer.from((await rel(c.id, 'de=2026-10-01&ate=2026-10-31&formato=pdf')).raw).subarray(0, 4).toString(), '%PDF', c.id);
+      assert.equal(Buffer.from((await rel(c.id, 'de=2026-10-01&ate=2026-10-31&formato=pdf' + cli)).raw).subarray(0, 4).toString(), '%PDF', c.id);
     }
     // faturamento por mês e curva ABC conferem com as notas (set: 1000 · out: 500 + 300 + 200)
     const fm = (await rel('faturamento-mensal', 'de=2026-09-01&ate=2026-10-31')).json;
@@ -91,5 +92,28 @@ test('relatórios: nota emitida em uma data e boleto com vencimento em outra', a
     db.prepare("INSERT INTO despesas (empresa_id, data, categoria, descricao, valor, forma_pagamento) VALUES (?,?,?,?,?,?)").run(eid, '2026-10-06', 'Material', 'Caneta', 10, null);
     const dc = (await rel('despesas-categoria', 'de=2026-10-01&ate=2026-10-31')).json; assert.deepEqual(dc.linhas.map((l: any) => [l.categoria, l.valor, l.pct]), [['Material', 50, 100]]);
     const df = (await rel('despesas-forma', 'de=2026-10-01&ate=2026-10-31')).json; assert.deepEqual(df.linhas.map((l: any) => [l.forma, l.valor]), [['PIX', 40], ['Não informado', 10]]);
+    // ---------- 1º lote dos relatórios novos ----------
+    const fd = (await rel('faturamento-diario', 'de=2026-10-01&ate=2026-10-31')).json;
+    assert.deepEqual(fd.linhas.map((l: any) => [l.data, l.faturado, l.acumulado]), [['2026-10-05', 500, 500], ['2026-10-06', 300, 800], ['2026-10-07', 200, 1000]]);
+    assert.equal((await rel('razao-cliente', 'de=2026-10-01&ate=2026-12-31')).status, 400, 'razão pede o cliente');
+    const rz = (await rel('razao-cliente', `de=2026-10-01&ate=2026-12-31&tomadorId=${a}`)).json;
+    assert.deepEqual(rz.linhas.map((l: any) => [l.historico.split(' ·')[0], l.debito, l.credito, l.saldo]), [['Saldo anterior', 0, 0, 1000], ['Cobrança', 300, 0, 1300], ['Pagamento da cobrança de 10/10/2026', 0, 1000, 300]]);
+    // contas a pagar: parcela de compra sem baixa no extrato
+    const cid = Number(db.prepare("INSERT INTO compras (empresa_id, fornecedor_documento, fornecedor_nome, numero, emissao, valor_total, origem) VALUES (?,?,?,?,?,?,'MANUAL')").run(eid, '11222333000181', 'Fornecedor X', '77', '2026-10-02', 900).lastInsertRowid);
+    db.prepare('INSERT INTO compra_parcelas (compra_id, numero, vencimento, valor) VALUES (?,?,?,?)').run(cid, '1', '2099-01-10', 450);
+    db.prepare('INSERT INTO compra_parcelas (compra_id, numero, vencimento, valor) VALUES (?,?,?,?)').run(cid, '2', '2099-02-10', 450);
+    const cp = (await rel('contas-a-pagar', 'de=2099-01-01&ate=2099-01-31')).json;
+    assert.deepEqual(cp.linhas.map((l: any) => [l.fornecedor, l.valor, l.situacao]), [['Fornecedor X', 450, 'A vencer']]);
+    const fp = (await rel('fluxo-previsto', 'de=2099-01-01&ate=2099-02-28')).json;
+    assert.equal(fp.linhas.at(-1).saldo, fp.linhas[0].saldo + fp.totais.entradas - fp.totais.saidas, 'saldo projetado fecha');
+    assert.ok(fp.linhas.some((l: any) => l.data === '2099-02-10' && l.saidas === 450));
+    const pj = (await rel('pagamentos-pj', 'de=2026-10-01&ate=2026-10-31')).json;
+    assert.deepEqual(pj.linhas.map((l: any) => [l.fornecedor, l.notas, l.valor, l.total_ret]), [['Fornecedor X', 1, 900, 0]]);
+    // livro caixa: saldo anterior do extrato e saldo dia a dia
+    const imp = Number(db.prepare("INSERT INTO extrato_importacoes (empresa_id, arquivo, hash, periodo_ini, periodo_fim, saldo_anterior, saldo_final, qtd) VALUES (?,?,?,?,?,?,?,2)").run(eid, 'x.pdf', 'h1', '2026-10-01', '2026-10-31', 100, 130).lastInsertRowid);
+    db.prepare("INSERT INTO extrato_lancamentos (empresa_id, importacao_id, data, descricao, valor, saldo, chave) VALUES (?,?,?,?,?,?,?)").run(eid, imp, '2026-10-03', 'PIX recebido', 50, 150, 'k1');
+    db.prepare("INSERT INTO extrato_lancamentos (empresa_id, importacao_id, data, descricao, valor, saldo, chave) VALUES (?,?,?,?,?,?,?)").run(eid, imp, '2026-10-04', 'Tarifa', -20, 130, 'k2');
+    const lc = (await rel('livro-caixa', 'de=2026-10-01&ate=2026-10-31')).json;
+    assert.deepEqual(lc.linhas.map((l: any) => [l.historico, l.entrada, l.saida, l.saldo]), [['Saldo anterior', 0, 0, 100], ['PIX recebido', 50, 0, 150], ['Tarifa', 0, 20, 130]]);
   } finally { await app.close(); }
 });

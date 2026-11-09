@@ -1,3 +1,4 @@
+import { conferenciaCsv, conferenciaFiscal } from './conferencia-fiscal.js';
 import { strToU8 } from 'fflate';
 import { db } from '../db.js';
 import { ErroNegocio } from './emissao.js';
@@ -154,5 +155,7 @@ export function pacoteDoMes(empresaId: number, mes: string) {
     extras['servicos/relatorio-nfse.csv'] = strToU8('﻿' + [cab.map(csv).join(';'), ...nfse.map((n) => [{ PRESTADOR: 'Prestada', TOMADOR: 'Tomada', OUTRO: 'Outra' }[n.papel as string], dataBr(n.competencia), n.numero, n.prestador_nome, n.prestador_documento, n.tomador_nome, n.tomador_documento,
       n.municipio, brNum(n.valor), brNum(n.iss), n.iss_retido ? 'Sim' : 'Não', brNum(n.valor_liquido), n.situacao, n.chave].map(csv).join(';'))].join('\r\n'));
   }
+  const conf = conferenciaFiscal(e.escritorio_id, empresaId, mes);
+  if (conf.entradas.notas + conf.saidas.notas + conf.nfsePrestadas.notas + conf.nfseTomadas.notas) extras['conferencia-cfop-e-nfse.csv'] = strToU8(conferenciaCsv(conf));
   return pacoteContabilidade(empresaId, { de, ate, xml: true, pdf: false, ofx: false, entradas: true, sefaz: true, extras });
 }

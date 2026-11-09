@@ -2,13 +2,13 @@
  * Manual do usuário do Kontor Gestão Contabilidade (mostrado em Relatórios > Documentação).
  * REGRA DO PROJETO: toda funcionalidade nova ou alterada precisa atualizar o tópico correspondente
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
- * `corpo` é HTML escrito à mão (não recebe dados de usuário).
+ * `corpo` é HTML escrito à mão (não recebe dados de usuário). `grupo` segue o menu lateral; `tela` é a rota aberta pelo botão "Abrir esta tela".
  */
-export const MANUAL_VERSAO = '1.58.0';
+export const MANUAL_VERSAO = '1.59.0';
 
 export const MANUAL = [
   {
-    id: 'primeiros-passos', titulo: 'Primeiros passos', resumo: 'Instalação, primeiro acesso e o que configurar antes de emitir.',
+    id: 'primeiros-passos', grupo: 'Comece aqui', titulo: 'Primeiros passos', resumo: 'Instalação, primeiro acesso e o que configurar antes de emitir.',
     corpo: `
       <p>O Kontor Gestão Contabilidade é o sistema de gestão do escritório de contabilidade: carteira de clientes, agenda de obrigações e prazos, certificados e procurações, contratos e honorários e captura de documentos. Ele traz junto tudo o que o Kontor Gestão faz — emissão de NFS-e pelo <strong>Emissor Nacional</strong>, boletos, despesas, extrato e relatórios — para o escritório e para os clientes que emitem por ele.</p>
       <h3>Para começar a gestão do escritório</h3>
@@ -30,17 +30,48 @@ export const MANUAL = [
         <li><strong>Teste:</strong> mantenha a empresa em <em>Produção restrita (testes)</em> até validar tudo; só depois mude o ambiente para produção.</li>
       </ol>
       <h3>Como o sistema é organizado</h3>
-      <p>No alto do menu lateral fica a <strong>empresa selecionada</strong>: quase todas as telas mostram os dados dela. Troque a empresa ali a qualquer momento. O restante do menu segue o fluxo do dia a dia: emitir, acompanhar notas, cobrar, controlar despesas e consultar relatórios.</p>
-      <p class="dica">O menu mostra só o que o seu usuário tem permissão de usar (Configurações &gt; Usuários e acessos). Este manual está liberado para todos os usuários: em Relatórios &gt; Documentação, ou no item Documentação do menu para quem não tem o acesso a Relatórios.</p>`,
+      <p>O menu segue o dia a dia do escritório: <strong>Escritório</strong> (carteira, prazos, fiscal e solicitações dos clientes), <strong>Faturamento</strong> (notas e cobranças), <strong>Compras</strong>, <strong>Financeiro</strong> e <strong>Cadastros</strong>. Veja <em>Telas, abas e menu</em>.</p>
+      <p class="dica">Este manual segue a mesma ordem do menu e está liberado para todos os usuários: em Relatórios &gt; Documentação, ou no item Documentação do menu para quem não tem acesso a Relatórios. Em cada tópico, o botão <em>Abrir esta tela</em> leva direto à tela.</p>`,
   },
   {
-    id: 'radar', titulo: 'Radar de Oportunidades', resumo: 'Pesquisa de empresas novas e existentes e CRM de prospecção do escritório.',
+    id: 'navegacao', grupo: 'Comece aqui', titulo: 'Telas, abas e menu', resumo: 'Como o sistema é organizado: menu por grupos, abas no topo, busca, sininho e telas menores.',
+    corpo: `
+      <h3>Menu lateral</h3>
+      <p>No alto fica a <strong>empresa selecionada</strong> (com o CNPJ, o ambiente e a validade do certificado): as telas de faturamento, compras e financeiro mostram os dados dela. As telas do escritório (Carteira, Monitor fiscal, Controle mensal etc.) valem para toda a carteira. Abaixo, os itens seguem os grupos <strong>Escritório</strong>, <strong>Faturamento</strong>, <strong>Compras</strong>, <strong>Financeiro</strong> e <strong>Cadastros</strong>, mais Relatórios e, no rodapé, Configurações e Sair. Clique no nome do grupo para abrir ou recolher; o grupo da tela atual abre sozinho.</p>
+      <p class="dica">O menu mostra só o que o seu usuário pode usar (Configurações &gt; Usuários e acessos) e só os módulos contratados na licença.</p>
+      <h3>Abas no topo</h3>
+      <p>Cada tela abre numa <strong>aba</strong> no alto, como num navegador: clique na aba para voltar a ela, no <strong>×</strong> para fechar e no <strong>+</strong> para abrir uma aba nova (começa no Início). Cabem até 10 abas; quando não há espaço, as que sobram vão para o menu <strong>☰</strong> ao lado. As abas valem enquanto o programa está aberto.</p>
+      <h3>Busca, sininho e usuário</h3>
+      <ul>
+        <li><strong>Busca do topo:</strong> nas telas com lista (Carteira, Monitor fiscal, Obrigações, Certificados, Controle mensal, Captura, Radar) a caixa de busca do alto filtra a tela aberta.</li>
+        <li><strong>Sininho:</strong> os lembretes que pedem ação (veja <em>Início e lembretes</em>).</li>
+        <li><strong>Seu nome:</strong> atalhos para Minha conta, Aparência e Sair.</li>
+      </ul>
+      <h3>Telas menores</h3>
+      <p>Em notebooks e monitores com zoom, as tabelas ficam compactas para caber sem rolagem para o lado: letras e espaçamentos menores, botões com texto viram ícones empilhados, o Monitor fiscal mostra só a bolinha de cada processo e o Controle mensal diminui o zoom da tabela sozinho. Passe o mouse sobre um ícone ou bolinha para ver o nome.</p>
+      <h3>Teclado e boas práticas</h3>
+      <ul>
+        <li>Em Emitir nota, digite no campo do cliente para buscar na hora; <strong>F2</strong> abre a consulta completa (setas, Enter para escolher, Esc para fechar).</li>
+        <li>Confira a empresa selecionada no alto do menu antes de emitir. Teste primeiro em <em>Produção restrita</em>.</li>
+        <li>Mantenha um backup fora do computador e renove os certificados A1 antes do vencimento.</li>
+      </ul>`,
+  },
+  {
+    id: 'inicio', grupo: 'Comece aqui', tela: '#/inicio', titulo: 'Início e lembretes', resumo: 'Tela de abertura com acesso rápido, dica e mensagem do dia; lembretes no sininho.',
+    corpo: `
+      <p>Ao abrir o programa, a tela <strong>Início</strong> mostra a saudação, a logo, o <strong>acesso rápido</strong> às telas mais usadas (conforme os acessos do usuário), a <strong>dica do dia</strong> sobre o Kontor e uma <strong>mensagem</strong> para o dia.</p>
+      <p>Os <strong>lembretes</strong> ficam no <strong>sininho</strong>, no alto de todas as telas. O número mostra quantos pedem ação (vermelho quando há algo atrasado). Clique no sininho para ver a lista: obrigações atrasadas, que vencem hoje ou nos próximos 3 dias; certificados e procurações vencendo em 30 dias; DAS e DARF do mês passado gerados e ainda não enviados; falhas no envio automático do DP; mensagens relevantes não lidas na caixa postal; parcelas em atraso e clientes perto do sublimite. Cada usuário vê só o que tem acesso; clique num lembrete para ir direto à tela.</p>
+      <p>Ao lado do sininho fica o seu nome, com atalhos para <em>Minha conta</em>, <em>Aparência</em> e <em>Sair</em>.</p>`,
+  },
+  {
+    id: 'radar', grupo: 'Escritório', tela: '#/radar', titulo: 'Radar de Oportunidades', resumo: 'Pesquisa de empresas novas e existentes e CRM de prospecção do escritório.',
     corpo: `
       <p>O <strong>Radar de Oportunidades</strong> (menu lateral) encontra empresas pelo cadastro público de CNPJ da Receita Federal e organiza a prospecção do escritório. É um <strong>módulo adicional</strong>, vendido à parte (veja Configurações &gt; Licença). Ele tem permissão própria: libere a funcionalidade <em>Radar de Oportunidades</em> para cada usuário em Configurações &gt; Usuários e acessos.</p>
-      <h3>Configurar a fonte de dados (administrador)</h3>
+      <h3>Configurar a fonte de dados</h3>
+      <p>A fonte e a chave da Casa dos Dados são configuradas pelo <strong>suporte Kontor</strong> (usuário master): só ele vê esses campos. O administrador do escritório ajusta, na mesma janela, o tempo de guarda das pesquisas, a UF e o município padrão e os critérios do potencial.</p>
       <ol>
         <li>Crie uma conta em casadosdados.com.br, coloque saldo e gere a <strong>chave de API</strong> (api-key) no portal.</li>
-        <li>No Radar, clique em <em>Configurar fonte de dados</em>, escolha <em>Casa dos Dados</em> e cole a chave. Ela fica guardada criptografada neste computador.</li>
+        <li>Com o usuário master, no Radar, clique em <em>Configurar fonte de dados</em>, escolha <em>Casa dos Dados</em> e cole a chave. Ela fica guardada criptografada neste computador.</li>
         <li>Ajuste por quantas horas cada pesquisa fica guardada (pesquisas repetidas nesse prazo não gastam saldo), a UF e o município padrão e os critérios do potencial.</li>
       </ol>
       <p>Sem chave, o Radar funciona em <strong>modo demonstração</strong>, com empresas fictícias marcadas como DEMONSTRAÇÃO (que não podem ir para a carteira de clientes).</p>
@@ -57,20 +88,47 @@ export const MANUAL = [
       <p><strong>LGPD:</strong> os dados são de cadastros públicos de empresas. Use os contatos para oferecer serviços de forma respeitosa, registre quando a empresa não quiser mais receber mensagens e remova da carteira quem pedir.</p>`,
   },
   {
-    id: 'inicio', titulo: 'Início e lembretes', resumo: 'Tela de abertura com acesso rápido, dica e mensagem do dia; lembretes no sininho.',
-    corpo: `
-      <p>Ao abrir o programa, a tela <strong>Início</strong> mostra a saudação, a logo, o <strong>acesso rápido</strong> às telas mais usadas (conforme os acessos do usuário), a <strong>dica do dia</strong> sobre o Kontor e uma <strong>mensagem</strong> para o dia.</p>
-      <p>Os <strong>lembretes</strong> ficam no <strong>sininho</strong>, no alto de todas as telas. O número mostra quantos pedem ação (vermelho quando há algo atrasado). Clique no sininho para ver a lista: obrigações atrasadas, que vencem hoje ou nos próximos 3 dias; certificados e procurações vencendo em 30 dias; DAS e DARF do mês passado gerados e ainda não enviados; falhas no envio automático do DP; mensagens relevantes não lidas na caixa postal; parcelas em atraso e clientes perto do sublimite. Cada usuário vê só o que tem acesso; clique num lembrete para ir direto à tela.</p>
-      <p>Ao lado do sininho fica o seu nome, com atalhos para <em>Minha conta</em>, <em>Aparência</em> e <em>Sair</em>.</p>`,
-  },
-  {
-    id: 'visao', titulo: 'Visão geral do escritório', resumo: 'Prazos, certificados e honorários de toda a carteira numa tela.',
+    id: 'visao', grupo: 'Escritório', tela: '#/visao', titulo: 'Visão geral do escritório', resumo: 'Prazos, certificados e honorários de toda a carteira numa tela.',
     corpo: `
       <p>Mostra, para o mês escolhido: clientes ativos por regime, obrigações entregues e em aberto, as atrasadas (inclusive de meses anteriores), certificados e procurações vencendo, o total de honorários e os boletos de honorário vencidos. Cada cartão leva à tela correspondente.</p>
       <p>A tabela <strong>Carga da equipe</strong> mostra quantas obrigações estão em aberto e atrasadas com cada responsável.</p>`,
   },
   {
-    id: 'carteira', titulo: 'Carteira de clientes', resumo: 'Cadastro do cliente, regime, perfil, responsável e situação.',
+    id: 'monitor', grupo: 'Escritório', tela: '#/monitor', titulo: 'Monitor fiscal', resumo: 'Pendências de cada cliente por processo, notificações e sublimites do Simples.',
+    corpo: `
+      <p>Em Escritório &gt; Monitor fiscal, uma tela com a situação de toda a carteira no que o Kontor acompanha. Nada é consultado na Receita ao abrir: a tela lê o que já está no sistema.</p>
+      <p><strong>Competência:</strong> o escritório processa sempre o mês anterior (em novembro, a competência outubro). O Monitor olha essa competência e as anteriores; obrigações de competências seguintes ainda não aparecem. O que o <strong>Controle mensal</strong> já dá como feito (guia emitida ou enviada, sem movimento, DP enviado ou sem folha) e o que foi transmitido pelo Kontor contam como entregues. No alto da tela dá para escolher outra competência.</p>
+      <p><strong>FGTS Digital:</strong> só conta como valor em aberto a guia que já passou do vencimento. A guia do mês, ainda no prazo, aparece como aviso <em>a vencer</em> (com o valor e a data), como a DARF previdenciária da DCTFWeb, e não entra nos totais em aberto.</p>
+      <h3>Guia e recibo do FGTS pelo Kontor</h3>
+      <p>No aplicativo instalado, clique no FGTS Digital de um cliente (coluna FGTS Digital do Monitor), escolha a competência e use um dos botões. O Kontor entra no FGTS Digital no perfil de procurador do cliente e faz o caminho sozinho:</p>
+      <ul>
+        <li><strong>Emitir guia do mês:</strong> Gestão de Guias &gt; Emissão de Guia Rápida &gt; competência &gt; Pesquisar &gt; Emitir guia. O valor vai para o Controle mensal (DP &gt; FGTS).</li>
+        <li><strong>Recalcular guia em atraso:</strong> Gestão de Guias &gt; Emissão de Guia Parametrizada &gt; competência &gt; Pesquisar &gt; marca os débitos &gt; Adicionar à guia &gt; Avançar &gt; Definir Vencimento na data de pagamento informada &gt; Emitir Guia. Não muda o valor do mês no Controle mensal.</li>
+        <li><strong>Baixar recibo:</strong> o ícone PDF ao lado de FGTS na Emissão de Guia Rápida.</li>
+      </ul>
+      <p>O PDF fica guardado no cliente (lista <em>Guias e recibos</em>). Se o portal mudar e algum passo não for achado, o Kontor avisa qual e você termina na própria janela; o PDF continua sendo guardado. A consulta do FGTS Digital é feita <strong>um cliente por vez</strong>: marque só um na lista.</p>
+      <ul>
+        <li><strong>Visão geral dos clientes:</strong> cada cliente entra na pior situação entre os processos: <em>Atenção</em> (algo vencido, em aberto ou com erro), <em>Pendentes</em> (algo a fazer ou conferir), <em>Processando</em>, <em>Em dia</em> ou <em>Sem informação</em>.</li>
+        <li><strong>Por processo:</strong> PGDAS-D e PGMEI (obrigações DAS e DAS do MEI e o fechamento), DCTFWeb (DCTFWeb e DARF previdenciário), FGTS Digital (última consulta), Situação fiscal (último relatório da Receita/PGFN), Parcelamentos e Caixa postal (última consulta), Certificados (A1 e procurações vencidos ou vencendo em 30 dias) e Demais obrigações. Clique no nome do processo, num pedaço da barra ou numa situação para listar os clientes.</li>
+        <li><strong>Notificações:</strong> o que pede ação, do mais grave ao mais recente, com busca por cliente, processo ou assunto.</li>
+        <li><strong>Faturamento acumulado:</strong> o faturamento do ano de cada cliente do Simples, lido da declaração do PGDAS-D mais recente buscada no Kontor (receita acumulada no ano até o mês da declaração), com o RBT12 e a projeção até dezembro no ritmo do ano. Fica em <em>Atenção</em> quem passou do sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS; acima de 20% do sublimite, já no mês seguinte) ou do limite de R$ 4,8 milhões, e em <em>Perto do sublimite</em> quem já usou 80% ou, no ritmo do ano, passa dele até dezembro. Esses avisos também vão para as notificações. O botão <em>Buscar declarações</em> traz a declaração do mês passado de todos os clientes do Simples (sem gerar DAS); o <em>Buscar DAS já transmitidos</em> do Controle mensal também alimenta esse quadro.</li>
+      </ul>
+      <h3>Parcelamentos e caixa postal</h3>
+      <p>A situação fiscal, os parcelamentos, a caixa postal e o FGTS Digital ficam todos no Monitor fiscal. No alto, os cartões mostram os clientes com débitos na Receita e PGFN (com o total em aberto), os regulares, os ainda não consultados e quem tem FGTS em aberto; clique num cartão para filtrar a lista. Na lista de clientes, a coluna Situação fiscal traz o valor em aberto (clique para ver os débitos, recalcular guias e avisar o cliente), a coluna FGTS Digital traz o valor da última consulta e a coluna <em>Avisar</em> marca quem recebe o aviso de débitos. Clicando no nome do cliente, abre tudo dele num lugar só.</p>
+      <h3>Pendências por cliente (PDF)</h3>
+      <p><strong>Ignorar uma coluna em um cliente:</strong> em cada célula da lista de clientes há um pequeno <strong>×</strong>. Clique nele quando aquele processo não se aplica ao cliente (por exemplo, o FGTS Digital de quem não tem empregados ou não deu procuração). A informação some da tela, do status geral do cliente, dos avisos e dos totais do PDF de pendências, e a célula passa a mostrar <em>ignorado</em>. Para voltar a acompanhar, clique no <strong>↺</strong> da mesma célula. Só aquele cliente é afetado. O × e o ↺ aparecem só para o <strong>administrador</strong>; os demais usuários veem a célula como <em>ignorado</em>. Em telas menores, o × aparece ao passar o mouse sobre a linha.</p>
+      <p><strong>Telas menores:</strong> em notebooks e monitores com zoom, a tabela fica compacta: cada processo aparece só com a bolinha da cor da situação (o nome aparece ao passar o mouse; a legenda das cores está no quadro do alto) e alguns títulos de coluna ficam abreviados.</p>
+      <p>No alto do Monitor fiscal, o botão <em>Pendências por cliente (PDF)</em> gera um relatório consolidado da carteira no papel timbrado do escritório: os totais em aberto (Receita/PGFN, FGTS e parcelas em atraso), uma linha por cliente com pendência (situação, valores, obrigações atrasadas e a entregar no mês, mensagens não lidas da caixa postal e certificados vencendo) e, depois, o detalhe de cada cliente. Vale para os clientes marcados na lista ou, sem marcação, para todos os da lista (com o filtro aplicado). Bom para reunião de equipe ou para o responsável de cada carteira. Os dois relatórios (Pendências por cliente e Situação fiscal do cliente) também ficam no menu <strong>Relatórios</strong>, no grupo <em>Fiscal dos clientes</em>, onde dá para filtrar as pendências por responsável.</p>
+      <h3>Relatório consolidado do cliente</h3>
+      <p>No detalhe do cliente (clique no nome dele no Monitor fiscal), o botão <em>Relatório consolidado (PDF)</em> gera a <strong>Situação fiscal do cliente</strong> no papel timbrado do escritório, pronto para enviar: a situação geral, o total em aberto (Receita/PGFN, FGTS e parcelas em atraso), o resumo de cada processo, os débitos por tributo e período, as inscrições em dívida ativa, os parcelamentos, as competências do FGTS, as mensagens não lidas da caixa postal, as obrigações atrasadas e dos próximos 30 dias, os certificados e procurações e, no Simples, o faturamento acumulado frente ao sublimite. Nada é consultado na hora: o relatório usa as últimas consultas (a data de cada uma aparece no PDF).</p>
+      <p>Os botões acima da lista (<em>Consultar situação fiscal</em>, <em>Consultar parcelamentos</em>, <em>Consultar caixa postal</em> e <em>Consultar FGTS Digital</em>, para quem tem acesso à Situação fiscal) valem para os clientes marcados ou, sem marcação, para todos os da lista (respeitando a busca e o filtro). As consultas à Receita buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Nada roda sozinho.</p>
+      <ul>
+        <li><strong>Parcelamentos:</strong> para clientes do Simples e MEI, os pedidos do parcelamento normal, especial, Pert e Relp e, havendo parcelamento ativo, as parcelas em aberto. Parcela de mês anterior ainda em aberto conta como em atraso. Clique no nome do cliente na lista para ver as parcelas e gerar o DAS de cada uma; o DAS fica guardado com as guias do cliente. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</li>
+        <li><strong>Caixa postal:</strong> a lista das mensagens mais recentes do e-CAC (assunto, data, se foi lida e se a Receita marcou como relevante). O conteúdo não é aberto na consulta. Para ler uma mensagem, clique no cliente e em <em>Abrir</em>: o Kontor avisa antes, porque abrir pode registrar a leitura no e-CAC e, numa intimação, contar como ciência e começar o prazo.</li>
+      </ul>`,
+  },
+  {
+    id: 'carteira', grupo: 'Escritório', tela: '#/carteira', titulo: 'Carteira de clientes', resumo: 'Cadastro do cliente, regime, perfil, responsável e situação.',
     corpo: `
       <h3>Cadastrar</h3>
       <p>Em <em>Novo cliente</em>, digite o CNPJ e clique em Buscar: razão social, município, e-mail e a opção pelo Simples vêm da Receita Federal. Escolha o <strong>regime</strong> (MEI, Simples, Presumido, Real, imune/isenta ou pessoa física), o <strong>responsável</strong> e a data <strong>cliente desde</strong>.</p>
@@ -93,7 +151,31 @@ export const MANUAL = [
       <p class="dica">O botão ⋯ leva aos dados de emissão (certificado A1, logo, dados bancários), à emissão de NFS-e e às NF-e recebidas do cliente.</p>`,
   },
   {
-    id: 'controle', titulo: 'Controle mensal, fechamento e senhas', resumo: 'Impostos, folha e envios de cada competência; guias do Simples e da DCTFWeb e envio ao cliente; senhas.',
+    id: 'obrigacoes', grupo: 'Escritório', tela: '#/obrigacoes', titulo: 'Obrigações e prazos', resumo: 'Agenda mensal, entregas, protocolo, dispensa e catálogo de obrigações.',
+    corpo: `
+      <h3>Prazos do mês</h3>
+      <p>Lista as obrigações de todos os clientes com vencimento no mês, já ajustado a fins de semana e feriados (nacionais e os municipais cadastrados na empresa), e as atrasadas de meses anteriores. Filtre por responsável (“Minhas”), situação, esfera ou cliente.</p>
+      <ul>
+        <li><strong>Entregue:</strong> informe o protocolo/recibo; fica registrado quem entregou e quando.</li>
+        <li><strong>Em andamento:</strong> para o que já começou.</li>
+        <li><strong>Dispensada:</strong> exige o motivo (ex.: sem movimento).</li>
+        <li>Marque várias e use <em>Marcar selecionadas como entregues</em>.</li>
+      </ul>
+      <h3>Catálogo</h3>
+      <p>Vem com as obrigações mais comuns (DAS, DAS-MEI, DASN-SIMEI, DEFIS, eSocial, salários, FGTS Digital, EFD-Reinf, DCTFWeb, DARF previdenciário, PIS/COFINS, EFD-Contribuições, IRPJ/CSLL, ECD, ECF, EFD ICMS/IPI, DeSTDA, ISS, DMED e 13º salário). Cada uma tem a periodicidade, quantos meses após o período vence, a regra do dia (dia fixo, último dia útil ou N-ésimo dia útil) e o que fazer quando cai em dia não útil.</p>
+      <p class="dica">Os prazos seguem a legislação conhecida, mas mudam: confira com a agenda tributária e ajuste no catálogo. Ao salvar, as tarefas em aberto são recalculadas. Prazos municipais e estaduais (ISS, ICMS) variam por local.</p>
+      <h3>Controlar a partir de</h3>
+      <p>Vencimentos anteriores a esta data não entram na agenda, para não aparecerem como atrasadas obrigações entregues antes de usar o sistema.</p>`,
+  },
+  {
+    id: 'certificados', grupo: 'Escritório', tela: '#/certificados', titulo: 'Certificados e procurações', resumo: 'Validade dos A1, A3, e-CPF e procurações eletrônicas.',
+    corpo: `
+      <p><strong>Enviar o A1 do cliente:</strong> em <em>Cadastrar</em>, escolha o tipo <em>Certificado A1</em> e o cliente, selecione o arquivo .pfx/.p12 e digite a senha. Titular, CNPJ e validade são lidos do arquivo; o certificado fica guardado criptografado na empresa do cliente e passa a ser usado para emitir NFS-e, buscar NF-e e capturar documentos. Para trocar um A1 que venceu, use <em>Trocar A1</em> na linha dele.</p>
+      <p>Os certificados A1 enviados em Empresas &gt; Certificado também aparecem sozinhos. Cadastre aqui os A3 (token/cartão), e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura), com a validade e onde ficam guardados.</p>
+      <p>A situação mostra os vencidos e os que vencem em 7 e 30 dias. Ao renovar, use <em>Renovado</em> e informe a nova validade: o registro antigo fica no histórico e sai dos avisos.</p>`,
+  },
+  {
+    id: 'controle', grupo: 'Escritório', tela: '#/controle', titulo: 'Controle mensal, fechamento e senhas', resumo: 'Impostos, folha e envios de cada competência; guias do Simples e da DCTFWeb e envio ao cliente; senhas.',
     corpo: `
       <h3>Controle mensal</h3>
       <p>Em Escritório &gt; Controle mensal, escolha a competência e a aba. Tudo é salvo ao sair de cada campo, com quem preencheu.</p>
@@ -103,6 +185,7 @@ export const MANUAL = [
         
       </ul>
       <p>“Só não enviados” mostra o que falta mandar; o rodapé soma faturamento, impostos e encargos.</p>
+      <p class="dica">Em telas menores, a tabela diminui o zoom sozinha para caber inteira, sem rolagem para o lado. Nesse caso o botão <em>Hoje</em> da data de envio fica no menu ⋯ da linha (<em>Marcar enviado hoje</em>).</p>
       <h3>Fechamento: guias do Simples e da DCTFWeb e envio ao cliente</h3>
       <p>As declarações são transmitidas no seu sistema (SCI, portal do Simples, e-CAC); o Kontor busca o que já foi transmitido, gera a guia e envia ao cliente. A coluna <em>PGDAS-D</em> (aba Fiscal) e a coluna <em>DCTFWeb</em> (aba Departamento pessoal) mostram a situação do mês; clique nela para abrir a janela do cliente. Tudo passa pelo Integra Contador, com a procuração do cliente ao escritório.</p>
       <ul>
@@ -126,31 +209,7 @@ export const MANUAL = [
       <p>O botão <em>Importar planilha</em> lê a planilha de controle (.xlsx): as senhas do Simples e previdenciária são ligadas pelo CNPJ; o canal de envio (aba Fiscal), pelo nome do cliente. A prévia mostra a quem cada linha foi ligada antes de importar.</p>`,
   },
   {
-    id: 'obrigacoes', titulo: 'Obrigações e prazos', resumo: 'Agenda mensal, entregas, protocolo, dispensa e catálogo de obrigações.',
-    corpo: `
-      <h3>Prazos do mês</h3>
-      <p>Lista as obrigações de todos os clientes com vencimento no mês, já ajustado a fins de semana e feriados (nacionais e os municipais cadastrados na empresa), e as atrasadas de meses anteriores. Filtre por responsável (“Minhas”), situação, esfera ou cliente.</p>
-      <ul>
-        <li><strong>Entregue:</strong> informe o protocolo/recibo; fica registrado quem entregou e quando.</li>
-        <li><strong>Em andamento:</strong> para o que já começou.</li>
-        <li><strong>Dispensada:</strong> exige o motivo (ex.: sem movimento).</li>
-        <li>Marque várias e use <em>Marcar selecionadas como entregues</em>.</li>
-      </ul>
-      <h3>Catálogo</h3>
-      <p>Vem com as obrigações mais comuns (DAS, DAS-MEI, DASN-SIMEI, DEFIS, eSocial, salários, FGTS Digital, EFD-Reinf, DCTFWeb, DARF previdenciário, PIS/COFINS, EFD-Contribuições, IRPJ/CSLL, ECD, ECF, EFD ICMS/IPI, DeSTDA, ISS, DMED e 13º salário). Cada uma tem a periodicidade, quantos meses após o período vence, a regra do dia (dia fixo, último dia útil ou N-ésimo dia útil) e o que fazer quando cai em dia não útil.</p>
-      <p class="dica">Os prazos seguem a legislação conhecida, mas mudam: confira com a agenda tributária e ajuste no catálogo. Ao salvar, as tarefas em aberto são recalculadas. Prazos municipais e estaduais (ISS, ICMS) variam por local.</p>
-      <h3>Controlar a partir de</h3>
-      <p>Vencimentos anteriores a esta data não entram na agenda, para não aparecerem como atrasadas obrigações entregues antes de usar o sistema.</p>`,
-  },
-  {
-    id: 'certificados', titulo: 'Certificados e procurações', resumo: 'Validade dos A1, A3, e-CPF e procurações eletrônicas.',
-    corpo: `
-      <p><strong>Enviar o A1 do cliente:</strong> em <em>Cadastrar</em>, escolha o tipo <em>Certificado A1</em> e o cliente, selecione o arquivo .pfx/.p12 e digite a senha. Titular, CNPJ e validade são lidos do arquivo; o certificado fica guardado criptografado na empresa do cliente e passa a ser usado para emitir NFS-e, buscar NF-e e capturar documentos. Para trocar um A1 que venceu, use <em>Trocar A1</em> na linha dele.</p>
-      <p>Os certificados A1 enviados em Empresas &gt; Certificado também aparecem sozinhos. Cadastre aqui os A3 (token/cartão), e-CPF dos sócios e as procurações eletrônicas (e-CAC, SEFAZ, prefeitura), com a validade e onde ficam guardados.</p>
-      <p>A situação mostra os vencidos e os que vencem em 7 e 30 dias. Ao renovar, use <em>Renovado</em> e informe a nova validade: o registro antigo fica no histórico e sai dos avisos.</p>`,
-  },
-  {
-    id: 'honorarios', titulo: 'Contratos e honorários', resumo: 'Contrato em PDF, assinatura, faturamento automático, reajuste e 13º.',
+    id: 'honorarios', grupo: 'Escritório', tela: '#/honorarios', titulo: 'Contratos e honorários', resumo: 'Contrato em PDF, assinatura, faturamento automático, reajuste e 13º.',
     corpo: `
       <h3>Configurar uma vez</h3>
       <ol>
@@ -171,40 +230,7 @@ export const MANUAL = [
       <p>Contratos com 13º aparecem na aba 13º honorário para emitir em dezembro. A aba Em atraso mostra os boletos de honorário vencidos por cliente.</p>`,
   },
   {
-    id: 'monitor', titulo: 'Monitor fiscal', resumo: 'Pendências de cada cliente por processo, notificações e sublimites do Simples.',
-    corpo: `
-      <p>Em Escritório &gt; Monitor fiscal, uma tela com a situação de toda a carteira no que o Kontor acompanha. Nada é consultado na Receita ao abrir: a tela lê o que já está no sistema.</p>
-      <p><strong>Competência:</strong> o escritório processa sempre o mês anterior (em novembro, a competência outubro). O Monitor olha essa competência e as anteriores; obrigações de competências seguintes ainda não aparecem. O que o <strong>Controle mensal</strong> já dá como feito (guia emitida ou enviada, sem movimento, DP enviado ou sem folha) e o que foi transmitido pelo Kontor contam como entregues. No alto da tela dá para escolher outra competência.</p>
-      <p><strong>FGTS Digital:</strong> só conta como valor em aberto a guia que já passou do vencimento. A guia do mês, ainda no prazo, aparece como aviso <em>a vencer</em> (com o valor e a data), como a DARF previdenciária da DCTFWeb, e não entra nos totais em aberto.</p>
-      <h3>Guia e recibo do FGTS pelo Kontor</h3>
-      <p>No aplicativo instalado, clique no FGTS Digital de um cliente (coluna FGTS Digital do Monitor), escolha a competência e use um dos botões. O Kontor entra no FGTS Digital no perfil de procurador do cliente e faz o caminho sozinho:</p>
-      <ul>
-        <li><strong>Emitir guia do mês:</strong> Gestão de Guias &gt; Emissão de Guia Rápida &gt; competência &gt; Pesquisar &gt; Emitir guia. O valor vai para o Controle mensal (DP &gt; FGTS).</li>
-        <li><strong>Recalcular guia em atraso:</strong> Gestão de Guias &gt; Emissão de Guia Parametrizada &gt; competência &gt; Pesquisar &gt; marca os débitos &gt; Adicionar à guia &gt; Avançar &gt; Definir Vencimento na data de pagamento informada &gt; Emitir Guia. Não muda o valor do mês no Controle mensal.</li>
-        <li><strong>Baixar recibo:</strong> o ícone PDF ao lado de FGTS na Emissão de Guia Rápida.</li>
-      </ul>
-      <p>O PDF fica guardado no cliente (lista <em>Guias e recibos</em>). Se o portal mudar e algum passo não for achado, o Kontor avisa qual e você termina na própria janela; o PDF continua sendo guardado. A consulta do FGTS Digital é feita <strong>um cliente por vez</strong>: marque só um na lista.</p>
-      <ul>
-        <li><strong>Visão geral dos clientes:</strong> cada cliente entra na pior situação entre os processos: <em>Atenção</em> (algo vencido, em aberto ou com erro), <em>Pendentes</em> (algo a fazer ou conferir), <em>Processando</em>, <em>Em dia</em> ou <em>Sem informação</em>.</li>
-        <li><strong>Por processo:</strong> PGDAS-D e PGMEI (obrigações DAS e DAS do MEI e o fechamento), DCTFWeb (DCTFWeb e DARF previdenciário), FGTS Digital (última consulta), Situação fiscal (último relatório da Receita/PGFN), Parcelamentos e Caixa postal (última consulta), Certificados (A1 e procurações vencidos ou vencendo em 30 dias) e Demais obrigações. Clique no nome do processo, num pedaço da barra ou numa situação para listar os clientes.</li>
-        <li><strong>Notificações:</strong> o que pede ação, do mais grave ao mais recente, com busca por cliente, processo ou assunto.</li>
-        <li><strong>Faturamento acumulado:</strong> o faturamento do ano de cada cliente do Simples, lido da declaração do PGDAS-D mais recente buscada no Kontor (receita acumulada no ano até o mês da declaração), com o RBT12 e a projeção até dezembro no ritmo do ano. Fica em <em>Atenção</em> quem passou do sublimite de R$ 3,6 milhões (ICMS e ISS fora do DAS; acima de 20% do sublimite, já no mês seguinte) ou do limite de R$ 4,8 milhões, e em <em>Perto do sublimite</em> quem já usou 80% ou, no ritmo do ano, passa dele até dezembro. Esses avisos também vão para as notificações. O botão <em>Buscar declarações</em> traz a declaração do mês passado de todos os clientes do Simples (uma chamada por cliente, sem gerar DAS); o <em>Buscar DAS já transmitidos</em> do Controle mensal também alimenta esse quadro.</li>
-      </ul>
-      <h3>Parcelamentos e caixa postal</h3>
-      <p>A situação fiscal, os parcelamentos, a caixa postal e o FGTS Digital ficam todos no Monitor fiscal. No alto, os cartões mostram os clientes com débitos na Receita e PGFN (com o total em aberto), os regulares, os ainda não consultados e quem tem FGTS em aberto; clique num cartão para filtrar a lista. Na lista de clientes, a coluna Situação fiscal traz o valor em aberto (clique para ver os débitos, recalcular guias e avisar o cliente), a coluna FGTS Digital traz o valor da última consulta e a coluna <em>Avisar</em> marca quem recebe o aviso de débitos. Clicando no nome do cliente, abre tudo dele num lugar só.</p>
-      <h3>Pendências por cliente (PDF)</h3>
-      <p><strong>Ignorar uma coluna em um cliente:</strong> em cada célula da lista de clientes há um pequeno <strong>×</strong>. Clique nele quando aquele processo não se aplica ao cliente (por exemplo, o FGTS Digital de quem não tem empregados ou não deu procuração). A informação some da tela, do status geral do cliente, dos avisos e dos totais do PDF de pendências, e a célula passa a mostrar <em>ignorado</em>. Para voltar a acompanhar, clique no <strong>↺</strong> da mesma célula. Só aquele cliente é afetado. O × e o ↺ aparecem só para o <strong>administrador</strong>; os demais usuários veem a célula como <em>ignorado</em>.</p>
-      <p>No alto do Monitor fiscal, o botão <em>Pendências por cliente (PDF)</em> gera um relatório consolidado da carteira no papel timbrado do escritório: os totais em aberto (Receita/PGFN, FGTS e parcelas em atraso), uma linha por cliente com pendência (situação, valores, obrigações atrasadas e a entregar no mês, mensagens não lidas da caixa postal e certificados vencendo) e, depois, o detalhe de cada cliente. Vale para os clientes marcados na lista ou, sem marcação, para todos os da lista (com o filtro aplicado). Bom para reunião de equipe ou para o responsável de cada carteira. Os dois relatórios (Pendências por cliente e Situação fiscal do cliente) também ficam no menu <strong>Relatórios</strong>, no grupo <em>Fiscal dos clientes</em>, onde dá para filtrar as pendências por responsável.</p>
-      <h3>Relatório consolidado do cliente</h3>
-      <p>No detalhe do cliente (clique no nome dele no Monitor fiscal), o botão <em>Relatório consolidado (PDF)</em> gera a <strong>Situação fiscal do cliente</strong> no papel timbrado do escritório, pronto para enviar: a situação geral, o total em aberto (Receita/PGFN, FGTS e parcelas em atraso), o resumo de cada processo, os débitos por tributo e período, as inscrições em dívida ativa, os parcelamentos, as competências do FGTS, as mensagens não lidas da caixa postal, as obrigações atrasadas e dos próximos 30 dias, os certificados e procurações e, no Simples, o faturamento acumulado frente ao sublimite. Nada é consultado na hora: o relatório usa as últimas consultas (a data de cada uma aparece no PDF).</p>
-      <p>Os botões acima da lista (<em>Consultar situação fiscal</em>, <em>Consultar parcelamentos</em>, <em>Consultar caixa postal</em> e <em>Consultar FGTS Digital</em>, para quem tem acesso à Situação fiscal) valem para os clientes marcados ou, sem marcação, para todos os da lista (respeitando a busca e o filtro). As consultas à Receita buscam na Receita, pelo Integra Contador, com a procuração do cliente ao escritório. Nada roda sozinho.</p>
-      <ul>
-        <li><strong>Parcelamentos:</strong> para clientes do Simples e MEI, os pedidos do parcelamento normal, especial, Pert e Relp e, havendo parcelamento ativo, as parcelas em aberto (de 4 a 8 chamadas por cliente). Parcela de mês anterior ainda em aberto conta como em atraso. Clique no nome do cliente na lista para ver as parcelas e gerar o DAS de cada uma; o DAS fica guardado com as guias do cliente. Parcelamentos de outros regimes aparecem no relatório de Situação fiscal.</li>
-        <li><strong>Caixa postal:</strong> a lista das mensagens mais recentes do e-CAC (assunto, data, se foi lida e se a Receita marcou como relevante), uma chamada por cliente. O conteúdo não é aberto na consulta. Para ler uma mensagem, clique no cliente e em <em>Abrir</em>: o Kontor avisa antes, porque abrir pode registrar a leitura no e-CAC e, numa intimação, contar como ciência e começar o prazo.</li>
-      </ul>`,
-  },
-  {
-    id: 'captura', titulo: 'Captura de documentos', resumo: 'NF-e de compra e de venda, NFS-e prestadas e tomadas de todos os clientes, e o pacote do mês.',
+    id: 'captura', grupo: 'Escritório', tela: '#/captura', titulo: 'Captura de documentos', resumo: 'NF-e de compra e de venda, NFS-e prestadas e tomadas de todos os clientes, e o pacote do mês.',
     corpo: `
       <p>Uma tela para os documentos de toda a carteira, mês a mês. A tabela mostra, por cliente, as NF-e de compra, as NF-e de venda, as NFS-e prestadas e as tomadas.</p>
       <h3>Resumo financeiro do cliente</h3>
@@ -220,20 +246,22 @@ export const MANUAL = [
       <p>Com o certificado A1 do cliente, o sistema consulta o Ambiente de Dados Nacional da NFS-e e baixa as notas de serviço em que ele é prestador ou tomador, inclusive as emitidas em outros sistemas, com os cancelamentos. Vale para os municípios que usam o padrão nacional; os que têm sistema próprio de prefeitura não enviam as notas para lá.</p>
       <h3>Buscar e acompanhar</h3>
       <p><em>Buscar agora</em> consulta todos os clientes que já podem: SEFAZ e Ambiente Nacional pedem 1 hora entre consultas quando não há notas novas. <em>Ligar busca automática</em> faz isso sozinho enquanto o programa estiver aberto. O botão <em>Notas</em> mostra as notas de venda e de serviço do mês, com o XML de cada uma; <em>Compras</em> abre as NF-e de compra do cliente.</p>
+      <p>Se o Ambiente Nacional recusar a consulta de um cliente, o resultado mostra o motivo informado pelo ADN (por exemplo, certificado de outro CNPJ ou falta da procuração da NFS-e). Corrija e busque de novo.</p>
+      <h3>Conferência por CFOP e NFS-e</h3>
+      <p>O botão de conferência (✓) na linha do cliente soma o mês com os documentos já capturados: as NF-e de entrada e de saída por <strong>CFOP</strong> (notas, itens e valor, com os totais de produtos, ICMS, ICMS-ST e IPI) e o resumo das <strong>NFS-e prestadas e tomadas</strong> (notas, canceladas, valor, ISS, ISS retido e líquido). Nas entradas, o CFOP é o que o fornecedor informou na nota dele. Notas canceladas ficam fora. A mesma conferência vai em planilha no pacote do mês.</p>
       <p><em>Pacote do mês</em> gera um ZIP com os XML de compras, vendas e serviços (prestados e tomados) e planilhas de conferência.</p>`,
   },
   {
-    id: 'solicitacoes', titulo: 'Solicitações dos clientes (Kontor Empresas)', resumo: 'Conectar o cliente, responder pedidos de guia e receber o fechamento do mês.',
+    id: 'solicitacoes', grupo: 'Escritório', tela: '#/solicitacoes', titulo: 'Solicitações dos clientes', resumo: 'Conexão com o Kontor Empresas e o app, envio automático, pedidos de guia e fechamentos recebidos.',
     corpo: `
       <p>O cliente que usa o <strong>Kontor Gestão Empresas</strong> pode ser conectado ao escritório. Conectado, ele pede guias atualizadas e manda o fechamento do mês direto para cá, sem e-mail.</p>
       <h3>Conectar um cliente</h3>
-      <ol><li>Na <em>Carteira de clientes</em>, abra o menu ⋮ do cliente e escolha <em>Conectar ao Kontor Empresas</em>. Na primeira vez, a empresa marcada como escritório em Cadastros &gt; Empresas é registrada no serviço de conexão.</li>
+      <ol><li>Na <em>Carteira de clientes</em>, abra o menu ⋮ do cliente e escolha <em>Conectar ao aplicativo ou ao Kontor Empresas</em>. Na primeira vez, a empresa marcada como escritório em Cadastros &gt; Empresas é registrada no serviço de conexão.</li>
         <li>Clique em <em>Gerar código de conexão</em> e passe o código ao cliente (vale 7 dias e só pode ser usado uma vez).</li>
         <li>No Kontor Empresas, o cliente abre <em>Configurações › Contabilidade</em>, seleciona a empresa do mesmo CNPJ e digita o código.</li></ol>
       <p>Cliente conectado aparece com um ícone de nuvem na Carteira. O mesmo menu mostra a conexão, o <strong>código de segurança</strong> (igual nos dois sistemas) e o botão <em>Desconectar</em>.</p>
       <h3>Aplicativo Kontor no celular</h3>
-      <p>Qualquer cliente (use ou não o Kontor Empresas) pode receber as guias no celular. Gere o código no menu ⋮ do cliente na Carteira e peça para ele abrir <strong>kontorgestao.com.br/app</strong>, informar o CNPJ e o código e tocar em <em>Adicionar à tela inicial</em>. Cada celular usa um código; a mesma janela mostra os aparelhos conectados, com o botão <em>Desconectar</em> de cada um.</p>
-      <p>No <strong>Controle mensal</strong>, ao enviar o DAS ou o DARF por e-mail ou WhatsApp, a guia também vai para o aplicativo dos clientes conectados (uma vez por mês); o botão <em>Enviar pelo aplicativo</em> manda de novo só por lá. A guia chega com o valor, a data, o PDF e, quando o PDF traz, o código de barras e o Pix copia e cola, conferidos pelos dígitos. O cliente recebe uma notificação, paga pelo aplicativo do banco e, se precisar, pede a guia atualizada, que cai aqui em Solicitações.</p>
+      <p>Os clientes também podem receber as guias e pedir guia atualizada pelo celular: veja o tópico <em>Aplicativo Kontor no celular</em>.</p>
       <h3>Envio automático (sem o cliente pedir)</h3>
       <p>Com o <strong>envio automático</strong> ligado (padrão; o botão fica no topo de <em>Solicitações dos clientes</em>), o DAS e o DARF da DCTFWeb que ficam prontos no Controle mensal vão sozinhos ao Kontor Empresas e ao aplicativo dos clientes conectados, junto com a declaração e o recibo de entrega, uma vez por mês. Os documentos do DP lidos da pasta do escritório (guia do FGTS, DARF previdenciária, boleto do sindicato, recibo mensal e espelho da folha) vão pela conexão no mesmo envio automático do DP; cliente conectado não precisa ter e-mail no cadastro.</p>
       <h3>Boletos de honorários</h3>
@@ -251,27 +279,34 @@ export const MANUAL = [
       <p>Tudo que passa pela conexão vai <strong>cifrado de ponta a ponta</strong>: o serviço de conexão (kontorgestao.com.br) só repassa e não consegue ler. Cada mensagem é apagada do serviço assim que é entregue (ou depois de 30 dias, se o outro lado não buscar).</p>`,
   },
   {
-    id: 'integra-contador', titulo: 'Conferir na Receita (Integra Contador)', resumo: 'PGDAS-D, DCTFWeb e DEFIS conferidos direto na Receita Federal.',
+    id: 'aplicativo', grupo: 'Escritório', titulo: 'Aplicativo Kontor no celular', resumo: 'O app dos clientes: guias do mês, documentos, boletos, pedidos de guia atualizada e notificações.',
     corpo: `
-      <p>O <strong>Integra Contador</strong> é o serviço do SERPRO que dá aos escritórios acesso, em nome dos clientes, ao que foi transmitido à Receita Federal. Com ele, o botão <strong>Conferir na Receita</strong>, em Obrigações e prazos, consulta o <strong>PGDAS-D</strong> (com a informação de DAS pago), a <strong>DCTFWeb</strong> e a <strong>DEFIS</strong> e marca como entregue o que já foi transmitido, com o número da declaração e a data.</p>
-      <h3>Configurar (administrador)</h3>
+      <p>O <strong>aplicativo Kontor</strong> é para os clientes do escritório receberem no celular as guias, os documentos e os boletos de honorários, e pedirem guia atualizada. Qualquer cliente pode usar, tenha ou não o Kontor Empresas, e cada cliente pode conectar vários celulares.</p>
+      <h3>Instalar e conectar</h3>
       <ol>
-        <li>Contrate o Integra Contador na Loja Serpro com o e-CNPJ do escritório. O Consumer Key e o Consumer Secret ficam na Área do Cliente Serpro.</li>
-        <li>Envie o certificado A1 da empresa do escritório em Cadastros &gt; Empresas: a autenticação é feita com ele.</li>
-        <li>Em Configurações &gt; Integra Contador (aba visível só para o usuário master Kontor, o suporte), informe as chaves, escolha Produção e use <em>Testar conexão</em>. O ambiente de Demonstração responde com dados fictícios, para testar antes do contrato.</li>
-        <li>Cada cliente outorga procuração eletrônica ao CNPJ do escritório no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</li>
+        <li>Na <em>Carteira de clientes</em>, menu ⋮ do cliente &gt; <em>Conectar ao aplicativo ou ao Kontor Empresas</em> &gt; <em>Gerar código de conexão</em>. O código vale 7 dias e serve para um aparelho só.</li>
+        <li>O cliente abre <strong>kontorgestao.com.br/baixar</strong> no celular. No Android, baixa o app (APK) ou instala pelo Chrome; no iPhone, abre no Safari e toca em <em>Compartilhar &gt; Adicionar à Tela de Início</em>. No computador, a mesma página mostra um QR Code para abrir no celular.</li>
+        <li>No app, o cliente informa o CNPJ e o código. Os dois lados mostram o mesmo <strong>código de segurança</strong>; confira com o cliente se quiser.</li>
+        <li>Em <em>Ajustes</em> do app, o cliente liga as notificações.</li>
       </ol>
-      <p class="dica">Se o SERPRO responder “Versão Descontinuada”, ele mudou a versão de algum serviço. Em Configurações &gt; Integra Contador &gt; Avançado, informe a versão nova no formato SISTEMA=versão (ex.: SITFIS=2.0) ou aguarde a atualização do sistema.</p>
-      <h3>Conferir</h3>
-      <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. Para conferir só alguns clientes, marque as linhas antes: o botão passa a <em>Conferir N selecionada(s) na Receita</em> e consulta só essas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
-      <p class="dica">EFD, ECD, ECF, eSocial, FGTS e as obrigações estaduais e municipais não passam pelo Integra Contador e continuam sendo marcadas à mão.</p>`,
+      <p>A janela de conexão do cliente lista os aparelhos conectados, com o botão <em>Desconectar</em> de cada um.</p>
+      <h3>O que o cliente recebe</h3>
+      <ul>
+        <li><strong>Guias do mês:</strong> DAS, DARF da DCTFWeb, FGTS e sindicato, com valor, vencimento, PDF e, quando o PDF traz, o código de barras e o Pix copia e cola para pagar no banco. Guia nova da mesma competência substitui a anterior.</li>
+        <li><strong>Documentos:</strong> declaração e recibo do PGDAS-D, recibo da DCTFWeb, recibo mensal e espelho da folha.</li>
+        <li><strong>Boletos de honorários:</strong> com o demonstrativo, o código de barras e o Pix; o app avisa quando o pagamento é confirmado ou a cobrança é cancelada.</li>
+      </ul>
+      <p>O envio é automático (veja <em>Solicitações dos clientes</em>) ou pelo botão <em>Enviar pelo aplicativo</em> do fechamento no Controle mensal.</p>
+      <h3>Pedidos de guia atualizada</h3>
+      <p>Na aba <em>Pedidos</em> do app, o cliente pede a guia atualizada (DAS, DCTFWeb ou DARF) com a data em que vai pagar. O pedido chega em <em>Solicitações dos clientes</em> com o nome do aparelho (“pelo celular”) e a guia respondida volta para todos os aparelhos e para o Kontor Empresas dele.</p>
+      <p class="dica">Tudo vai cifrado de ponta a ponta e fica guardado só no aparelho do cliente. O site e o serviço de conexão só repassam as mensagens.</p>`,
   },
   {
-    id: 'situacao-fiscal', titulo: 'Situação fiscal', resumo: 'O que está em aberto na Receita Federal e na PGFN, cliente a cliente.',
+    id: 'situacao-fiscal', grupo: 'Escritório', tela: '#/monitor', titulo: 'Situação fiscal', resumo: 'O que está em aberto na Receita Federal e na PGFN, cliente a cliente.',
     corpo: `
       <p>Consulta, pelo Integra Contador, o <strong>Relatório de Situação Fiscal</strong> da Receita Federal e da Procuradoria-Geral da Fazenda Nacional (o mesmo do e-CAC) e mostra o que está em aberto: débitos, omissões de declaração e inscrições em dívida ativa, com o saldo de cada um. O PDF original fica guardado.</p>
       <h3>Consultar</h3>
-      <p>A Situação fiscal fica no <strong>Monitor fiscal</strong> (Escritório &gt; Monitor fiscal). Marque os clientes na lista e clique em <em>Consultar situação fiscal</em> (sem marcação, consulta todos os da lista). A consulta automática fica no fim da tela, em <em>Consulta automática da situação fiscal</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Cada consulta usa duas chamadas ao Integra Contador. Quando a Receita avisa que o <em>limite de solicitações em processamento</em> foi atingido (ela gera poucos relatórios ao mesmo tempo por escritório), o Kontor espera o tempo pedido e tenta de novo; se continuar no limite, avisa e deixa os demais clientes do lote para uma nova consulta, sem marcar erro.</p>
+      <p>A Situação fiscal fica no <strong>Monitor fiscal</strong> (Escritório &gt; Monitor fiscal). Marque os clientes na lista e clique em <em>Consultar situação fiscal</em> (sem marcação, consulta todos os da lista). A consulta automática fica no fim da tela, em <em>Consulta automática da situação fiscal</em>. A Receita leva alguns segundos para gerar cada relatório; se ainda não estiver pronto, o cliente fica como <em>Aguardando a Receita</em> e o botão <em>Atualizar</em> busca o relatório depois, sem pedir outro. Quando a Receita avisa que o <em>limite de solicitações em processamento</em> foi atingido (ela gera poucos relatórios ao mesmo tempo por escritório), o Kontor espera o tempo pedido e tenta de novo; se continuar no limite, avisa e deixa os demais clientes do lote para uma nova consulta, sem marcar erro.</p>
       <h3>Resultado</h3>
       <ul>
         <li><strong>Com pendências:</strong> o valor em aberto aparece na coluna Situação fiscal; clicando nele abre o detalhe, que mostra o total dos débitos na Receita Federal (saldo com multa e juros), os <strong>impostos em aberto agrupados por tributo</strong>, a lista completa dos débitos (com período, vencimento e número da notificação, no caso das multas por atraso) e as inscrições em dívida ativa na PGFN, com a situação (ajuizada ou a ser cobrada). O relatório não traz o valor das inscrições: consulte no Regularize. Débitos e parcelamentos com exigibilidade suspensa aparecem à parte, porque não impedem a certidão. A última certidão aparece com a validade, em vermelho se estiver vencida.</li>
@@ -297,53 +332,34 @@ export const MANUAL = [
       <p class="dica">É preciso o Integra Contador configurado (Configurações &gt; Integra Contador) e a procuração eletrônica do cliente para o escritório no e-CAC.</p>`,
   },
   {
-    id: 'avisos', titulo: 'Avisos de prazos por e-mail', resumo: 'Resumo diário de atrasos, vencimentos, certificados e reajustes.',
+    id: 'integra-contador', grupo: 'Escritório', tela: '#/obrigacoes', titulo: 'Conferir na Receita (Integra Contador)', resumo: 'PGDAS-D, DCTFWeb e DEFIS conferidos direto na Receita Federal.',
+    corpo: `
+      <p>O <strong>Integra Contador</strong> é o serviço do SERPRO que dá aos escritórios acesso, em nome dos clientes, ao que foi transmitido à Receita Federal. Com ele, o botão <strong>Conferir na Receita</strong>, em Obrigações e prazos, consulta o <strong>PGDAS-D</strong> (com a informação de DAS pago), a <strong>DCTFWeb</strong> e a <strong>DEFIS</strong> e marca como entregue o que já foi transmitido, com o número da declaração e a data.</p>
+      <h3>Configurar (suporte Kontor)</h3>
+      <ol>
+        <li>Contrate o Integra Contador na Loja Serpro com o e-CNPJ do escritório. O Consumer Key e o Consumer Secret ficam na Área do Cliente Serpro.</li>
+        <li>Envie o certificado A1 da empresa do escritório em Cadastros &gt; Empresas: a autenticação é feita com ele.</li>
+        <li>Em Configurações &gt; Integra Contador (aba visível só para o usuário master Kontor, o suporte), informe as chaves, escolha Produção e use <em>Testar conexão</em>. O ambiente de Demonstração responde com dados fictícios, para testar antes do contrato.</li>
+        <li>Cada cliente outorga procuração eletrônica ao CNPJ do escritório no e-CAC, com os serviços do Simples Nacional e da DCTFWeb.</li>
+      </ol>
+      <p class="dica">Se o SERPRO responder “Versão Descontinuada”, ele mudou a versão de algum serviço. Em Configurações &gt; Integra Contador &gt; Avançado, informe a versão nova no formato SISTEMA=versão (ex.: SITFIS=2.0) ou aguarde a atualização do sistema.</p>
+      <h3>Conferir</h3>
+      <p>Em Obrigações e prazos, escolha o mês e clique em <em>Conferir na Receita</em>. O sistema mostra quantas consultas vai fazer e, ao confirmar, confere as DAS, DCTFWeb e DEFIS em aberto, inclusive as atrasadas. Para conferir só alguns clientes, marque as linhas antes: o botão passa a <em>Conferir N selecionada(s) na Receita</em> e consulta só essas. O PGDAS-D de um ano inteiro sai numa consulta só por cliente. O que não for localizado continua em aberto; clientes sem procuração aparecem na lista de erros.</p>
+      <p class="dica">EFD, ECD, ECF, eSocial, FGTS e as obrigações estaduais e municipais não passam pelo Integra Contador e continuam sendo marcadas à mão.</p>`,
+  },
+  {
+    id: 'avisos', grupo: 'Escritório', tela: '#/config/avisos', titulo: 'Avisos de prazos por e-mail', resumo: 'Resumo diário de atrasos, vencimentos, certificados e reajustes.',
     corpo: `
       <p>Em Configurações &gt; Avisos de prazos (administrador), ligue o resumo e informe até 5 e-mails. Nos dias úteis, a partir das 7h e com o programa aberto, sai um e-mail com as obrigações atrasadas e as que vencem nos próximos dias, certificados vencidos ou vencendo e os reajustes do mês. Usa o e-mail configurado em Configurações &gt; E-mail.</p>`,
   },
   {
-    id: 'empresas', titulo: 'Empresas', resumo: 'Cadastro do prestador, certificado, logo, dados bancários e emissão sem certificado.',
+    id: 'painel', grupo: 'Faturamento', tela: '#/painel', titulo: 'Visão geral do faturamento', resumo: 'Faturado, recebido, a receber, em atraso e quem falta emitir no mês.',
     corpo: `
-      <h3>Cadastrar</h3>
-      <p>Em <strong>Empresas &gt; Cadastrar empresa</strong> informe o CNPJ (o botão de busca preenche razão social e endereço), o regime (não optante, MEI ou Simples ME/EPP), o município e o ambiente. Use <em>Produção restrita</em> para testes: as notas não têm valor fiscal.</p>
-      <h3>Certificado A1</h3>
-      <p>A API da Sefin exige certificado digital A1 da empresa. Na linha da empresa, <strong>Certificado</strong> envia o arquivo .pfx e a senha; o sistema guarda criptografado e mostra a validade. Renove antes de vencer.</p>
-      <h3>Emissão sem certificado (CNPJ e senha)</h3>
-      <p>Para empresas que emitem direto no portal do Emissor Nacional, escolha o modo <strong>Portal (CNPJ e senha)</strong> no cadastro. Nesse modo o sistema <em>não emite a nota</em>: você emite no portal e importa o XML em <strong>Notas emitidas &gt; Importar XML</strong>. Os boletos, as cobranças e os relatórios continuam funcionando normalmente. A senha do portal fica guardada criptografada.</p>
-      <h3>Logo</h3>
-      <p>O botão <strong>Logo</strong> envia a imagem que aparece no DANFSe (PDF da nota) dessa empresa.</p>
-      <h3>Dados bancários</h3>
-      <p>O botão <strong>Dados bancários</strong> da linha da empresa abre a configuração da cobrança (convênio bancário com remessa e retorno): agência, conta, convênio, carteira, formato CNAB, numeração do próximo boleto e da próxima remessa, multa, juros, instrução e <em>feriados municipais</em>. Sem isso não é possível gerar boletos. Se já emitia boletos em outro sistema, informe o próximo número livre para o nosso número nunca repetir.</p>`,
+      <p>Em <strong>Faturamento &gt; Visão geral</strong>, escolha o mês. Os cartões mostram, para a empresa selecionada: o faturado (cobranças com vencimento no mês), o recebido e o percentual, o que está a receber em dia, o que está em atraso com a inadimplência e quantos clientes ainda faltam emitir no mês. Abaixo ficam as dicas para o caixa e o resumo das notas de todas as empresas.</p>
+      <p class="dica">Os números vêm das cobranças e das notas já lançadas. Para o resultado do mês (receitas × despesas) use <em>Despesas e balanço</em>; para análises por período, <em>Relatórios</em>.</p>`,
   },
   {
-    id: 'clientes', titulo: 'Clientes', resumo: 'Tomadores, forma de faturar, vencimento e serviços padrão.',
-    corpo: `
-      <p>Em <strong>Clientes</strong> ficam os tomadores de cada empresa. Informe o CNPJ/CPF (a busca preenche os dados), endereço e e-mail.</p>
-      <p class="dica">Esta tela não fica mais no menu: abra pela Carteira (⋯ do cliente → <em>Tomadores das NFS-e deste cliente</em>, ou <em>Clientes avulsos</em> para os do escritório). Os clientes da contabilidade são faturados pela Carteira, botão <em>Faturamento</em>.</p>
-      <h3>Importar clientes de uma planilha</h3>
-      <p>Em <strong>Clientes → Importar planilha</strong>, envie um arquivo Excel (.xlsx) ou .csv com o <strong>CNPJ</strong> (ou CPF) e, se quiser, o nome, em qualquer coluna. O sistema mostra quantos são novos, quais já estão cadastrados, repetidos ou inválidos. Ao importar, ele <strong>consulta cada CNPJ na Receita Federal</strong> e preenche razão social, endereço, e-mail e telefone. CPF precisa do nome na planilha. CNPJ que o Excel mostrou sem o zero à esquerda é reconhecido.</p>
-      <p>Todo cliente criado assim fica com a marca <strong>Falta conferir</strong>, com o motivo (endereço incompleto, sem e-mail, situação na Receita, Receita fora do ar). Use a aba <em>Falta conferir</em> da lista, complete o cadastro e marque <em>Cadastro conferido</em> para tirar a marca.</p>
-      <h3>Como faturar</h3>
-      <ul>
-        <li><strong>Somente nota:</strong> emite a NFS-e.</li>
-        <li><strong>Nota + boleto:</strong> emite a nota e gera o boleto.</li>
-        <li><strong>Somente boleto:</strong> gera só a cobrança.</li>
-      </ul>
-      <h3>Vencimento</h3>
-      <p>Por prazo (X dias após a emissão) ou em dia fixo do mês. Boleto não vence em sábado, domingo ou feriado: o sistema antecipa para o dia útil anterior.</p>
-      <h3>Serviços padrão e agenda</h3>
-      <p>Na aba <strong>Serviços padrão</strong> do cliente, cadastre o serviço e o valor que se repetem todo mês; eles alimentam a <em>Emissão automática</em>. Também é ali que se define o envio automático por e-mail.</p>`,
-  },
-  {
-    id: 'servicos', titulo: 'Serviços e tributação', resumo: 'Cadastro do serviço, código nacional, NBS, retenções.',
-    corpo: `
-      <p>Em <strong>Serviços</strong> cadastre cada serviço prestado pela empresa selecionada: descrição que sai na nota, código de tributação nacional (cTribNac), alíquota e, se for o caso, NBS.</p>
-      <h3>Tributação do serviço</h3>
-      <p>O serviço <strong>não guarda</strong> alíquotas nem retenções: ele apenas aponta para uma <strong>tributação</strong> (campo <em>Tributação</em> do cadastro). Alíquota do ISS, ISSQN, imunidade, retenções (PIS, COFINS, CSLL, IRRF, INSS), totais aproximados, município e IBS/CBS ficam na tributação, em <strong>Tributação</strong>. Sem escolha, vale a tributação padrão de saída da empresa. Serviços antigos foram convertidos automaticamente.</p>
-      <p class="dica">Confira sempre o enquadramento com o contador. O sistema só repete o que foi cadastrado.</p>`,
-  },
-  {
-    id: 'emitir', titulo: 'Emitir nota', resumo: 'Passo a passo da emissão, F2 para clientes e boleto junto.',
+    id: 'emitir', grupo: 'Faturamento', tela: '#/emitir', titulo: 'Emitir nota', resumo: 'Passo a passo da emissão, F2 para clientes e boleto junto.',
     corpo: `
       <ol>
         <li>Abra <strong>Emitir nota</strong> (confira a empresa no alto do menu).</li>
@@ -366,7 +382,19 @@ export const MANUAL = [
       <p class="dica">Em produção restrita as notas são de teste e não têm valor fiscal.</p>`,
   },
   {
-    id: 'notas', titulo: 'Notas emitidas', resumo: 'Consultar, baixar, enviar, cancelar, excluir e importar XML.',
+    id: 'agenda', grupo: 'Faturamento', tela: '#/agenda', titulo: 'Emissão automática', resumo: 'Preparar as notas e boletos do mês e confirmar de uma vez.',
+    corpo: `
+      <p>Para clientes com cobrança todo mês. O sistema <strong>prepara</strong> a emissão na data de cada cliente, usando o serviço padrão e o valor cadastrados; <strong>nada é emitido sem a sua confirmação</strong>.</p>
+      <h3>Configurar</h3>
+      <ol>
+        <li>Em <strong>Clientes</strong>, cadastre o serviço e o valor na aba Serviços padrão.</li>
+        <li>Em <strong>Emissão automática</strong>, clique em <em>Agendar</em> no cliente e escolha o dia do mês.</li>
+      </ol>
+      <h3>No dia a dia</h3>
+      <p>Escolha o mês. Cada item aparece como <em>Pronta</em>, <em>Agendada</em> (ainda não chegou a data), <em>Emitida</em>, <em>Com erro</em> ou <em>Pulada</em>. Use <em>Emitir</em> em um item, <strong>Emitir prontas</strong> para todos de uma vez, <em>Pular</em> para ignorar o mês ou <em>Tentar de novo</em> nos que deram erro. Conforme o cliente, gera nota, nota + boleto ou só boleto.</p>`,
+  },
+  {
+    id: 'notas', grupo: 'Faturamento', tela: '#/notas', titulo: 'Notas emitidas', resumo: 'Consultar, baixar, enviar, cancelar, excluir e importar XML.',
     corpo: `
       <p>A lista mostra as notas da empresa com situação, número, cliente e valor. Clique na nota para ver o detalhe.</p>
       <h3>O que dá para fazer</h3>
@@ -382,19 +410,7 @@ export const MANUAL = [
       <p class="dica">Dúvida se a Sefin gerou a nota? Use <em>Consultar na Sefin</em> antes de excluir uma nota pendente.</p>`,
   },
   {
-    id: 'agenda', titulo: 'Emissão automática', resumo: 'Preparar as notas e boletos do mês e confirmar de uma vez.',
-    corpo: `
-      <p>Para clientes com cobrança todo mês. O sistema <strong>prepara</strong> a emissão na data de cada cliente, usando o serviço padrão e o valor cadastrados; <strong>nada é emitido sem a sua confirmação</strong>.</p>
-      <h3>Configurar</h3>
-      <ol>
-        <li>Em <strong>Clientes</strong>, cadastre o serviço e o valor na aba Serviços padrão.</li>
-        <li>Em <strong>Emissão automática</strong>, clique em <em>Agendar</em> no cliente e escolha o dia do mês.</li>
-      </ol>
-      <h3>No dia a dia</h3>
-      <p>Escolha o mês. Cada item aparece como <em>Pronta</em>, <em>Agendada</em> (ainda não chegou a data), <em>Emitida</em>, <em>Com erro</em> ou <em>Pulada</em>. Use <em>Emitir</em> em um item, <strong>Emitir prontas</strong> para todos de uma vez, <em>Pular</em> para ignorar o mês ou <em>Tentar de novo</em> nos que deram erro. Conforme o cliente, gera nota, nota + boleto ou só boleto.</p>`,
-  },
-  {
-    id: 'cobrancas', titulo: 'Cobranças, boletos e Pix', resumo: 'Carteira boleto (convênio com remessa e retorno), carteira Pix e o demonstrativo de cobrança.',
+    id: 'cobrancas', grupo: 'Faturamento', tela: '#/cobrancas', titulo: 'Cobranças, boletos e Pix', resumo: 'Carteira boleto (convênio com remessa e retorno), carteira Pix e o demonstrativo de cobrança.',
     corpo: `
       <p>A tela <strong>Cobranças</strong> tem duas carteiras. Cada cliente fica em uma delas, escolhida no cadastro dele (Faturamento e cobrança &gt; <em>Carteira de cobrança</em>):</p>
       <ul>
@@ -432,7 +448,7 @@ export const MANUAL = [
       </ul>`,
   },
   {
-    id: 'compras', titulo: 'Compras (NF-e de entrada)', resumo: 'Buscar na SEFAZ as NF-e emitidas contra o CNPJ, importar o XML e lançar nas despesas.',
+    id: 'compras', grupo: 'Compras', tela: '#/compras', titulo: 'Compras (NF-e de entrada)', resumo: 'Buscar na SEFAZ as NF-e emitidas contra o CNPJ, importar o XML e lançar nas despesas.',
     corpo: `
       <p>O grupo <strong>Compras</strong> tem duas telas: <strong>Compras</strong> (lançar e consultar notas, num lugar só) e <strong>Buscar NF-e (SEFAZ)</strong> (notas emitidas contra o CNPJ). Na tela Compras, busque por fornecedor, número da nota, CNPJ ou chave, no período, e use <em>Importar XML da NF-e</em> ou <em>Lançar compra manual</em>.</p>
       <p>Toda nota que entra, pelo XML ou pela SEFAZ, abre <em>nota a nota</em> com o resumo (fornecedor, totais, itens) e o <strong>parcelamento da nota</strong>. Se o pagamento real for diferente, altere datas e valores, adicione ou remova parcelas, ou use <em>Refazer</em> em N parcelas a cada X dias; a soma precisa fechar com o total. Em <em>Condição de pagamento</em> escolha <strong>À vista</strong> (o parcelamento some e a <em>forma de pagamento</em> passa a ser obrigatória: PIX, débito, crédito ou dinheiro, que vai para as despesas geradas) ou <strong>Parcelado</strong> (abre o parcelamento).</p>
@@ -459,7 +475,46 @@ export const MANUAL = [
       <p>Clique na compra para ver itens, totais e parcelas e baixar o XML. <strong>Alterar parcelas</strong> refaz o parcelamento e acerta as despesas geradas (se uma parcela já estiver ligada ao extrato, desfaça o vínculo antes). Cada parcela vira uma despesa; quando o pagamento aparecer no extrato, ligue-o em <em>Extrato e conciliação</em>. <strong>Excluir compra</strong> (permissão <em>Excluir registros</em>) apaga também as despesas que ela gerou. O relatório <em>Compras (NF-e de entrada)</em> está em Relatórios. O acesso a Compras é liberado por usuário em Configurações &gt; Usuários e acessos.</p>`,
   },
   {
-    id: 'tributacao', titulo: 'Tributação', resumo: 'Impostos, tributações e o vínculo com serviços e compras.',
+    id: 'despesas', grupo: 'Financeiro', tela: '#/despesas', titulo: 'Despesas e balanço', resumo: 'Lançar despesas e acompanhar receitas × despesas.',
+    corpo: `
+      <p>Em <strong>Despesas e balanço</strong> lance as despesas da empresa por categoria e acompanhe o resultado do mês: o que foi <em>recebido</em> (boletos pagos) contra o que foi gasto. Marcar as cobranças como pagas e lançar as despesas mantém o balanço confiável. A <strong>Visão geral do faturamento</strong> (Faturamento &gt; Visão geral) resume faturado, recebido, a receber, em atraso e quem ainda falta emitir. Em cada despesa informe <strong>Pago com</strong> (PIX, débito, crédito ou dinheiro): é o que permitirá vincular o gasto ao extrato para justificá-lo. As despesas vindas do extrato aparecem com a marca “extrato” e são alteradas lá, não aqui.</p>`,
+  },
+  {
+    id: 'extrato', grupo: 'Financeiro', tela: '#/extrato', titulo: 'Extrato e conciliação', resumo: 'Importar o extrato em PDF, classificar e ligar aos boletos.',
+    corpo: `
+      <p>O sistema lê o extrato da conta corrente em PDF nos formatos de banco já homologados; outros bancos entram aos poucos. Se o PDF não for reconhecido, o sistema avisa.</p>
+      <p>Se a empresa usa a <strong>Cora</strong>, o botão <em>Sincronizar com a Cora</em> traz os lançamentos e o saldo direto da conta, sem PDF, com a mesma classificação e conciliação.</p>
+      <ol>
+        <li>Em <strong>Extrato e conciliação</strong>, clique em <em>Importar extrato (PDF)</em>. O sistema confere o total lido com o saldo do próprio extrato.</li>
+        <li><strong>Classifique</strong> entradas e saídas por categoria. Regras aprendem com o que você classifica e valem para lançamentos parecidos.</li>
+        <li>Nas entradas, use <strong>Ligar a boleto</strong> para conciliar o recebimento com o boleto (aparecem os boletos de valor compatível, mesmo com vencimento diferente da data do crédito).</li>
+        <li>O balanço do mês só fecha quando não há lançamentos sem classificação.</li>
+      </ol>
+      <p><strong>Ligar a despesa:</strong> numa saída, clique em <em>Ligar a despesa</em> para ligá-la a uma despesa já lançada (a parcela de uma compra, por exemplo) com o mesmo valor e data próxima. A despesa passa a ser a própria saída do extrato, sem aparecer duas vezes; <em>desfazer</em> desliga. Fluxo recomendado: lance a NF-e em <em>Compras</em> (gera despesa e parcelas) e, quando o pagamento cair no extrato, ligue.</p>
+      <p><strong>Reflexo em Despesas e balanço:</strong> toda <em>saída classificada</em> vira automaticamente uma despesa (marcada como “extrato”, com o PIX/débito deduzido da descrição). Reclassificar no extrato atualiza a despesa; excluir a importação remove as despesas dela. Ficam de fora as categorias <em>Cartão de crédito</em> (os gastos entram pela própria fatura) e <em>Transferências</em>. Entradas classificadas como <em>Outras receitas</em> (sem boleto) entram nas receitas do balanço.</p>
+      <p class="dica">Importar o mesmo extrato duas vezes não duplica os lançamentos. Uma importação errada pode ser excluída na lista de importações.</p>`,
+  },
+  {
+    id: 'cartao', grupo: 'Financeiro', tela: '#/cartao', titulo: 'Fatura do cartão de crédito', resumo: 'Importar a fatura em PDF e levar os gastos para as despesas.',
+    corpo: `
+      <p>Em <strong>Financeiro &gt; Fatura do cartão</strong> importe o PDF da fatura do cartão (formatos de emissor já homologados). O sistema lê cada compra (data, estabelecimento, cidade, parcela e final do cartão) e confere a soma com os totais impressos na própria fatura.</p>
+      <ol>
+        <li>Clique em <em>Importar fatura (PDF)</em>. Importar o mesmo arquivo duas vezes é recusado.</li>
+        <li>Classifique cada gasto (a categoria é lembrada para compras parecidas, inclusive no extrato bancário). Anuidade e encargos já entram como <em>Tarifas e juros</em>.</li>
+        <li>Os gastos classificados aparecem em <strong>Despesas e balanço</strong> como “Crédito”, no <em>mês do vencimento da fatura</em> (quando o dinheiro sai de fato), com a data da compra na descrição.</li>
+      </ol>
+      <p>O pagamento da fatura no extrato (categoria “Cartão de crédito”) não é contado outra vez. O pagamento da fatura anterior e créditos de estorno aparecem na lista, mas não viram despesa; um desconto de anuidade cancela a própria anuidade. Excluir a fatura remove as despesas geradas.</p>`,
+  },
+  {
+    id: 'servicos', grupo: 'Cadastros', tela: '#/servicos', titulo: 'Serviços e tributação', resumo: 'Cadastro do serviço, código nacional, NBS, retenções.',
+    corpo: `
+      <p>Em <strong>Serviços</strong> cadastre cada serviço prestado pela empresa selecionada: descrição que sai na nota, código de tributação nacional (cTribNac), alíquota e, se for o caso, NBS.</p>
+      <h3>Tributação do serviço</h3>
+      <p>O serviço <strong>não guarda</strong> alíquotas nem retenções: ele apenas aponta para uma <strong>tributação</strong> (campo <em>Tributação</em> do cadastro). Alíquota do ISS, ISSQN, imunidade, retenções (PIS, COFINS, CSLL, IRRF, INSS), totais aproximados, município e IBS/CBS ficam na tributação, em <strong>Tributação</strong>. Sem escolha, vale a tributação padrão de saída da empresa. Serviços antigos foram convertidos automaticamente.</p>
+      <p class="dica">Confira sempre o enquadramento com o contador. O sistema só repete o que foi cadastrado.</p>`,
+  },
+  {
+    id: 'tributacao', grupo: 'Cadastros', tela: '#/tributacao', titulo: 'Tributação', resumo: 'Impostos, tributações e o vínculo com serviços e compras.',
     corpo: `
       <p>Em <strong>Tributação</strong> você cadastra os impostos uma vez, monta cada <em>tributação</em> e só então vincula serviços e compras a ela.</p>
       <h3>1. Impostos</h3>
@@ -477,53 +532,55 @@ export const MANUAL = [
       <p class="dica">O acesso é liberado por usuário (permissão <em>Tributação</em>).</p>`,
   },
   {
-    id: 'despesas', titulo: 'Despesas e balanço', resumo: 'Lançar despesas e acompanhar receitas × despesas.',
+    id: 'empresas', grupo: 'Cadastros', tela: '#/empresas', titulo: 'Empresas', resumo: 'Cadastro do prestador, certificado, logo, dados bancários e emissão sem certificado.',
     corpo: `
-      <p>Em <strong>Despesas e balanço</strong> lance as despesas da empresa por categoria e acompanhe o resultado do mês: o que foi <em>recebido</em> (boletos pagos) contra o que foi gasto. Marcar as cobranças como pagas e lançar as despesas mantém o balanço confiável. A <strong>Visão geral do faturamento</strong> (Faturamento &gt; Visão geral) resume faturado, recebido, a receber, em atraso e quem ainda falta emitir. Em cada despesa informe <strong>Pago com</strong> (PIX, débito, crédito ou dinheiro): é o que permitirá vincular o gasto ao extrato para justificá-lo. As despesas vindas do extrato aparecem com a marca “extrato” e são alteradas lá, não aqui.</p>`,
+      <h3>Cadastrar</h3>
+      <p>Em <strong>Empresas &gt; Cadastrar empresa</strong> informe o CNPJ (o botão de busca preenche razão social e endereço), o regime (não optante, MEI ou Simples ME/EPP), o município e o ambiente. Use <em>Produção restrita</em> para testes: as notas não têm valor fiscal.</p>
+      <h3>Certificado A1</h3>
+      <p>A API da Sefin exige certificado digital A1 da empresa. Na linha da empresa, <strong>Certificado</strong> envia o arquivo .pfx e a senha; o sistema guarda criptografado e mostra a validade. Renove antes de vencer.</p>
+      <h3>Emissão sem certificado (CNPJ e senha)</h3>
+      <p>Para empresas que emitem direto no portal do Emissor Nacional, escolha o modo <strong>Portal (CNPJ e senha)</strong> no cadastro. Nesse modo o sistema <em>não emite a nota</em>: você emite no portal e importa o XML em <strong>Notas emitidas &gt; Importar XML</strong>. Os boletos, as cobranças e os relatórios continuam funcionando normalmente. A senha do portal fica guardada criptografada.</p>
+      <h3>Logo</h3>
+      <p>O botão <strong>Logo</strong> envia a imagem que aparece no DANFSe (PDF da nota) dessa empresa.</p>
+      <h3>Dados bancários</h3>
+      <p>O botão <strong>Dados bancários</strong> da linha da empresa abre a configuração da cobrança (convênio bancário com remessa e retorno): agência, conta, convênio, carteira, formato CNAB, numeração do próximo boleto e da próxima remessa, multa, juros, instrução e <em>feriados municipais</em>. Sem isso não é possível gerar boletos. Se já emitia boletos em outro sistema, informe o próximo número livre para o nosso número nunca repetir.</p>`,
   },
   {
-    id: 'extrato', titulo: 'Extrato e conciliação', resumo: 'Importar o extrato em PDF, classificar e ligar aos boletos.',
+    id: 'clientes', grupo: 'Cadastros', titulo: 'Clientes', resumo: 'Tomadores, forma de faturar, vencimento e serviços padrão.',
     corpo: `
-      <p>O sistema lê o extrato da conta corrente em PDF nos formatos de banco já homologados; outros bancos entram aos poucos. Se o PDF não for reconhecido, o sistema avisa.</p>
-      <p>Se a empresa usa a <strong>Cora</strong>, o botão <em>Sincronizar com a Cora</em> traz os lançamentos e o saldo direto da conta, sem PDF, com a mesma classificação e conciliação.</p>
-      <ol>
-        <li>Em <strong>Extrato e conciliação</strong>, clique em <em>Importar extrato (PDF)</em>. O sistema confere o total lido com o saldo do próprio extrato.</li>
-        <li><strong>Classifique</strong> entradas e saídas por categoria. Regras aprendem com o que você classifica e valem para lançamentos parecidos.</li>
-        <li>Nas entradas, use <strong>Ligar a boleto</strong> para conciliar o recebimento com o boleto (aparecem os boletos de valor compatível, mesmo com vencimento diferente da data do crédito).</li>
-        <li>O balanço do mês só fecha quando não há lançamentos sem classificação.</li>
-      </ol>
-      <p><strong>Ligar a despesa:</strong> numa saída, clique em <em>Ligar a despesa</em> para ligá-la a uma despesa já lançada (a parcela de uma compra, por exemplo) com o mesmo valor e data próxima. A despesa passa a ser a própria saída do extrato, sem aparecer duas vezes; <em>desfazer</em> desliga. Fluxo recomendado: lance a NF-e em <em>Compras</em> (gera despesa e parcelas) e, quando o pagamento cair no extrato, ligue.</p>
-      <p><strong>Reflexo em Despesas e balanço:</strong> toda <em>saída classificada</em> vira automaticamente uma despesa (marcada como “extrato”, com o PIX/débito deduzido da descrição). Reclassificar no extrato atualiza a despesa; excluir a importação remove as despesas dela. Ficam de fora as categorias <em>Cartão de crédito</em> (os gastos entram pela própria fatura) e <em>Transferências</em>. Entradas classificadas como <em>Outras receitas</em> (sem boleto) entram nas receitas do balanço.</p>
-      <p class="dica">Importar o mesmo extrato duas vezes não duplica os lançamentos. Uma importação errada pode ser excluída na lista de importações.</p>`,
+      <p>Em <strong>Clientes</strong> ficam os tomadores de cada empresa. Informe o CNPJ/CPF (a busca preenche os dados), endereço e e-mail.</p>
+      <p class="dica">Esta tela não fica mais no menu: abra pela Carteira (⋯ do cliente → <em>Tomadores das NFS-e deste cliente</em>, ou <em>Clientes avulsos</em> para os do escritório). Os clientes da contabilidade são faturados pela Carteira, botão <em>Faturamento</em>.</p>
+      <h3>Importar clientes de uma planilha</h3>
+      <p>Em <strong>Clientes → Importar planilha</strong>, envie um arquivo Excel (.xlsx) ou .csv com o <strong>CNPJ</strong> (ou CPF) e, se quiser, o nome, em qualquer coluna. O sistema mostra quantos são novos, quais já estão cadastrados, repetidos ou inválidos. Ao importar, ele <strong>consulta cada CNPJ na Receita Federal</strong> e preenche razão social, endereço, e-mail e telefone. CPF precisa do nome na planilha. CNPJ que o Excel mostrou sem o zero à esquerda é reconhecido.</p>
+      <p>Todo cliente criado assim fica com a marca <strong>Falta conferir</strong>, com o motivo (endereço incompleto, sem e-mail, situação na Receita, Receita fora do ar). Use a aba <em>Falta conferir</em> da lista, complete o cadastro e marque <em>Cadastro conferido</em> para tirar a marca.</p>
+      <h3>Como faturar</h3>
+      <ul>
+        <li><strong>Somente nota:</strong> emite a NFS-e.</li>
+        <li><strong>Nota + boleto:</strong> emite a nota e gera o boleto.</li>
+        <li><strong>Somente boleto:</strong> gera só a cobrança.</li>
+      </ul>
+      <h3>Vencimento</h3>
+      <p>Por prazo (X dias após a emissão) ou em dia fixo do mês. Boleto não vence em sábado, domingo ou feriado: o sistema antecipa para o dia útil anterior.</p>
+      <h3>Serviços padrão e agenda</h3>
+      <p>Na aba <strong>Serviços padrão</strong> do cliente, cadastre o serviço e o valor que se repetem todo mês; eles alimentam a <em>Emissão automática</em>. Também é ali que se define o envio automático por e-mail.</p>`,
   },
   {
-    id: 'cartao', titulo: 'Fatura do cartão de crédito', resumo: 'Importar a fatura em PDF e levar os gastos para as despesas.',
-    corpo: `
-      <p>Em <strong>Financeiro &gt; Fatura do cartão</strong> importe o PDF da fatura do cartão (formatos de emissor já homologados). O sistema lê cada compra (data, estabelecimento, cidade, parcela e final do cartão) e confere a soma com os totais impressos na própria fatura.</p>
-      <ol>
-        <li>Clique em <em>Importar fatura (PDF)</em>. Importar o mesmo arquivo duas vezes é recusado.</li>
-        <li>Classifique cada gasto (a categoria é lembrada para compras parecidas, inclusive no extrato bancário). Anuidade e encargos já entram como <em>Tarifas e juros</em>.</li>
-        <li>Os gastos classificados aparecem em <strong>Despesas e balanço</strong> como “Crédito”, no <em>mês do vencimento da fatura</em> (quando o dinheiro sai de fato), com a data da compra na descrição.</li>
-      </ol>
-      <p>O pagamento da fatura no extrato (categoria “Cartão de crédito”) não é contado outra vez. O pagamento da fatura anterior e créditos de estorno aparecem na lista, mas não viram despesa; um desconto de anuidade cancela a própria anuidade. Excluir a fatura remove as despesas geradas.</p>`,
-  },
-  {
-    id: 'relatorios', titulo: 'Relatórios', resumo: 'Os relatórios disponíveis e qual data cada um usa.',
+    id: 'relatorios', grupo: 'Relatórios e contabilidade', tela: '#/relatorios', titulo: 'Relatórios', resumo: 'Os relatórios disponíveis e qual data cada um usa.',
     corpo: `
       <p>A nota é emitida em um dia, o boleto vence em outro e é pago em outro. Por isso cada relatório informa <strong>qual data filtra o período</strong> e mostra as demais nas colunas.</p>
       <p>Os relatórios ficam em <strong>grupos</strong>, na lista à esquerda da tela:</p>
       <ul>
-        <li><strong>Faturamento:</strong> Receitas emitidas (por data de emissão), Faturamento por mês (notas, canceladas e recebido) e Faturamento por cidade/UF do cliente.</li>
-        <li><strong>Contas a receber:</strong> por vencimento, em aberto por emissão, recebimentos (data do pagamento), saldo vencido por cliente (faixas de atraso), posição por cliente, prazo de recebimento por cliente (prazo e atraso médios, % pago em dia) e contas a receber por carteira (boleto × Pix, com subtotal de cada uma).</li>
-        <li><strong>Despesas e pagamentos:</strong> despesas lançadas (com forma de pagamento e origem), por categoria, por forma de pagamento (PIX, débito, crédito, dinheiro), parcelas do cartão a vencer e compras (NF-e de entrada).</li>
-        <li><strong>Fiscal e retenções:</strong> notas emitidas e tributos, livro de serviços prestados (ISS a recolher e ISS retido pelo tomador) e retenções por cliente (PIS, COFINS, CSLL, IRRF, INSS e ISS).</li>
-        <li><strong>Resultado e caixa:</strong> resultado mensal (o balanço mês a mês), fluxo de caixa por categoria e pendências do extrato (sem classificação ou crédito sem boleto ligado).</li>
+        <li><strong>Faturamento:</strong> Receitas emitidas (por data de emissão), Faturamento por mês (notas, canceladas e recebido), <strong>Faturamento diário</strong> (com o acumulado) e Faturamento por cidade/UF do cliente.</li>
+        <li><strong>Contas a receber:</strong> por vencimento, em aberto por emissão, recebimentos (data do pagamento), saldo vencido por cliente (faixas de atraso), posição por cliente, prazo de recebimento por cliente (prazo e atraso médios, % pago em dia) e contas a receber por carteira (boleto × Pix, com subtotal de cada uma). O <strong>Razão do cliente</strong> mostra o extrato da conta de um cliente (cobranças, pagamentos e saldo devedor, a partir do saldo anterior): escolha o cliente antes de gerar — com a empresa do escritório selecionada, é o razão dos honorários.</li>
+        <li><strong>Despesas e pagamentos:</strong> despesas lançadas (com forma de pagamento e origem), por categoria, por forma de pagamento (PIX, débito, crédito, dinheiro), parcelas do cartão a vencer e compras (NF-e de entrada). <strong>Contas a pagar em aberto</strong> lista as parcelas das compras e as despesas com data futura que ainda não foram ligadas ao extrato ou à fatura do cartão, com vencidas e a vencer.</li>
+        <li><strong>Fiscal e retenções:</strong> notas emitidas e tributos, livro de serviços prestados (ISS a recolher e ISS retido pelo tomador) e retenções por cliente (PIS, COFINS, CSLL, IRRF, INSS e ISS). <strong>Pagamentos a pessoas jurídicas</strong> soma as compras de fornecedores com CNPJ e calcula as retenções pela tributação vinculada a cada compra: base para conferir a EFD-Reinf e a DIRF.</li>
+        <li><strong>Resultado e caixa:</strong> resultado mensal (o balanço mês a mês), fluxo de caixa por categoria e pendências do extrato (sem classificação ou crédito sem boleto ligado). <strong>Fluxo de caixa previsto</strong> projeta, dia a dia, o que entra (cobranças em aberto) e sai (contas a pagar), a partir do último saldo do extrato; o vencido sem baixa aparece numa linha "Em atraso". <strong>Livro caixa</strong> lista as entradas e saídas do extrato com o saldo dia a dia.</li>
         <li><strong>Clientes:</strong> curva ABC (classes A, B e C pelo faturamento), clientes sem faturamento no período e clientes com cadastro incompleto (o que falta e o que isso atrapalha: nota, boleto ou e-mail).</li>
       </ul>
       <p>Clique no relatório na lista, escolha o período, o cliente e a situação (quando houver) e clique em <em>Gerar</em>. Exporte para <strong>Excel (CSV)</strong> ou <strong>PDF</strong>; o PDF sai no papel timbrado da empresa (logo, CNPJ, endereço e contato no cabeçalho e o rodapé do demonstrativo em todas as páginas).</p>`,
   },
   {
-    id: 'contabilidade', titulo: 'Exportar para a contabilidade', resumo: 'Pacote com extrato em OFX, PDF e XML das notas.',
+    id: 'contabilidade', grupo: 'Relatórios e contabilidade', tela: '#/config/contabilidade', titulo: 'Exportar para a contabilidade', resumo: 'Pacote com extrato em OFX, PDF e XML das notas.',
     corpo: `
       <p>Em <strong>Configurações &gt; Contabilidade</strong> (administrador) escolha a empresa e o mês. O sistema gera um pacote ZIP com o extrato convertido em <strong>OFX</strong>, o extrato em <strong>PDF</strong> e os <strong>XML</strong> de todas as notas emitidas no período, pronto para enviar ao contador.</p>
       <p>Marque o que vai no pacote: notas emitidas (XML e PDF), <strong>notas de entrada lançadas em Compras</strong>, <strong>notas recebidas da SEFAZ ainda não lançadas</strong> e o extrato em OFX. As entradas vão em <code>entradas/xml</code> com uma planilha (fornecedor, valor, chave, parcelas); as não lançadas e as canceladas pelo fornecedor vêm marcadas.</p>
@@ -531,13 +588,13 @@ export const MANUAL = [
       <p>Na mesma tela, informe o <strong>e-mail da contabilidade</strong> (até 5), ligue <em>Enviar automaticamente todo mês</em> e escolha o <strong>dia</strong>. Nesse dia o sistema envia sozinho, em anexo, o pacote completo do <strong>mês anterior</strong>. Usa o e-mail do escritório configurado em <em>E-mail</em>. Se o sistema estiver fechado no dia, envia na primeira vez que for aberto depois; se falhar, tenta de novo em 6 horas e mostra o motivo. <em>Enviar agora</em> dispara qualquer mês na hora. Pacotes acima de 20 MB não vão por e-mail.</p>`,
   },
   {
-    id: 'configuracoes', titulo: 'Configurações', resumo: 'Usuários, e-mail, aparência, backup, licença e atualizações.',
+    id: 'configuracoes', grupo: 'Configurações e ajuda', tela: '#/config', titulo: 'Configurações', resumo: 'Usuários, e-mail, aparência, backup, licença e atualizações.',
     corpo: `
       <ul>
         <li><strong>Minha conta:</strong> altere sua senha.</li>
         <li><strong>Usuários e acessos</strong> (administrador): crie usuários e libere por usuário as funcionalidades (emissão, notas, cobranças, relatórios etc.) e as empresas que cada um enxerga. A permissão <strong>Excluir registros</strong> é separada das demais: sem ela o usuário não vê nem consegue usar nenhuma exclusão (nota não autorizada, serviço, despesa, importação de extrato), mesmo tendo acesso à tela. O administrador sempre pode. Ao criar um usuário sem senha ou ao <strong>redefinir a senha</strong>, o sistema gera uma <strong>senha provisória</strong> aleatória, mostrada uma única vez para você entregar à pessoa; no primeiro acesso ela cria a própria senha.</li>
         <li><strong>Esqueci minha senha</strong> (tela de login): o sistema envia um código de 6 dígitos ao e-mail do usuário, e com ele a pessoa cria a senha nova na mesma hora.</li>
-        <li><strong>Usuário KONTOR</strong> (suporte): não tem senha. O suporte do Kontor só entra com um código gerado para este computador, que expira em poucas horas.</li>
+        <li><strong>Usuário KONTOR</strong> (suporte): não tem senha. O suporte do Kontor só entra com um código gerado para este computador, que expira em poucas horas. Só ele vê e altera as chaves do <em>Integra Contador</em> (aba própria em Configurações) e a fonte de dados do Radar (chave da Casa dos Dados).</li>
         <li><strong>E-mail:</strong> servidor SMTP usado para enviar notas e boletos aos clientes e para a recuperação de senha. Em <em>Assinatura dos e-mails</em>, envie a imagem da assinatura do escritório (PNG ou JPG, até 600 KB): ela vai no fim de todos os e-mails aos clientes (notas, boletos, fechamentos, documentos do DP). Use o e-mail de teste para ver como fica.</li>
         <li><strong>Modelos de e-mail:</strong> o texto de cada e-mail que o Kontor manda aos clientes (DAS, DARF, sem guia no mês, documentos do DP, complemento do DP, NFS-e emitida e cancelada, boleto, aviso de débitos e fechamento para a contabilidade). Cada um vem com um texto sugerido; escolha o e-mail à esquerda, ajuste o assunto e a mensagem e confira a prévia ao lado, com dados de exemplo. Os campos entre chaves, como <code>{{cliente}}</code>, <code>{{mes}}</code> e <code>{{valor}}</code>, são preenchidos em cada envio: clique num campo para inseri-lo onde está o cursor. Linha em branco separa parágrafos, <code>**texto**</code> sai em negrito, os campos de quadro (guias, documentos, débitos) ficam sozinhos na linha e, se um campo vier vazio, a linha dele não é enviada. <em>Enviar teste para mim</em> manda o texto da tela (mesmo sem salvar); <em>Restaurar texto sugerido</em> volta ao padrão.</li>
         <li><strong>Aparência:</strong> escolha entre <em>Azul e dourado</em> (o padrão), <em>Azul e roxo</em>, <em>Verde petróleo e esmeralda</em>, <em>Grafite e azul elétrico</em>, <em>Marrom e champagne</em>, <em>Roxo e rosa</em>, <em>Preto e laranja</em> e <em>Branco e laranja</em>. Vale para o computador.</li>
@@ -549,18 +606,7 @@ export const MANUAL = [
       </ul>`,
   },
   {
-    id: 'atalhos', titulo: 'Atalhos e dicas', resumo: 'Atalhos de teclado e boas práticas.',
-    corpo: `
-      <p><strong>Menu:</strong> as telas ficam em grupos (Faturamento, Compras, Financeiro, Cadastros). Clique no nome do grupo para abrir ou recolher; o grupo da tela atual abre sozinho.</p>
-      <ul>
-        <li>Em Emitir nota, digite no campo do cliente para buscar na hora; <kbd>F2</kbd> abre a consulta completa (setas, Enter para escolher, Esc para fechar).</li>
-        <li>Confira sempre a <strong>empresa selecionada</strong> no alto do menu antes de emitir.</li>
-        <li>Teste primeiro em <em>Produção restrita</em>.</li>
-        <li>Mantenha backup fora do computador e renove o certificado A1 antes do vencimento.</li>
-      </ul>`,
-  },
-  {
-    id: 'problemas', titulo: 'Problemas comuns', resumo: 'O que fazer nos erros mais frequentes.',
+    id: 'problemas', grupo: 'Configurações e ajuda', titulo: 'Problemas comuns', resumo: 'O que fazer nos erros mais frequentes.',
     corpo: `
       <dl class="faq">
         <dt>"Cadastre o certificado A1 da empresa antes de emitir"</dt><dd>Envie o certificado em Empresas &gt; Certificado, ou mude a empresa para o modo Portal se ela emite sem certificado.</dd>
@@ -568,6 +614,9 @@ export const MANUAL = [
         <dt>A Sefin não respondeu</dt><dd>Use <em>Consultar na Sefin</em> na nota. Se ela existir, é recuperada; senão, reenvie.</dd>
         <dt>Não consigo gerar boleto</dt><dd>Falta preencher os Dados bancários da empresa (Empresas &gt; Dados bancários).</dd>
         <dt>Não encontro uma opção no menu</dt><dd>Seu usuário pode não ter a permissão; peça ao administrador em Configurações &gt; Usuários e acessos.</dd>
+        <dt>"O ADN rejeitou a consulta" (Captura de documentos)</dt><dd>A mensagem traz o motivo dado pelo Ambiente Nacional. Os mais comuns: o certificado usado não é do CNPJ consultado, ou falta a procuração eletrônica da NFS-e do cliente para o escritório (quando a busca usa o certificado do escritório).</dd>
+        <dt>Tela com rolagem para o lado</dt><dd>Em telas pequenas ou com zoom do Windows acima de 100%, as tabelas ficam compactas e o Controle mensal diminui o zoom sozinho. Se ainda sobrar rolagem, maximize a janela ou deixe o zoom do Windows em 100%.</dd>
+        <dt>Não vejo o Radar ou a aba Integra Contador</dt><dd>O Radar só aparece com o módulo contratado (Configurações &gt; Licença). A aba Integra Contador e a chave da Casa dos Dados ficam só com o suporte Kontor.</dd>
         <dt>Extrato não confere</dt><dd>O sistema compara o total lido com o do PDF e avisa a diferença; confirme se o PDF é de um banco homologado e do período completo.</dd>
       </dl>`,
   },
