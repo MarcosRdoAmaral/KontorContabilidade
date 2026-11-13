@@ -128,6 +128,24 @@ const Fechamento = z.object({
   enviado_por: z.string().max(120).nullish(),
 });
 
+const NotaFoto = z.object({
+  id: z.string().min(8).max(64),
+  nome: z.string().max(200).nullish(),
+  mime: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+  arquivo: z.string().min(100).max(8_000_000), // base64
+  chave: z.string().regex(/^\d{44}$/).nullish(),
+  observacao: z.string().trim().max(500).nullish(),
+  enviado_por: z.string().trim().max(120).nullish(),
+});
+/** Confere pelo começo do arquivo se ele é mesmo o que o tipo diz (não confia no que o aparelho informou). */
+function tipoReal(b: Buffer) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  if (b.subarray(0, 5).toString('latin1') === '%PDF-') return 'application/pdf';
+  return null;
+}
+
 function tratar(escritorioId: number, env: Envelope) {
   const l = db.prepare('SELECT a.empresa_id, a.nome, a.tipo FROM conexao_aparelhos a JOIN empresas e ON e.id = a.empresa_id WHERE a.vinculo = ? AND e.escritorio_id = ?').get(env.vinculo, escritorioId) as { empresa_id: number; nome: string | null; tipo: string } | undefined;
   if (!l) return; // conexão desfeita neste computador: descarta
@@ -144,6 +162,15 @@ function tratar(escritorioId: number, env: Envelope) {
     const zip = Buffer.from(f.zip, 'base64');
     db.prepare(`INSERT OR IGNORE INTO fechamentos_recebidos (empresa_id, grupo, de, ate, nome, arquivos, tamanho, zip, enviado_por, recebido_em) VALUES (?,?,?,?,?,?,?,?,?,?)`)
       .run(l.empresa_id, env.grupo, f.de, f.ate, f.nome.replace(/[^\w.\- ]+/g, '_'), JSON.stringify(f.arquivos), zip.length, zip, f.enviado_por ?? null, env.recebido_em);
+  } else if (env.tipo === 'NOTA_FOTO') {
+    const f = NotaFoto.parse(env.dados);
+    const arq = Buffer.from(f.arquivo, 'base64');
+    const mime = tipoReal(arq);
+    if (!mime) return; // não é imagem nem PDF: descarta
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' }[mime];
+    const nome = `${(f.nome ?? 'nota').replace(/\.[A-Za-z0-9]{1,5}$/, '').replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'nota'}.${ext}`;
+    db.prepare(`INSERT OR IGNORE INTO notas_recebidas (empresa_id, origem_id, nome, mime, tamanho, arquivo, chave, observacao, enviado_por, recebido_em) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(l.empresa_id, f.id, nome, mime, arq.length, arq, f.chave ?? null, f.observacao ?? null, f.enviado_por ?? l.nome ?? null, env.recebido_em);
   }
   // tipos desconhecidos (versão mais nova do Kontor Empresas): ignorados
 }
@@ -361,6 +388,40 @@ export function zipRecebido(escritorioId: number, id: number) {
   if (!f) throw new ErroNegocio('Fechamento não encontrado.', 404);
   db.prepare("UPDATE fechamentos_recebidos SET baixado_em = COALESCE(baixado_em, datetime('now')) WHERE id = ?").run(id);
   return { zip: Buffer.from(f.zip), nome: /\.zip$/i.test(f.nome) ? f.nome : `${f.nome}.zip` };
+}
+
+// ---- fotos de notas enviadas pelo aplicativo ----
+
+export function listarNotasRecebidas(escritorioId: number, empresas: number[] | null) {
+  const filtro = empresas ? `AND e.id IN (${empresas.join(',') || 'NULL'})` : '';
+  return db.prepare(`SELECT n.id, n.empresa_id, n.nome, n.mime, n.tamanho, n.chave, n.observacao, n.enviado_por, n.recebido_em, n.situacao, n.resposta, n.respondido_em,
+      COALESCE(e.nome_fantasia, e.razao_social) AS cliente, e.documento
+    FROM notas_recebidas n JOIN empresas e ON e.id = n.empresa_id WHERE e.escritorio_id = ? ${filtro} ORDER BY (n.situacao = 'NOVA') DESC, n.recebido_em DESC, n.id DESC LIMIT 500`).all(escritorioId) as any[];
+}
+const notaDoEscritorio = (escritorioId: number, id: number) => {
+  const n = db.prepare('SELECT n.* FROM notas_recebidas n JOIN empresas e ON e.id = n.empresa_id WHERE n.id = ? AND e.escritorio_id = ?').get(id, escritorioId) as any;
+  if (!n) throw new ErroNegocio('Nota não encontrada.', 404);
+  return n;
+};
+export function arquivoNotaRecebida(escritorioId: number, id: number) {
+  const n = notaDoEscritorio(escritorioId, id);
+  return { arquivo: Buffer.from(n.arquivo), nome: n.nome as string, mime: n.mime as string };
+}
+/** Marca a foto como conferida, ou pede outra (ilegível, cortada); o aplicativo do cliente é avisado. */
+export async function responderNotaRecebida(escritorioId: number, usuarioId: number, id: number, situacao: 'CONFERIDA' | 'REFAZER', mensagem?: string | null) {
+  const n = notaDoEscritorio(escritorioId, id);
+  const msg = (mensagem ?? '').trim() || null;
+  if (situacao === 'REFAZER' && (msg?.length ?? 0) < 3) throw new ErroNegocio('Escreva ao cliente o que precisa na nova foto.');
+  let avisado = true;
+  try { await enviarAoCliente(escritorioId, n.empresa_id, 'NOTA_RESPOSTA', { id: n.origem_id, situacao, mensagem: msg }); }
+  catch (e) { if (situacao === 'REFAZER') throw e; avisado = false; } // conferir vale mesmo com o cliente já desconectado
+  db.prepare(`UPDATE notas_recebidas SET situacao = ?, resposta = ?, usuario_id = ?, respondido_em = datetime('now') WHERE id = ?`).run(situacao, msg, usuarioId, id);
+  return { ok: true, avisado };
+}
+export function excluirNotaRecebida(escritorioId: number, id: number) {
+  notaDoEscritorio(escritorioId, id);
+  db.prepare('DELETE FROM notas_recebidas WHERE id = ?').run(id);
+  return { ok: true };
 }
 
 // ---- boletos de honorários (cobranças do escritório) ----

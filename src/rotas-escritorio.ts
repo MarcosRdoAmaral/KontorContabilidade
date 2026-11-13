@@ -23,7 +23,7 @@ import { Acesso, acessoDoCliente, listarAcessos, revelarAcesso, salvarAcesso } f
 import { analisarControle, importarControle } from './servicos/importar-controle.js';
 import { DocumentoFgts, ResultadoFgts, detalheFgts, documentoFgts, salvarDocumentoFgts, salvarResultadosFgts, ultimasFgts } from './servicos/fgts.js';
 import { PedidoGuia, gerarGuia, listarGuias, pdfGuia, sugestaoGuia } from './servicos/guias.js';
-import { lerEnvioAutomatico, salvarEnvioAutomatico, DadosDarf, anexarNaSolicitacao, convidar, desconectar, enviarGuiaAoCliente, enviarSolicitacao, gerarDaSolicitacao, listarRecebidos, listarSolicitacoes, recusarSolicitacao, sincronizar, statusConexao, zipRecebido } from './conexao/escritorio.js';
+import { lerEnvioAutomatico, salvarEnvioAutomatico, DadosDarf, anexarNaSolicitacao, convidar, desconectar, enviarGuiaAoCliente, enviarSolicitacao, gerarDaSolicitacao, listarRecebidos, listarNotasRecebidas, arquivoNotaRecebida, responderNotaRecebida, excluirNotaRecebida, listarSolicitacoes, recusarSolicitacao, sincronizar, statusConexao, zipRecebido } from './conexao/escritorio.js';
 import { avisarCliente, marcarAviso, textoDoAviso, ultimosAvisos } from './servicos/avisos-debitos.js';
 import { AgendaSitfis, consultarVarios, detalheSituacao, painelSituacao, pdfSituacao, resumoSituacoes, salvarAgenda, statusAgenda } from './servicos/situacao-fiscal.js';
 import { CONFERIVEIS, ConfigIntegra, conferirNaReceita, configPublica as configIntegra, previaConferencia, salvarConfig as salvarIntegra, testarConexao } from './servicos/integra-contador.js';
@@ -488,6 +488,24 @@ export async function rotasEscritorio(app: FastifyInstance) {
       daSolicitacao(req);
       return recusarSolicitacao(u(req).escritorio_id, u(req).id, id(req), z.object({ mensagem: z.string().max(1000) }).parse(req.body).mensagem);
     });
+    // fotos de notas (NFC-e, cupons) enviadas pelo aplicativo do celular
+    const daNota = (req: any) => {
+      const n = db.prepare('SELECT empresa_id FROM notas_recebidas WHERE id = ?').get(id(req)) as { empresa_id: number } | undefined;
+      if (!n) throw new ErroNegocio('Nota não encontrada.', 404);
+      checar(req, n.empresa_id);
+    };
+    api.get('/api/escritorio/notas-recebidas', async (req) => listarNotasRecebidas(u(req).escritorio_id, empresasDoUsuario(u(req))));
+    api.get('/api/escritorio/notas-recebidas/:id/arquivo', async (req, reply) => {
+      daNota(req);
+      const a = arquivoNotaRecebida(u(req).escritorio_id, id(req));
+      return reply.header('Content-Type', a.mime).header('X-Content-Type-Options', 'nosniff').header('Content-Disposition', `attachment; filename="${a.nome}"`).send(a.arquivo);
+    });
+    api.post('/api/escritorio/notas-recebidas/:id/responder', async (req) => {
+      daNota(req);
+      const d = z.object({ situacao: z.enum(['CONFERIDA', 'REFAZER']), mensagem: z.string().max(500).nullish() }).parse(req.body);
+      return responderNotaRecebida(u(req).escritorio_id, u(req).id, id(req), d.situacao, d.mensagem);
+    });
+    api.delete('/api/escritorio/notas-recebidas/:id', async (req) => { daNota(req); return excluirNotaRecebida(u(req).escritorio_id, id(req)); });
     api.get('/api/escritorio/recebidos', async (req) => {
       const e = Number((req.query as any)?.empresa) || undefined;
       if (e) checar(req, e);

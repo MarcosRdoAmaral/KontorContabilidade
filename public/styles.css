@@ -1320,3 +1320,5 @@ main:has(> .tl-topo), main:has(> .ct-topo) { max-width: 1600px; }
 .setup-cnpj input { flex: 1; min-width: 0; }
 .setup-cnpj button { flex: none; }
 .rel-grupos details.grupo.tem-ativo > summary { color: var(--laranja); }
+.nr-foto { max-height: 62vh; overflow: auto; border: 1px solid var(--linha); border-radius: var(--raio); background: #fff; text-align: center; }
+.nr-foto img { max-width: 100%; display: block; margin: 0 auto; }

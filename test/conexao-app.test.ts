@@ -95,6 +95,26 @@ test('aplicativo do celular: vários aparelhos, guia do mês com código de barr
     assert.equal((await recebe(cel1))[0].dados.pedido, 'cel-pedido-01');
     assert.equal((await recebe(desktop))[0].tipo, 'PEDIDO_RESPOSTA');
 
+    // foto de NFC-e pelo celular: chega em Fotos de notas, com a chave lida do QR Code; arquivo que não é imagem é descartado
+    const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(300, 7)]);
+    const CHAVE = '42261106990590000123650010000012341000012345';
+    await n.enviarEnvelope(cel1.token, cel1.chave, 'NOTA_FOTO', { id: 'foto-0001', nome: 'nfce.jpg', mime: 'image/jpeg', arquivo: jpg.toString('base64'), chave: CHAVE, observacao: 'Gasolina do carro da empresa' });
+    await n.enviarEnvelope(cel1.token, cel1.chave, 'NOTA_FOTO', { id: 'foto-0002', nome: 'x.jpg', mime: 'image/jpeg', arquivo: Buffer.alloc(300, 65).toString('base64') });
+    await call('POST', '/api/escritorio/conexao/sincronizar', {}, t);
+    await call('POST', '/api/escritorio/conexao/sincronizar', {}, t);
+    let fotos = (await call('GET', '/api/escritorio/notas-recebidas', undefined, t)).json;
+    assert.deepEqual(fotos.map((f: any) => [f.cliente, f.nome, f.mime, f.tamanho, f.chave, f.observacao, f.enviado_por, f.situacao]), [['Alfa Engenharia', 'nfce.jpg', 'image/jpeg', 304, CHAVE, 'Gasolina do carro da empresa', 'iPhone da Joana', 'NOVA']]);
+    const arq = await app.inject({ method: 'GET', url: `/api/escritorio/notas-recebidas/${fotos[0].id}/arquivo`, headers: { authorization: `Bearer ${t}` } });
+    assert.deepEqual([arq.headers['content-type'], arq.headers['x-content-type-options'], arq.rawPayload.equals(jpg)], ['image/jpeg', 'nosniff', true]);
+    assert.equal((await call('POST', `/api/escritorio/notas-recebidas/${fotos[0].id}/responder`, { situacao: 'REFAZER', mensagem: '' }, t)).status, 400);
+    assert.equal((await call('POST', `/api/escritorio/notas-recebidas/${fotos[0].id}/responder`, { situacao: 'REFAZER', mensagem: 'Cortou o QR Code.' }, t)).json.avisado, true);
+    assert.deepEqual((await recebe(cel1)).map((m: any) => [m.tipo, m.dados.id, m.dados.situacao, m.dados.mensagem]), [['NOTA_RESPOSTA', 'foto-0001', 'REFAZER', 'Cortou o QR Code.']]);
+    await recebe(desktop);
+    fotos = (await call('GET', '/api/escritorio/notas-recebidas', undefined, t)).json;
+    assert.equal(fotos[0].situacao, 'REFAZER');
+    assert.equal((await call('DELETE', `/api/escritorio/notas-recebidas/${fotos[0].id}`, undefined, t)).status, 200);
+    assert.equal((await call('GET', '/api/escritorio/notas-recebidas', undefined, t)).json.length, 0);
+
     // desconectar um celular não afeta os outros
     st = (await call('DELETE', `/api/escritorio/conexao/clientes/${alfa}/aparelhos/${cel2.vinculo}`, undefined, t)).json;
     assert.equal(st.aparelhos.filter((a: any) => a.situacao === 'CONECTADO').length, 2);

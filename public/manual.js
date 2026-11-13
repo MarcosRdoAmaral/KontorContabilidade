@@ -4,7 +4,7 @@
  * aqui (e a data/versão em MANUAL_VERSAO) antes de publicar a versão.
  * `corpo` é HTML escrito à mão (não recebe dados de usuário). `grupo` segue o menu lateral; `tela` é a rota aberta pelo botão "Abrir esta tela".
  */
-export const MANUAL_VERSAO = '1.60.1';
+export const MANUAL_VERSAO = '1.61.0';
 
 export const MANUAL = [
   {
@@ -297,6 +297,9 @@ export const MANUAL = [
         <li><strong>Boletos de honorários:</strong> com o demonstrativo, o código de barras e o Pix; o app avisa quando o pagamento é confirmado ou a cobrança é cancelada.</li>
       </ul>
       <p>O envio é automático (veja <em>Solicitações dos clientes</em>) ou pelo botão <em>Enviar pelo aplicativo</em> do fechamento no Controle mensal.</p>
+      <h3>Fotos de notas (NFC-e, cupons, recibos)</h3>
+      <p>Em <em>Documentos</em> do app, o cliente toca em <strong>Enviar foto de nota ao escritório</strong>, tira a foto (ou escolhe da galeria), escreve um recado se quiser e envia. A foto é reduzida no celular para ir rápido e chega em <strong>Solicitações dos clientes &gt; Fotos de notas</strong>. Quando o celular consegue ler o QR Code da NFC-e, a <strong>chave de acesso</strong> vem junto, pronta para copiar.</p>
+      <p>Na lista, abra a foto para ver e baixar. <em>Marcar conferida</em> avisa o cliente de que a nota foi recebida e conferida; <em>Pedir outra foto</em> manda o seu recado (por exemplo, “a foto cortou o QR Code”) e o app oferece enviar de novo. Fotos já respondidas podem ser excluídas deste computador.</p>
       <h3>Pedidos de guia atualizada</h3>
       <p>Na aba <em>Pedidos</em> do app, o cliente pede a guia atualizada (DAS, DCTFWeb ou DARF) com a data em que vai pagar. O pedido chega em <em>Solicitações dos clientes</em> com o nome do aparelho (“pelo celular”) e a guia respondida volta para todos os aparelhos e para o Kontor Empresas dele.</p>
       <p class="dica">Tudo vai cifrado de ponta a ponta e fica guardado só no aparelho do cliente. O site e o serviço de conexão só repassam as mensagens.</p>`,

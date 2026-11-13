@@ -105,6 +105,7 @@ const REGRAS: Regra[] = [
   { m: 'POST', r: /^\/api\/escritorio\/conexao\/clientes\/\d+\/guias\/\d+\/enviar$/, mod: ['situacao', 'controle'] },
   { r: /^\/api\/escritorio\/solicitacoes(\/\d+\/(gerar|anexar|enviar|recusar))?$/, mod: ['situacao', 'controle'] },
   { m: 'GET', r: /^\/api\/escritorio\/recebidos(\/\d+\/zip)?$/, mod: ['captura', 'controle'] },
+  { r: /^\/api\/escritorio\/notas-recebidas(\/\d+(\/(arquivo|responder))?)?$/, mod: ['captura', 'controle'] },
   { r: /^\/api\/me(\/empresa|\/senha|\/avatar)?$/, mod: 'livre' },
   { m: 'GET', r: /^\/api\/inicio$/, mod: 'livre' }, // os lembretes já saem filtrados pelos módulos do usuário
   { m: 'GET', r: /^\/api\/licenca$/, mod: 'livre' },

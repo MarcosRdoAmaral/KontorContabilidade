@@ -5439,12 +5439,12 @@ const TIPO_GUIA = { DAS: 'DAS do Simples', DCTFWEB: 'Guia da DCTFWeb', DARF: 'DA
 const lerPdf = (f) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
 
 async function telaSolicitacoes(aba) {
-  aba = aba === 'recebidos' ? 'recebidos' : 'pedidos';
+  aba = aba === 'recebidos' || aba === 'notas' ? aba : 'pedidos';
   conteudo.innerHTML = `
-    ${cabecaTela('solicitacoes', 'Solicitações dos clientes', 'Pedidos de guia atualizada e fechamentos do mês enviados pelos clientes conectados ao Kontor Gestão Empresas. Para conectar um cliente, use o menu ⋮ dele na Carteira.',
+    ${cabecaTela('solicitacoes', 'Solicitações dos clientes', 'Pedidos de guia atualizada, fechamentos do mês e fotos de notas enviados pelos clientes conectados ao Kontor Gestão Empresas ou ao aplicativo. Para conectar um cliente, use o menu ⋮ dele na Carteira.',
       `<button type="button" class="orc-ouro" id="sol-sinc">${icone('refazer')} Buscar agora</button>`)}
     <div class="cx-auto" id="cx-auto"></div>
-    <nav class="abas"><a href="#/solicitacoes" class="${aba === 'pedidos' ? 'ativo' : ''}">Pedidos de guia</a><a href="#/solicitacoes/recebidos" class="${aba === 'recebidos' ? 'ativo' : ''}">Fechamentos recebidos</a></nav>
+    <nav class="abas"><a href="#/solicitacoes" class="${aba === 'pedidos' ? 'ativo' : ''}">Pedidos de guia</a><a href="#/solicitacoes/recebidos" class="${aba === 'recebidos' ? 'ativo' : ''}">Fechamentos recebidos</a>${pode('captura') || pode('controle') ? `<a href="#/solicitacoes/notas" class="${aba === 'notas' ? 'ativo' : ''}">Fotos de notas</a>` : ''}</nav>
     <div id="sol-corpo"></div>`;
   const pintarAuto = (a) => {
     $('#cx-auto').innerHTML = `<span class="orc-ico">${icone('aviao')}</span><div><strong>Envio automático aos clientes conectados: ${a.ligado ? '<span class="cor-verde">ligado</span>' : '<span class="cor-ambar">desligado</span>'}</strong>
@@ -5459,7 +5459,77 @@ async function telaSolicitacoes(aba) {
     catch (e) { aviso(mensagemErro(e)); b.disabled = false; }
   };
   buscaTopoCarteira('Buscar clientes...');
-  return aba === 'recebidos' ? abaRecebidos() : abaPedidosGuia();
+  return aba === 'recebidos' ? abaRecebidos() : aba === 'notas' ? abaNotasRecebidas() : abaPedidosGuia();
+}
+
+/** Fotos de notas (NFC-e, cupons, recibos) que os clientes mandam pelo aplicativo do celular. */
+async function abaNotasRecebidas() {
+  const lista = await api('GET', '/api/escritorio/notas-recebidas');
+  const f = abaNotasRecebidas.f ??= { q: '', sit: 'NOVA' };
+  const corpo = $('#sol-corpo');
+  const SIT = { NOVA: ['Nova', 'PZ-BREVE'], CONFERIDA: ['Conferida', 'PZ-ENTREGUE'], REFAZER: ['Pedida outra foto', 'PZ-ATRASADA'] };
+  const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const fmtChave = (c) => c.replace(/(\d{4})(?=\d)/g, '$1 ');
+  corpo.innerHTML = `
+    ${cartoesKpi([
+      { ic: 'nuvem', tom: 'laranja', rotulo: 'Fotos recebidas', valor: lista.length, sub: 'enviadas pelo aplicativo' },
+      { ic: 'tl-olho', tom: lista.some((x) => x.situacao === 'NOVA') ? 'vermelho' : 'verde', rotulo: 'Para conferir', valor: lista.filter((x) => x.situacao === 'NOVA').length, sub: 'fotos novas' },
+    ])}
+    <section class="tl-tabela solta">
+      <div class="tl-cab-lista"><h2>${icone('tl-lista')} Fotos de notas</h2>
+        <label class="tl-busca">${icone('busca')}<input type="search" id="nr-q" value="${esc(f.q)}" placeholder="Buscar por cliente..." aria-label="Buscar por cliente"></label>
+        <label>Situação <select id="nr-sit"><option value="">Todas</option>${Object.entries(SIT).map(([k, v]) => `<option value="${k}" ${f.sit === k ? 'selected' : ''}>${v[0]}</option>`).join('')}</select></label></div>
+      <div class="rolagem"><table><thead><tr><th>Recebida em</th><th>Cliente</th><th>Nota</th><th>Recado do cliente</th><th>Situação</th><th class="c">Ações</th></tr></thead><tbody id="nr-lista"></tbody></table></div>
+    </section>
+    ${dicaTela('Como funciona', 'No aplicativo Kontor, o cliente toca em Enviar foto de nota, fotografa a NFC-e (ou cupom, recibo) e manda. Quando o celular consegue ler o QR Code, a chave de acesso vem junto. Marque como conferida depois de lançar, ou peça outra foto se estiver ilegível: o cliente é avisado no aplicativo.')}`;
+  const ver = async (x) => {
+    abrirDialogo(`<div class="dlg-largo"><h2>${esc(x.cliente)} — ${dhBr(x.recebido_em)}</h2>
+      ${x.chave ? `<p>Chave de acesso (lida do QR Code): <strong>${fmtChave(x.chave)}</strong> <button type="button" class="tl-btn-borda" id="nr-copiar">Copiar</button></p>` : '<p class="dica">O celular não leu o QR Code desta nota; a chave de acesso não veio junto.</p>'}
+      ${x.observacao ? `<p><strong>Recado:</strong> ${esc(x.observacao)}</p>` : ''}
+      ${x.mime === 'application/pdf' ? '<p class="dica">O arquivo é um PDF: use Baixar.</p>' : '<div class="nr-foto"><img id="nr-img" alt="Foto da nota enviada pelo cliente"></div>'}
+      <div class="acoes"><button type="button" id="nr-baixar">Baixar</button>${x.situacao === 'NOVA' ? '<button type="button" id="nr-refazer">Pedir outra foto</button><button type="button" class="primario" id="nr-ok">Marcar conferida</button>' : ''}<button data-fechar>Fechar</button></div></div>`);
+    if (x.mime !== 'application/pdf') baixarImagem(`/api/escritorio/notas-recebidas/${x.id}/arquivo`, $('#nr-img'));
+    $('#nr-copiar') && ($('#nr-copiar').onclick = async () => { try { await navigator.clipboard.writeText(x.chave); aviso('Chave copiada.'); } catch { aviso('Não foi possível copiar.'); } });
+    $('#nr-baixar').onclick = () => baixar(`/api/escritorio/notas-recebidas/${x.id}/arquivo`, x.nome);
+    $('#nr-ok') && ($('#nr-ok').onclick = () => responder(x, 'CONFERIDA'));
+    $('#nr-refazer') && ($('#nr-refazer').onclick = () => pedirOutra(x));
+  };
+  const responder = async (x, situacao, mensagem) => {
+    try {
+      const r = await api('POST', `/api/escritorio/notas-recebidas/${x.id}/responder`, { situacao, mensagem: mensagem ?? null });
+      $('#dialogo').open && $('#dialogo').close();
+      aviso(situacao === 'CONFERIDA' ? (r.avisado ? 'Nota conferida; o cliente vê no aplicativo.' : 'Nota conferida (o cliente não está mais conectado para ser avisado).') : 'Pedido de outra foto enviado ao cliente.');
+      abaNotasRecebidas();
+    } catch (e) { aviso(mensagemErro(e)); }
+  };
+  const pedirOutra = (x) => {
+    abrirDialogo(`<form id="nr-f"><h2>Pedir outra foto</h2><p class="sutil">${esc(x.cliente)} recebe o recado no aplicativo.</p>
+      <label>O que precisa na nova foto <textarea name="mensagem" rows="3" maxlength="500" required placeholder="Ex.: a foto cortou o QR Code. Fotografe a nota inteira, sem dobrar."></textarea></label>
+      <div class="acoes"><button type="button" data-fechar>Cancelar</button><button class="primario">Enviar pedido</button></div></form>`);
+    $('#nr-f').onsubmit = (ev) => { ev.preventDefault(); responder(x, 'REFAZER', ev.target.mensagem.value); };
+  };
+  const pintar = () => {
+    const q = norm(f.q);
+    const vis = lista.filter((x) => (!q || norm(x.cliente).includes(q)) && (!f.sit || x.situacao === f.sit));
+    $('#nr-lista').innerHTML = vis.length ? vis.map((x) => `<tr><td>${dhBr(x.recebido_em)}</td>
+      <td><strong>${esc(x.cliente)}</strong><br><span class="dica">${fmtDoc(x.documento)}${x.enviado_por ? ` · ${esc(x.enviado_por)}` : ''}</span></td>
+      <td>${x.chave ? `<span title="Chave de acesso lida do QR Code">${esc(x.chave.slice(0, 8))}…${esc(x.chave.slice(-6))}</span>` : '<span class="dica">sem chave</span>'}<br><span class="dica">${x.mime === 'application/pdf' ? 'PDF' : 'Foto'} · ${kb(x.tamanho)}</span></td>
+      <td>${esc(x.observacao ?? '—')}${x.resposta ? `<br><span class="dica">Você respondeu: ${esc(x.resposta)}</span>` : ''}</td>
+      <td><span class="selo ${SIT[x.situacao][1]}">${SIT[x.situacao][0]}</span></td>
+      <td class="c"><span class="tl-ac"><button type="button" data-ver="${x.id}" title="Ver a foto" aria-label="Ver a foto">${icone('tl-olho')}</button><button type="button" data-bx="${x.id}" title="Baixar" aria-label="Baixar">${icone('tl-baixar')}</button>${x.situacao === 'NOVA' ? `<button type="button" data-ok="${x.id}" title="Marcar conferida" aria-label="Marcar conferida">${icone('tl-check')}</button>` : `<button type="button" data-del="${x.id}" title="Excluir a foto deste computador" aria-label="Excluir a foto deste computador">${icone('tl-lixeira')}</button>`}</span></td></tr>`).join('')
+      : `<tr><td colspan="6"><div class="vazio" style="border:0">${lista.length ? 'Nenhuma foto com esses filtros.' : 'Nenhuma foto recebida ainda. Os clientes mandam pelo aplicativo Kontor (Enviar foto de nota).'}</div></td></tr>`;
+    const de = (b, k) => lista.find((y) => y.id === Number(b.dataset[k]));
+    corpo.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = () => ver(de(b, 'ver'))));
+    corpo.querySelectorAll('[data-bx]').forEach((b) => (b.onclick = () => { const x = de(b, 'bx'); baixar(`/api/escritorio/notas-recebidas/${x.id}/arquivo`, x.nome); }));
+    corpo.querySelectorAll('[data-ok]').forEach((b) => (b.onclick = () => responder(de(b, 'ok'), 'CONFERIDA')));
+    corpo.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('Excluir esta foto deste computador? Ela não pode ser recuperada depois.')) return;
+      try { await api('DELETE', `/api/escritorio/notas-recebidas/${b.dataset.del}`); abaNotasRecebidas(); } catch (e) { aviso(mensagemErro(e)); }
+    }));
+  };
+  $('#nr-q').oninput = (ev) => { f.q = ev.target.value; pintar(); };
+  $('#nr-sit').onchange = (ev) => { f.sit = ev.target.value; pintar(); };
+  pintar();
 }
 
 async function abaPedidosGuia() {
@@ -6970,6 +7040,7 @@ const ICONES = {
   'tl-check': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.8 2.8L16.5 9.5',
   'tl-limpar': 'M20 11a8 8 0 0 0-14.5-4.2L4 9M4 4v5h5M4 13a8 8 0 0 0 14.5 4.2L20 15M20 20v-5h-5',
   'tl-filtro': 'M3 5h18l-7 8v6l-4-2v-4z',
+  'tl-lixeira': 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   'tl-olho': 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   'tl-baixar': 'M12 4v11M7.5 11 12 15.5 16.5 11M5 20h14',
   'tl-mais': 'M5 12h.01M12 12h.01M19 12h.01',

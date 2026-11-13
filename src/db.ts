@@ -1444,6 +1444,26 @@ const migracoes: string[] = [
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
+  // 56: fotos de notas (NFC-e, cupons, recibos) que o cliente manda pelo aplicativo do celular
+  `CREATE TABLE notas_recebidas (
+    id INTEGER PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    origem_id TEXT NOT NULL,          -- id criado no aparelho (não repete o mesmo envio)
+    nome TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    tamanho INTEGER NOT NULL,
+    arquivo BLOB NOT NULL,
+    chave TEXT,                       -- chave de acesso lida do QR Code, quando o aparelho conseguiu ler
+    observacao TEXT,
+    enviado_por TEXT,
+    recebido_em TEXT NOT NULL,
+    situacao TEXT NOT NULL DEFAULT 'NOVA' CHECK (situacao IN ('NOVA','CONFERIDA','REFAZER')),
+    resposta TEXT,
+    usuario_id INTEGER,
+    respondido_em TEXT,
+    UNIQUE (empresa_id, origem_id)
+  );
+  CREATE INDEX ix_notas_recebidas ON notas_recebidas(empresa_id, recebido_em);`,
 ];
 
 export function migrar(): void {
